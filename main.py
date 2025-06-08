@@ -522,6 +522,148 @@ def get_main_proc(process_name):
     logging.info("未找到程序进程")
     return None
 
+
+
+def run_as_admin(executable_path, parameters=None, working_dir=None, show_cmd=0):
+    """
+    以管理员权限运行指定程序
+
+    参数：
+    executable_path (str): 要执行的可执行文件路径
+    parameters (str, optional): 传递给程序的参数，默认为None
+    working_dir (str, optional): 工作目录，默认为None（当前目录）
+    show_cmd (int, optional): 窗口显示方式，默认为0（1正常显示，0隐藏）
+
+    返回：
+    int: ShellExecute的返回值，若小于等于32表示出错
+    """
+    logging.info(f"执行函数: run_as_admin；参数: {executable_path}")
+    if parameters is None:
+        parameters = ''
+    if working_dir is None:
+        working_dir = ''
+    # 调用ShellExecuteW，设置动词为'runas'
+    result = ctypes.windll.shell32.ShellExecuteW(
+        None,                  # 父窗口句柄
+        'runas',               # 操作：请求管理员权限
+        executable_path,       # 要执行的文件路径
+        parameters,            # 参数
+        working_dir,           # 工作目录
+        show_cmd               # 窗口显示方式
+    )
+    
+    return result
+
+def run_py_in_venv_as_admin_hidden(python_exe_path, script_path, script_args=None):
+    """
+    使用指定的 Python 解释器（如虚拟环境中的 python.exe）以管理员权限静默运行脚本
+    
+    参数：
+    python_exe_path (str): Python 解释器路径
+    script_path (str): 要运行的 Python 脚本路径
+    script_args (list): 传递给脚本的参数（可选）
+    """
+    logging.info(f"执行函数: run_py_in_venv_as_admin_hidden；参数: {python_exe_path}, {script_path}")
+    if not os.path.exists(python_exe_path):
+        raise FileNotFoundError(f"Python 解释器未找到: {python_exe_path}")
+
+    if script_args is None:
+        script_args = []
+
+    # 构造命令（确保路径带引号，防止空格问题）
+    command = f'"{python_exe_path}" "{script_path}" {" ".join(script_args)}'
+    logging.info(f"构造的命令: {command}")
+
+    # 使用 ShellExecuteW 以管理员权限静默运行
+    result = ctypes.windll.shell32.ShellExecuteW(
+        None,               # 父窗口句柄
+        'runas',            # 请求管理员权限
+        'cmd.exe',          # 通过 cmd 执行（但隐藏窗口）
+        f'/c {command}',    # /c 执行后关闭窗口
+        None,               # 工作目录
+        0                   # 窗口模式：0=隐藏
+    )
+    return result
+
+def restart_self_as_admin():
+    """以管理员权限重新启动当前程序"""
+    logging.info("执行函数: restart_self_as_admin")
+    try:
+        # 获取当前程序的完整路径和参数
+        if getattr(sys, "frozen", False):
+            # 如果是打包后的exe
+            current_exe = sys.executable
+            logging.info(f"当前程序路径(EXE): {current_exe}")
+        else:
+            # 如果是Python脚本
+            current_script = os.path.abspath(__file__)
+            current_exe = sys.executable
+            logging.info(f"当前程序路径(脚本): {current_script}")
+            logging.info(f"Python解释器路径: {current_exe}")
+        
+        # 构建重启命令
+        if getattr(sys, "frozen", False):
+            # EXE模式：直接以管理员权限运行exe
+            result = run_as_admin(current_exe)
+        else:
+            # 脚本模式：以管理员权限运行Python脚本
+            result = run_py_in_venv_as_admin_hidden(current_exe, os.path.abspath(__file__))
+        
+        if result > 32:
+            logging.info(f"成功以管理员权限重启程序，返回值: {result}")
+            # 重启成功，退出当前进程
+            logging.info("正在退出当前进程...")
+            os._exit(0)
+        else:
+            logging.error(f"以管理员权限重启程序失败，错误码: {result}")
+            messagebox.showwarning("UAC提权", f"获取管理员权限失败，错误码: {result}")
+            return False
+            
+    except Exception as e:
+        logging.error(f"重启程序时出错: {e}")
+        messagebox.showerror("UAC提权", f"重启程序时出错: {e}")
+        return False
+
+def check_and_request_uac():
+    """检查并在需要时请求提权"""
+    logging.info("执行函数: check_and_request_uac")
+    
+    # 如果已经是管理员权限，无需提权
+    if IS_ADMIN:
+        logging.info("当前已具有管理员权限，无需提权")
+        return True
+    
+    logging.info("当前程序未获得管理员权限，准备提权...")
+    
+    try:
+        # 询问用户是否要提权
+        if messagebox.askyesno("管理员权限", "程序未获得管理员权限。\n是否立即请求管理员权限？\n\n选择'是'将重新启动程序并请求管理员权限。"):
+            # 以管理员权限重新启动程序
+            return restart_self_as_admin()
+        else:
+            logging.info("用户选择不进行提权")
+            return False
+        
+    except Exception as e:
+        logging.error(f"提权过程中出错: {e}")
+        messagebox.showerror("管理员权限", f"提权失败: {e}")
+        return False
+
+def startup_admin_check():
+    """启动时进行管理员权限检查和自动提权"""
+    logging.info("开始检查管理员权限状态...")
+    try:
+        # 检查并请求提权（如果需要的话）
+        admin_result = check_and_request_uac()
+        if admin_result is False:  # 明确检查False，因为None表示其他情况
+            logging.info("未进行提权或提权失败，程序将以当前权限继续运行")
+        # 如果admin_result是True，说明已经有管理员权限
+        # 如果函数内部重启了程序，这里的代码不会执行到
+    except Exception as e:
+        logging.error(f"管理员权限检查过程中出现异常: {e}")
+        logging.info("程序将以当前权限继续运行")
+
+
 def open_gui() -> None:
     """
     English: Attempts to open GUI.py or RC-GUI.exe, else shows an error message
@@ -818,6 +960,9 @@ def tray_():
     timer.daemon = True
     timer.start()
 
+# 启动时检查管理员权限并请求提权
+check_and_request_uac()
+
 tray_()
 
 if IS_ADMIN:
@@ -882,4 +1027,3 @@ try:
     ctypes.windll.kernel32.CloseHandle(mutex)
 except Exception as e:
     logging.error(f"释放互斥体时出错: {e}")
-

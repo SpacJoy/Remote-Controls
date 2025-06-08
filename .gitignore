@@ -15,3 +15,8 @@
 up.md
 test.*
 /__pycache__
+.gitignore
+RC-main.exe
+RC-GUI.exe
+RC-tray.exe
+*.pyc

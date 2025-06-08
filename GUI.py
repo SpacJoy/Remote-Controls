@@ -29,12 +29,157 @@ def get_administrator_privileges() -> None:
     English: Re-runs the program with administrator privileges
     中文: 以管理员权限重新运行当前程序
     """
-    messagebox.showinfo("提示！", "将以管理员权限重新运行！！")
-    ctypes.windll.shell32.ShellExecuteW(
-        None, "runas", sys.executable, f'"{__file__}"', None, 0
-    )
-    sys.exit()
+    try:
+        # 询问用户是否确认重启为管理员权限
+        result = messagebox.askyesno(
+            "管理员权限确认", 
+            "程序将以管理员权限重新启动。\n\n"
+            "这将关闭当前程序并请求管理员权限。\n\n"
+            "是否继续？"
+        )
+        
+        if result:
+            # 重新启动程序，请求管理员权限
+            ret = ctypes.windll.shell32.ShellExecuteW(
+                None, "runas", sys.executable, f'"{__file__}"', None, 1
+            )
+            # 只有在成功启动新进程时才退出当前程序
+            if ret > 32:  # ShellExecuteW 返回值大于32表示成功
+                sys.exit()
+            else:
+                messagebox.showwarning(
+                    "权限提醒", 
+                    "授权被取消或失败。\n\n"
+                    "程序将以当前权限继续运行。\n"
+                    "请注意：部分功能可能无法正常工作。"
+                )
+        else:
+            messagebox.showwarning(
+                "权限提醒", 
+                "您选择了不使用管理员权限运行。\n\n"
+                "请注意：部分功能可能无法正常工作。"
+            )
+    except Exception as e:
+        messagebox.showerror("错误", f"请求管理员权限时出错: {e}")
 
+def run_as_admin(executable_path, parameters=None, working_dir=None, show_cmd=0):
+    """
+    以管理员权限运行指定程序
+
+    参数：
+    executable_path (str): 要执行的可执行文件路径
+    parameters (str, optional): 传递给程序的参数，默认为None
+    working_dir (str, optional): 工作目录，默认为None（当前目录）
+    show_cmd (int, optional): 窗口显示方式，默认为0（1正常显示，0隐藏）
+
+    返回：
+    int: ShellExecute的返回值，若小于等于32表示出错
+    """
+    if parameters is None:
+        parameters = ''
+    if working_dir is None:
+        working_dir = ''
+    # 调用ShellExecuteW，设置动词为'runas'
+    result = ctypes.windll.shell32.ShellExecuteW(
+        None,                  # 父窗口句柄
+        'runas',               # 操作：请求管理员权限
+        executable_path,       # 要执行的文件路径
+        parameters,            # 参数
+        working_dir,           # 工作目录
+        show_cmd               # 窗口显示方式
+    )
+    
+    return result
+
+def run_py_in_venv_as_admin_hidden(python_exe_path, script_path, script_args=None):
+    """
+    使用指定的 Python 解释器（如虚拟环境中的 python.exe）以管理员权限静默运行脚本
+    
+    参数：
+    python_exe_path (str): Python 解释器路径
+    script_path (str): 要运行的 Python 脚本路径
+    script_args (list): 传递给脚本的参数（可选）
+    """
+    if not os.path.exists(python_exe_path):
+        raise FileNotFoundError(f"Python 解释器未找到: {python_exe_path}")
+
+    if script_args is None:
+        script_args = []
+
+    # 构造命令（确保路径带引号，防止空格问题）
+    command = f'"{python_exe_path}" "{script_path}" {" ".join(script_args)}'
+
+    # 使用 ShellExecuteW 以管理员权限静默运行
+    result = ctypes.windll.shell32.ShellExecuteW(
+        None,               # 父窗口句柄
+        'runas',            # 请求管理员权限
+        'cmd.exe',          # 通过 cmd 执行（但隐藏窗口）
+        f'/c {command}',    # /c 执行后关闭窗口
+        None,               # 工作目录
+        0                   # 窗口模式：0=隐藏
+    )
+    return result
+
+def restart_self_as_admin():
+    """以管理员权限重新启动当前程序"""
+    try:
+        # 获取当前程序的完整路径和参数
+        if getattr(sys, "frozen", False):
+            # 如果是打包后的exe
+            current_exe = sys.executable
+        else:
+            # 如果是Python脚本
+            current_script = os.path.abspath(__file__)
+            current_exe = sys.executable
+        
+        # 构建重启命令
+        if getattr(sys, "frozen", False):
+            # EXE模式：直接以管理员权限运行exe
+            result = run_as_admin(current_exe)
+        else:
+            # 脚本模式：以管理员权限运行Python脚本
+            result = run_py_in_venv_as_admin_hidden(current_exe, os.path.abspath(__file__))
+        
+        if result > 32:  # ShellExecuteW 返回值大于32表示成功
+            os._exit(0)
+        else:
+            messagebox.showwarning("UAC提权", f"获取管理员权限失败，错误码: {result}")
+            return False
+            
+    except Exception as e:
+        messagebox.showerror("UAC提权", f"重启程序时出错: {e}")
+        return False
+
+def check_and_request_uac():
+    """检查并在需要时请求提权"""
+    
+    # 如果已经是管理员权限，无需提权
+    if IS_GUI_ADMIN:
+        return True
+    
+    try:
+        # 询问用户是否要提权
+        if messagebox.askyesno("管理员权限", "程序未获得管理员权限。\n是否立即请求管理员权限？\n\n选择'是'将重新启动程序并请求管理员权限。"):
+            # 以管理员权限重新启动程序
+            return restart_self_as_admin()
+        else:
+            return False
+        
+    except Exception as e:
+        messagebox.showerror("管理员权限", f"提权失败: {e}")
+        return False
+
+def startup_admin_check():
+    """启动时进行管理员权限检查和自动提权"""
+    try:
+        # 检查并请求提权（如果需要的话）
+        admin_result = check_and_request_uac()
+        if admin_result is False:  # 明确检查False，因为None表示其他情况
+            messagebox.showinfo("管理员权限", "未进行提权或提权失败，程序将以当前权限继续运行")
+        # 如果admin_result是True，说明已经有管理员权限
+        # 如果函数内部重启了程序，这里的代码不会执行到
+    except Exception as e:
+        messagebox.showerror("管理员权限检查", f"管理员权限检查过程中出现异常: {e}")
 
 
 # 设置窗口居中
@@ -319,7 +464,7 @@ def modify_custom_theme() -> None:
         state="readonly"
     )
     theme_type_combobox.grid(row=0, column=1, sticky="w")
-    type_index = ["程序或脚本", "服务(需管理员权限)"].index(theme["type"])
+    type_index = ["程序或脚脚本", "服务(需管理员权限)"].index(theme["type"])
     theme_type_combobox.current(type_index)
 
     ttk.Label(theme_window, text="服务时主程序").grid(row=0, column=2, sticky="w")
@@ -634,6 +779,9 @@ try:
 except Exception as e:
     # logging.error(f"检查程序管理员权限时出错: {e}")
     IS_GUI_ADMIN = False
+
+# 启动时检查管理员权限并请求提权
+check_and_request_uac()
 
 # 配置文件和目录改为当前工作目录
 appdata_dir: str = os.path.abspath(os.path.dirname(sys.argv[0]))

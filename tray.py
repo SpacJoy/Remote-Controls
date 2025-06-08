@@ -202,6 +202,86 @@ def run_py_in_venv_as_admin_hidden(python_exe_path, script_path, script_args=Non
     )
     return result
 
+
+def restart_self_as_admin():
+    """以管理员权限重新启动当前程序"""
+    logging.info("执行函数: restart_self_as_admin")
+    try:
+        # 获取当前程序的完整路径和参数
+        if getattr(sys, "frozen", False):
+            # 如果是打包后的exe
+            current_exe = sys.executable
+            logging.info(f"当前程序路径(EXE): {current_exe}")
+        else:
+            # 如果是Python脚本
+            current_script = os.path.abspath(__file__)
+            current_exe = sys.executable
+            logging.info(f"当前程序路径(脚本): {current_script}")
+            logging.info(f"Python解释器路径: {current_exe}")
+        
+        # 构建重启命令
+        if getattr(sys, "frozen", False):
+            # EXE模式：直接以管理员权限运行exe
+            result = run_as_admin(current_exe)
+        else:
+            # 脚本模式：以管理员权限运行Python脚本
+            result = run_py_in_venv_as_admin_hidden(current_exe, os.path.abspath(__file__))
+        
+        if result > 32:
+            logging.info(f"成功以管理员权限重启程序，返回值: {result}")
+            # 重启成功，退出当前进程
+            logging.info("正在退出当前进程...")
+            os._exit(0)
+        else:
+            logging.error(f"以管理员权限重启程序失败，错误码: {result}")
+            messagebox.showwarning("UAC提权", f"获取管理员权限失败，错误码: {result}")
+            return False
+            
+    except Exception as e:
+        logging.error(f"重启程序时出错: {e}")
+        messagebox.showerror("UAC提权", f"重启程序时出错: {e}")
+        return False
+
+def check_and_request_uac():
+    """检查并在需要时请求提权"""
+    logging.info("执行函数: check_and_request_uac")
+    
+    # 如果已经是管理员权限，无需提权
+    if IS_TRAY_ADMIN:
+        logging.info("当前已具有管理员权限，无需提权")
+        return True
+    
+    logging.info("当前程序未获得管理员权限，准备提权...")
+    
+    try:
+        # 询问用户是否要提权
+        if messagebox.askyesno("管理员权限", "程序未获得管理员权限。\n是否立即请求管理员权限？\n\n选择'是'将重新启动程序并请求管理员权限。"):
+            # 以管理员权限重新启动程序
+            return restart_self_as_admin()
+        else:
+            logging.info("用户选择不进行提权")
+            return False
+        
+    except Exception as e:
+        logging.error(f"提权过程中出错: {e}")
+        messagebox.showerror("管理员权限", f"提权失败: {e}")
+        return False
+
+def startup_admin_check():
+    """启动时进行管理员权限检查和自动提权"""
+    logging.info("开始检查管理员权限状态...")
+    try:
+        # 检查并请求提权（如果需要的话）
+        admin_result = check_and_request_uac()
+        if admin_result is False:  # 明确检查False，因为None表示其他情况
+            logging.info("未进行提权或提权失败，程序将以当前权限继续运行")
+        # 如果admin_result是True，说明已经有管理员权限
+        # 如果函数内部重启了程序，这里的代码不会执行到
+    except Exception as e:
+        logging.error(f"管理员权限检查过程中出现异常: {e}")
+        logging.info("程序将以当前权限继续运行")
+
+
 def get_main_proc(process_name):
     """查找程序进程是否存在"""
     logging.info(f"执行函数: get_main_proc; 参数: {process_name}")
@@ -488,7 +568,9 @@ def stop_tray():
     logging.info("执行函数: stop_tray")
     logging.info("="*30)
     logging.info("正在关闭托盘程序")
-    logging.info("="*30)
+    
+    # 有管理员权限或UAC未启用时，正常重启主程序并退出托盘
+    logging.info("托盘程序退出，将重启主程序并退出托盘")
     
     # 定义在restart_main完成后执行的回调函数
     def exit_after_restart():
@@ -565,10 +647,8 @@ def get_menu_items():
     # 检查托盘程序管理员权限状态
     global IS_TRAY_ADMIN
     admin_status = "【已获得管理员权限】" if IS_TRAY_ADMIN else "【未获得管理员权限】"
-    
-    # 添加运行模式提示
+      # 添加运行模式提示
     mode_info = "【脚本模式】" if is_script_mode else "【EXE模式】"
-    
     return [
         pystray.MenuItem(f"{mode_info} 版本-{BANBEN}", None),
         # 显示权限状态的纯文本项
@@ -590,6 +670,9 @@ def init_main_program():
     else:
         logging.info("托盘启动时未发现主程序运行，准备启动...")
         is_admin_start_main()
+
+# 启动时检查管理员权限并请求提权
+check_and_request_uac()
 
 # 在单独的线程中处理主程序初始化
 threading.Thread(target=init_main_program, daemon=True).start()
