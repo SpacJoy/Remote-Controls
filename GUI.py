@@ -464,7 +464,7 @@ def modify_custom_theme() -> None:
         state="readonly"
     )
     theme_type_combobox.grid(row=0, column=1, sticky="w")
-    type_index = ["程序或脚脚本", "服务(需管理员权限)"].index(theme["type"])
+    type_index = ["程序或脚本", "服务(需管理员权限)"].index(theme["type"])
     theme_type_combobox.current(type_index)
 
     ttk.Label(theme_window, text="服务时主程序").grid(row=0, column=2, sticky="w")
