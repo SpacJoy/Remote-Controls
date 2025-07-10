@@ -29,7 +29,7 @@ from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 import pyautogui
 from pyautogui import press as pyautogui_press
 
-BANBEN = "V2.1.0"
+BANBEN = "V2.1.1"
 
 # 禁用 PyAutoGUI 安全模式，确保即使鼠标在屏幕角落也能执行命令
 pyautogui.FAILSAFE = False
