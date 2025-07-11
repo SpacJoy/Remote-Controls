@@ -10,7 +10,7 @@
 *.gitignore
 *.txt
 *.log
-*.json
+config.json
 *.back
 up.md
 test.*
