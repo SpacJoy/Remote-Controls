@@ -67,34 +67,6 @@ pyinstaller -F -n RC-main --windowed --icon=res\\icon.ico --add-data "res\\icon.
 pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." tray.py
 ```
 
-## 教程（参考）
-
-### 1. 修改 MQTT 服务器信息
-
-修改你的巴法云订阅和密钥，并创建相应主题（记得修改主题昵称） 具体主题命名规则可以看巴法云接入文档（右上角里面智能音箱部分）[接入文档](https://cloud.bemfa.com/docs/src/speaker_mi.html)  
-例如：（记得复制密钥备用）
-
-- ![巴法云配置](res/巴法云.png)
-
-### 2. 启动程序
-
-可以直接下载执行文件，也可以下载源码自行编译：  
-- `RC-GUI.exe`：配置界面程序
-- `RC-main.exe`：主程序，负责MQTT连接和控制功能
-- `RC-tray.exe`：托盘程序，用于管理和监控主程序
-
-打开 GUI 程序，输入巴法云密钥等信息，点击保存。
-例：（可分别启用主题（test 模式可不启用主题））
-
-- ![GUI配置界面](res/GUI.png)
-
-### 3. 米家绑定巴法云账号
-
-绑定后同步设备，小爱就能控制了
-
-- ![米家绑定](res/米家.jpg)
-- ![小爱同学](res/小爱同学.jpg)
-
 ## 项目文件说明
 
 本项目由以下主要组件构成：
@@ -111,7 +83,7 @@ pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.
 
 ### 支持的脚本类型
 - **PowerShell脚本 (.ps1)**：自动使用 `powershell.exe -ExecutionPolicy Bypass -File` 启动
-- **Python脚本 (.py/.pyw)**：自动使用 `python.exe` 启动
+- **Python脚本 (.py/.pyw)**：自动使用 `python.exe` 启动,注：未测试
 - **批处理脚本 (.cmd/.bat)**：使用 `cmd /c` 启动
 - **可执行文件 (.exe)**：直接启动
 
@@ -172,6 +144,33 @@ pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.
 - Q: 打包后程序无法运行？
   A: 确保使用PyInstaller 6.13.0及以上版本，检查是否正确添加资源文件。
 
+## 教程（参考）
+
+### 1. 修改 MQTT 服务器信息
+
+修改你的巴法云订阅和密钥，并创建相应主题（记得修改主题昵称） 具体主题命名规则可以看巴法云接入文档（右上角里面智能音箱部分）[接入文档](https://cloud.bemfa.com/docs/src/speaker_mi.html)  
+例如：（记得复制密钥备用）
+
+- ![巴法云配置](res/巴法云.png)
+
+### 2. 启动程序
+
+可以直接下载执行文件，也可以下载源码自行编译：  
+- `RC-GUI.exe`：配置界面程序
+- `RC-main.exe`：主程序，负责MQTT连接和控制功能
+- `RC-tray.exe`：托盘程序，用于管理和监控主程序
+
+打开 GUI 程序，输入巴法云密钥等信息，点击保存。
+例：（可分别启用主题（test 模式可不启用主题））
+
+- ![GUI配置界面](res/GUI.png)
+
+### 3. 米家绑定巴法云账号
+
+绑定后同步设备，小爱就能控制了
+
+- ![米家绑定](res/米家.jpg)
+- ![小爱同学](res/小爱同学.jpg)
 
 ## 更新日志
 
