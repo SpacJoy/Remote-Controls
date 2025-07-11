@@ -200,12 +200,36 @@ def process_command(command: str, topic: str) -> None:
                 process_name = os.path.basename(directory)
                 logging.info(f"尝试终止进程: {process_name}")
                 notify_in_thread(f"尝试终止进程: {process_name}")
-                result = subprocess.run(
-                    ["taskkill", "/F", "/IM", process_name],
-                    capture_output=True,
-                    text=True,
-                )
-                logging.info(result.stdout)
+                
+                # 检查是否是脚本文件
+                if directory.lower().endswith(('.cmd', '.bat', '.ps1')):
+                    # 对于批处理文件，先尝试增强版终止方法
+                    if directory.lower().endswith(('.cmd', '.bat')):
+                        if terminate_batch_process_enhanced(directory):
+                            notify_in_thread(f"成功终止批处理脚本: {process_name}")
+                        elif terminate_script_process(directory):
+                            notify_in_thread(f"成功终止脚本: {process_name}")
+                        else:
+                            notify_in_thread(f"终止脚本失败: {process_name}")
+                    else:
+                        # PowerShell脚本使用原方法
+                        if terminate_script_process(directory):
+                            notify_in_thread(f"成功终止脚本: {process_name}")
+                        else:
+                            notify_in_thread(f"终止脚本失败: {process_name}")
+                else:
+                    # 普通可执行文件
+                    result = subprocess.run(
+                        ["taskkill", "/F", "/IM", process_name],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if result.returncode == 0:
+                        logging.info(f"成功终止进程: {result.stdout}")
+                        notify_in_thread(f"成功终止进程: {process_name}")
+                    else:
+                        logging.error(f"终止进程失败: {result.stderr}")
+                        notify_in_thread(f"终止进程失败: {process_name}")
             elif command == "on":
                 if not directory or not os.path.isfile(directory):
                     logging.error(f"启动失败，文件不存在: {directory}")
@@ -225,7 +249,7 @@ def process_command(command: str, topic: str) -> None:
             logging.info(f"服务 {service_name} 已停止")
             return "stopped"
         else:
-            logging.error(f"无法获取服务{serve_name}的状态:{result.stderr}")
+            logging.error(f"无法获取服务{service_name}的状态:{result.stderr}")
             return "unknown"
     
     for serve, serve_name in serves:
@@ -373,7 +397,276 @@ def process_command(command: str, topic: str) -> None:
         # 未知主题
         logging.error(f"未知主题: {topic}")
         notify_in_thread(f"未知主题: {topic}")
+        
 
+def terminate_script_process(script_path: str) -> bool:
+    """
+    终止脚本相关的进程
+    
+    参数:
+    - script_path: 脚本文件路径
+    
+    返回:
+    - bool: 是否成功终止进程
+    """
+    script_name = os.path.basename(script_path)
+    script_full_path = os.path.abspath(script_path)
+    logging.info(f"尝试终止脚本进程: {script_name}")
+    logging.info(f"脚本完整路径: {script_full_path}")
+    
+    terminated_count = 0
+    process_pids = []
+    
+    try:
+        # 方法1: 精确匹配通过cmd.exe /c或/k启动的脚本进程
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                cmdline = proc.info['cmdline']
+                if not cmdline or proc.info['name'].lower() != 'cmd.exe':
+                    continue
+                
+                # 转换为字符串进行分析
+                cmdline_str = ' '.join(cmdline).lower()
+                script_name_lower = script_name.lower()
+                script_path_lower = script_full_path.lower()
+                
+                # 只匹配通过cmd.exe /c 或 /k 启动的脚本
+                is_script_process = False
+                
+                # 检查是否是通过/c或/k参数启动的脚本
+                if '/c' in cmdline_str or '/k' in cmdline_str:
+                    # 检查是否包含完整路径或脚本名
+                    if (script_path_lower in cmdline_str or 
+                        script_name_lower in cmdline_str):
+                        # 进一步验证：确保是作为脚本执行，而不是在路径中偶然包含
+                        for arg in cmdline:
+                            if (script_name_lower in arg.lower() and 
+                                (arg.lower().endswith('.bat') or arg.lower().endswith('.cmd'))):
+                                is_script_process = True
+                                break
+                
+                if is_script_process:
+                    logging.info(f"找到脚本进程: PID={proc.info['pid']}, 命令行={cmdline}")
+                    process_pids.append(proc.info['pid'])
+                    
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+        
+        # 先尝试优雅终止
+        for pid in process_pids:
+            try:
+                proc = psutil.Process(pid)
+                # 获取子进程
+                children = proc.children(recursive=True)
+                
+                # 先终止子进程
+                for child in children:
+                    try:
+                        logging.info(f"终止子进程: PID={child.pid}")
+                        child.terminate()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                
+                # 再终止主进程
+                proc.terminate()
+                terminated_count += 1
+                logging.info(f"已终止进程: PID={pid}")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # 等待进程终止
+        if terminated_count > 0:
+            time.sleep(3)
+            
+        # 检查进程是否真的被终止，如果没有则强制终止
+        still_running = []
+        for pid in process_pids:
+            try:
+                proc = psutil.Process(pid)
+                if proc.is_running():
+                    still_running.append(pid)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # 强制终止仍在运行的进程
+        for pid in still_running:
+            try:
+                proc = psutil.Process(pid)
+                # 强制终止子进程
+                children = proc.children(recursive=True)
+                for child in children:
+                    try:
+                        logging.info(f"强制终止子进程: PID={child.pid}")
+                        child.kill()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                
+                # 强制终止主进程
+                proc.kill()
+                logging.info(f"强制终止进程: PID={pid}")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # 方法2: 如果没有找到相关进程，使用精确的taskkill命令
+        if terminated_count == 0:
+            logging.info("尝试使用taskkill命令终止相关进程")
+            # 使用更精确的taskkill命令，避免误杀用户进程
+            result = subprocess.run(
+                ["taskkill", "/F", "/FI", f"IMAGENAME eq cmd.exe", "/FI", f"COMMANDLINE eq *{script_name}*"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0 and "SUCCESS" in result.stdout:
+                logging.info(f"taskkill成功终止相关进程: {result.stdout}")
+                terminated_count += 1
+            else:
+                logging.info(f"taskkill未找到匹配的进程: {result.stderr}")
+        
+        return terminated_count > 0
+        
+    except Exception as e:
+        logging.error(f"终止脚本进程时出错: {e}")
+        return False
+
+def terminate_batch_process_enhanced(script_path: str) -> bool:
+    """
+    增强版批处理文件终止功能
+    
+    参数:
+    - script_path: 脚本文件路径
+    
+    返回:
+    - bool: 是否成功终止进程
+    """
+    script_name = os.path.basename(script_path)
+    script_full_path = os.path.abspath(script_path)
+    logging.info(f"使用增强版方法终止批处理进程: {script_name}")
+    logging.info(f"脚本完整路径: {script_full_path}")
+    
+    terminated_count = 0
+    
+    try:
+        # 方法1: 使用wmic精确查找并终止进程
+        try:
+            # 使用完整路径进行精确匹配
+            cmd = f'wmic process where "name=\'cmd.exe\' AND (CommandLine LIKE \'%{script_full_path}%\' OR CommandLine LIKE \'%{script_name}%\')" get ProcessId,CommandLine /format:value'
+            result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+            
+            pids = []
+            current_pid = None
+            current_cmdline = None
+            
+            for line in result.stdout.strip().split('\n'):
+                line = line.strip()
+                if line.startswith("CommandLine="):
+                    current_cmdline = line[12:]
+                elif line.startswith("ProcessId="):
+                    pid_str = line.split("=")[1].strip()
+                    if pid_str.isdigit():
+                        current_pid = int(pid_str)
+                    
+                    # 当获取到完整信息时进行验证
+                    if current_pid and current_cmdline:
+                        # 进一步验证：确保是通过/c或/k执行的脚本
+                        if (('/c' in current_cmdline.lower() or '/k' in current_cmdline.lower()) and
+                            (script_name.lower() in current_cmdline.lower() or 
+                             script_full_path.lower() in current_cmdline.lower())):
+                            pids.append(current_pid)
+                            logging.info(f"找到匹配的进程: PID={current_pid}, 命令行={current_cmdline}")
+                        
+                        # 重置
+                        current_pid = None
+                        current_cmdline = None
+            
+            # 终止找到的进程
+            for pid in pids:
+                try:
+                    # 使用taskkill /T 终止进程树
+                    result = subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(pid)],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if result.returncode == 0:
+                        logging.info(f"成功终止进程树 PID={pid}")
+                        terminated_count += 1
+                    else:
+                        logging.warning(f"终止进程树 PID={pid} 失败: {result.stderr}")
+                except Exception as e:
+                    logging.error(f"终止进程树 PID={pid} 时出错: {e}")
+                    
+        except Exception as e:
+            logging.error(f"使用wmic查找进程失败: {e}")
+        
+        # 方法2: 使用psutil进行精确查找
+        if terminated_count == 0:
+            logging.info("尝试使用psutil进行精确查找")
+            try:
+                cmd_processes = []
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        if proc.info['name'].lower() == 'cmd.exe':
+                            cmdline = proc.info['cmdline']
+                            if cmdline:
+                                cmdline_str = ' '.join(cmdline).lower()
+                                # 精确匹配：必须包含/c或/k参数，且包含脚本名
+                                if (('/c' in cmdline_str or '/k' in cmdline_str) and
+                                    (script_name.lower() in cmdline_str or 
+                                     script_full_path.lower() in cmdline_str)):
+                                    # 进一步验证脚本文件扩展名
+                                    if any(arg.lower().endswith(('.bat', '.cmd')) for arg in cmdline):
+                                        cmd_processes.append(proc.info['pid'])
+                                        logging.info(f"psutil找到匹配进程: PID={proc.info['pid']}, 命令行={cmdline}")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        continue
+                
+                # 终止找到的进程及其子进程
+                for pid in cmd_processes:
+                    try:
+                        # 使用taskkill /T 终止进程树
+                        result = subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(pid)],
+                            capture_output=True,
+                            text=True,
+                        )
+                        if result.returncode == 0:
+                            logging.info(f"成功终止进程树 PID={pid}")
+                            terminated_count += 1
+                        else:
+                            logging.warning(f"终止进程树 PID={pid} 失败: {result.stderr}")
+                    except Exception as e:
+                        logging.error(f"终止进程树 PID={pid} 时出错: {e}")
+                        
+            except Exception as e:
+                logging.error(f"psutil查找方法失败: {e}")
+        
+        # 方法3: 使用taskkill的精确过滤（不再使用兜底方案）
+        if terminated_count == 0:
+            logging.info("尝试使用taskkill精确过滤")
+            try:
+                # 使用多个过滤条件确保精确匹配
+                result = subprocess.run(
+                    ["taskkill", "/F", "/FI", f"IMAGENAME eq cmd.exe", 
+                     "/FI", f"COMMANDLINE eq *{script_name}*"],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode == 0 and "SUCCESS" in result.stdout:
+                    logging.info(f"taskkill成功终止相关进程: {result.stdout}")
+                    terminated_count += 1
+                else:
+                    logging.info(f"taskkill未找到匹配的进程")
+            except Exception as e:
+                logging.error(f"taskkill方法失败: {e}")
+        
+        if terminated_count == 0:
+            logging.warning(f"未找到与脚本 {script_name} 相关的进程")
+        
+        return terminated_count > 0
+        
+    except Exception as e:
+        logging.error(f"增强版批处理终止功能出错: {e}")
+        return False
 
 """
 MQTT接收到消息时的回调函数。
