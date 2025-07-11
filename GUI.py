@@ -430,7 +430,7 @@ def show_detail_window():
     detail_win.geometry("600x600")
     detail_text = tk.Text(detail_win, wrap="word")
     sleep()
-    detail_text.insert("end", "\n【内置主题详解】\n计算机：\n    打开：锁定计算机（Win+L）\n    关闭：15秒后重启计算机\n屏幕：\n    灯泡设备，通过API调节屏幕亮度(百分比)\n音量：\n    窗帘设备，可调节系统总音量(百分比)，暂停为静音\n睡眠：\n    开关设备，可休眠计算机\n媒体控制：\n    窗帘设备，可控制系统媒体播放\n    打开(on)：上一曲\n    关闭(off)：下一曲\n    暂停(pause)：播放/暂停\n    打开百分比(on#80)：\n      1-33%：下一曲\n      34-66%：播放/暂停\n      67-100%：上一曲\n\n\n【自定义主题详解】\n\n注：[均为开关设备]\n程序或脚本：\n    需要填写路径，或调用系统api选择程序或脚本文件\n服务：\n    主程序需要管理员权限（开机自启时默认拥有）\n填写服务名称\n\n\n【系统睡眠支持检测】\n\n可开启test模式以禁用本程序的睡眠支持检测\n\n可尝试此命令启用：powercfg.exe /hibernate on\n\n" + sleep_status_message+"\n\n\n")
+    detail_text.insert("end", "\n【内置主题详解】\n计算机：\n    打开：锁定计算机（Win+L）\n    关闭：60秒后重启计算机\n屏幕：\n    灯泡设备，通过API调节屏幕亮度(百分比)\n音量：\n    窗帘设备，可调节系统总音量(百分比)，暂停为静音\n睡眠：\n    开关设备，可休眠计算机\n媒体控制：\n    窗帘设备，可控制系统媒体播放\n    打开(on)：上一曲\n    关闭(off)：下一曲\n    暂停(pause)：播放/暂停\n    打开百分比(on#80)：\n      1-33%：下一曲\n      34-66%：播放/暂停\n      67-100%：上一曲\n\n\n【自定义主题详解】\n\n注：[均为开关设备]\n程序或脚本：\n    需要填写路径，或调用系统api选择程序或脚本文件\n服务：\n    主程序需要管理员权限（开机自启时默认拥有）\n填写服务名称\n\n\n【系统睡眠支持检测】\n\n可开启test模式以禁用本程序的睡眠支持检测\n\n可尝试此命令启用：powercfg.exe /hibernate on\n\n" + sleep_status_message+"\n\n\n")
     detail_text.config(state="disabled")
     detail_text.pack(expand=True, fill="both", padx=10, pady=10)
     center_window(detail_win)
