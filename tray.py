@@ -19,7 +19,7 @@ from win11toast import notify as toast
 from PIL import Image
 import psutil
 
-BANBEN = "V2.1.2"
+BANBEN = "V2.1.3"
 
 # 日志配置
 appdata_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
