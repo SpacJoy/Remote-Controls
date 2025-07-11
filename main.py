@@ -202,21 +202,30 @@ def process_command(command: str, topic: str) -> None:
                 notify_in_thread(f"尝试终止进程: {process_name}")
                 
                 # 检查是否是脚本文件
-                if directory.lower().endswith(('.cmd', '.bat', '.ps1')):
-                    # 对于批处理文件，先尝试增强版终止方法
+                if directory.lower().endswith(('.cmd', '.bat', '.ps1', '.py', '.pyw')):
+                    # 对于不同类型的脚本使用不同的终止方法
                     if directory.lower().endswith(('.cmd', '.bat')):
+                        # 批处理文件：先尝试增强版终止方法
                         if terminate_batch_process_enhanced(directory):
                             notify_in_thread(f"成功终止批处理脚本: {process_name}")
                         elif terminate_script_process(directory):
                             notify_in_thread(f"成功终止脚本: {process_name}")
                         else:
                             notify_in_thread(f"终止脚本失败: {process_name}")
-                    else:
-                        # PowerShell脚本使用原方法
-                        if terminate_script_process(directory):
+                    elif directory.lower().endswith('.ps1'):
+                        # PowerShell脚本：使用专门的PowerShell终止方法
+                        if terminate_powershell_process_enhanced(directory):
+                            notify_in_thread(f"成功终止PowerShell脚本: {process_name}")
+                        elif terminate_script_process(directory):
                             notify_in_thread(f"成功终止脚本: {process_name}")
                         else:
-                            notify_in_thread(f"终止脚本失败: {process_name}")
+                            notify_in_thread(f"终止PowerShell脚本失败: {process_name}")
+                    else:
+                        # Python脚本：使用标准方法
+                        if terminate_script_process(directory):
+                            notify_in_thread(f"成功终止Python脚本: {process_name}")
+                        else:
+                            notify_in_thread(f"终止Python脚本失败: {process_name}")
                 else:
                     # 普通可执行文件
                     result = subprocess.run(
@@ -235,9 +244,47 @@ def process_command(command: str, topic: str) -> None:
                     logging.error(f"启动失败，文件不存在: {directory}")
                     notify_in_thread(f"启动失败，文件不存在: {directory}")
                     return
+                
                 logging.info(f"启动: {directory}")
-                subprocess.Popen(directory)
-                notify_in_thread(f"启动: {directory}")
+                
+                # 检查文件类型，选择合适的启动方式
+                if directory.lower().endswith('.ps1'):
+                    # PowerShell脚本需要通过PowerShell解释器启动
+                    try:
+                        subprocess.Popen(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", directory])
+                        notify_in_thread(f"启动PowerShell脚本: {os.path.basename(directory)}")
+                        logging.info(f"成功启动PowerShell脚本: {directory}")
+                    except Exception as e:
+                        logging.error(f"启动PowerShell脚本失败: {e}")
+                        notify_in_thread(f"启动PowerShell脚本失败: {os.path.basename(directory)}")
+                elif directory.lower().endswith(('.py', '.pyw')):
+                    # Python脚本需要通过Python解释器启动
+                    try:
+                        subprocess.Popen(["python", directory])
+                        notify_in_thread(f"启动Python脚本: {os.path.basename(directory)}")
+                        logging.info(f"成功启动Python脚本: {directory}")
+                    except Exception as e:
+                        logging.error(f"启动Python脚本失败: {e}")
+                        notify_in_thread(f"启动Python脚本失败: {os.path.basename(directory)}")
+                elif directory.lower().endswith(('.cmd', '.bat')):
+                    # 批处理文件需要通过cmd启动
+                    try:
+                        # 使用cmd /c来启动批处理文件，确保路径正确处理
+                        subprocess.Popen(["cmd", "/c", directory], shell=False)
+                        notify_in_thread(f"启动批处理脚本: {os.path.basename(directory)}")
+                        logging.info(f"成功启动批处理脚本: {directory}")
+                    except Exception as e:
+                        logging.error(f"启动批处理脚本失败: {e}")
+                        notify_in_thread(f"启动批处理脚本失败: {os.path.basename(directory)}")
+                else:
+                    # 其他可执行文件
+                    try:
+                        subprocess.Popen(directory)
+                        notify_in_thread(f"启动程序: {os.path.basename(directory)}")
+                        logging.info(f"成功启动程序: {directory}")
+                    except Exception as e:
+                        logging.error(f"启动程序失败: {e}")
+                        notify_in_thread(f"启动程序失败: {os.path.basename(directory)}")
             return
     
     def check_service_status(service_name):
@@ -418,32 +465,53 @@ def terminate_script_process(script_path: str) -> bool:
     process_pids = []
     
     try:
-        # 方法1: 精确匹配通过cmd.exe /c或/k启动的脚本进程
+        # 方法1: 精确匹配通过相应解释器启动的脚本进程
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
                 cmdline = proc.info['cmdline']
-                if not cmdline or proc.info['name'].lower() != 'cmd.exe':
+                if not cmdline:
                     continue
                 
-                # 转换为字符串进行分析
+                proc_name = proc.info['name'].lower()
                 cmdline_str = ' '.join(cmdline).lower()
                 script_name_lower = script_name.lower()
                 script_path_lower = script_full_path.lower()
                 
-                # 只匹配通过cmd.exe /c 或 /k 启动的脚本
+                # 判断是否是脚本相关的进程
                 is_script_process = False
                 
-                # 检查是否是通过/c或/k参数启动的脚本
-                if '/c' in cmdline_str or '/k' in cmdline_str:
-                    # 检查是否包含完整路径或脚本名
-                    if (script_path_lower in cmdline_str or 
-                        script_name_lower in cmdline_str):
-                        # 进一步验证：确保是作为脚本执行，而不是在路径中偶然包含
-                        for arg in cmdline:
-                            if (script_name_lower in arg.lower() and 
-                                (arg.lower().endswith('.bat') or arg.lower().endswith('.cmd'))):
+                if script_name.lower().endswith('.ps1'):
+                    # PowerShell脚本：查找powershell.exe进程
+                    if proc_name in ['powershell.exe', 'pwsh.exe']:
+                        # 检查命令行是否包含脚本文件
+                        if (script_path_lower in cmdline_str or 
+                            script_name_lower in cmdline_str):
+                            # 进一步验证是否是执行脚本
+                            if any(script_name_lower in arg.lower() for arg in cmdline):
                                 is_script_process = True
-                                break
+                                
+                elif script_name.lower().endswith(('.py', '.pyw')):
+                    # Python脚本：查找python.exe进程
+                    if proc_name in ['python.exe', 'pythonw.exe']:
+                        # 检查命令行是否包含脚本文件
+                        if (script_path_lower in cmdline_str or 
+                            script_name_lower in cmdline_str):
+                            # 进一步验证是否是执行脚本
+                            if any(script_name_lower in arg.lower() for arg in cmdline):
+                                is_script_process = True
+                                
+                elif script_name.lower().endswith(('.cmd', '.bat')):
+                    # 批处理脚本：查找cmd.exe进程
+                    if proc_name == 'cmd.exe':
+                        # 检查是否是通过/c或/k参数启动的脚本
+                        if '/c' in cmdline_str or '/k' in cmdline_str:
+                            if (script_path_lower in cmdline_str or 
+                                script_name_lower in cmdline_str):
+                                # 进一步验证是否是脚本执行
+                                if any(script_name_lower in arg.lower() and 
+                                      (arg.lower().endswith('.bat') or arg.lower().endswith('.cmd'))
+                                      for arg in cmdline):
+                                    is_script_process = True
                 
                 if is_script_process:
                     logging.info(f"找到脚本进程: PID={proc.info['pid']}, 命令行={cmdline}")
@@ -666,6 +734,155 @@ def terminate_batch_process_enhanced(script_path: str) -> bool:
         
     except Exception as e:
         logging.error(f"增强版批处理终止功能出错: {e}")
+        return False
+
+def terminate_powershell_process_enhanced(script_path: str) -> bool:
+    """
+    增强版PowerShell脚本终止功能
+    
+    参数:
+    - script_path: PowerShell脚本文件路径
+    
+    返回:
+    - bool: 是否成功终止进程
+    """
+    script_name = os.path.basename(script_path)
+    script_full_path = os.path.abspath(script_path)
+    logging.info(f"使用增强版方法终止PowerShell进程: {script_name}")
+    logging.info(f"脚本完整路径: {script_full_path}")
+    
+    terminated_count = 0
+    
+    try:
+        # 方法1: 使用wmic精确查找PowerShell进程
+        try:
+            cmd = f'wmic process where "name=\'powershell.exe\' OR name=\'pwsh.exe\'" get ProcessId,CommandLine /format:value'
+            result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+            
+            pids = []
+            current_pid = None
+            current_cmdline = None
+            
+            for line in result.stdout.strip().split('\n'):
+                line = line.strip()
+                if line.startswith("CommandLine="):
+                    current_cmdline = line[12:]
+                elif line.startswith("ProcessId="):
+                    pid_str = line.split("=")[1].strip()
+                    if pid_str.isdigit():
+                        current_pid = int(pid_str)
+                    
+                    # 当获取到完整信息时进行验证
+                    if current_pid and current_cmdline:
+                        # 检查是否包含脚本名称
+                        if (script_name.lower() in current_cmdline.lower() or 
+                            script_full_path.lower() in current_cmdline.lower()):
+                            pids.append(current_pid)
+                            logging.info(f"找到匹配的PowerShell进程: PID={current_pid}, 命令行={current_cmdline}")
+                        
+                        # 重置
+                        current_pid = None
+                        current_cmdline = None
+            
+            # 终止找到的进程
+            for pid in pids:
+                try:
+                    # 使用taskkill /T 终止进程树
+                    result = subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(pid)],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if result.returncode == 0:
+                        logging.info(f"成功终止PowerShell进程树 PID={pid}")
+                        terminated_count += 1
+                    else:
+                        logging.warning(f"终止PowerShell进程树 PID={pid} 失败: {result.stderr}")
+                except Exception as e:
+                    logging.error(f"终止PowerShell进程树 PID={pid} 时出错: {e}")
+                    
+        except Exception as e:
+            logging.error(f"使用wmic查找PowerShell进程失败: {e}")
+        
+        # 方法2: 使用psutil进行精确查找
+        if terminated_count == 0:
+            logging.info("尝试使用psutil查找PowerShell进程")
+            try:
+                ps_processes = []
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        proc_name = proc.info['name'].lower()
+                        if proc_name in ['powershell.exe', 'pwsh.exe']:
+                            cmdline = proc.info['cmdline']
+                            if cmdline:
+                                cmdline_str = ' '.join(cmdline).lower()
+                                # 检查是否包含脚本名称
+                                if (script_name.lower() in cmdline_str or 
+                                    script_full_path.lower() in cmdline_str):
+                                    # 进一步验证是否是脚本执行
+                                    if any(script_name.lower() in arg.lower() for arg in cmdline):
+                                        ps_processes.append(proc.info['pid'])
+                                        logging.info(f"psutil找到匹配的PowerShell进程: PID={proc.info['pid']}, 命令行={cmdline}")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        continue
+                
+                # 终止找到的进程及其子进程
+                for pid in ps_processes:
+                    try:
+                        # 使用taskkill /T 终止进程树
+                        result = subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(pid)],
+                            capture_output=True,
+                            text=True,
+                        )
+                        if result.returncode == 0:
+                            logging.info(f"成功终止PowerShell进程树 PID={pid}")
+                            terminated_count += 1
+                        else:
+                            logging.warning(f"终止PowerShell进程树 PID={pid} 失败: {result.stderr}")
+                    except Exception as e:
+                        logging.error(f"终止PowerShell进程树 PID={pid} 时出错: {e}")
+                        
+            except Exception as e:
+                logging.error(f"psutil查找PowerShell进程失败: {e}")
+        
+        # 方法3: 使用taskkill精确过滤
+        if terminated_count == 0:
+            logging.info("尝试使用taskkill精确过滤PowerShell进程")
+            try:
+                # 首先尝试powershell.exe
+                result = subprocess.run(
+                    ["taskkill", "/F", "/FI", f"IMAGENAME eq powershell.exe", 
+                     "/FI", f"COMMANDLINE eq *{script_name}*"],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode == 0 and "SUCCESS" in result.stdout:
+                    logging.info(f"taskkill成功终止PowerShell进程: {result.stdout}")
+                    terminated_count += 1
+                else:
+                    # 尝试pwsh.exe（PowerShell Core）
+                    result = subprocess.run(
+                        ["taskkill", "/F", "/FI", f"IMAGENAME eq pwsh.exe", 
+                         "/FI", f"COMMANDLINE eq *{script_name}*"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if result.returncode == 0 and "SUCCESS" in result.stdout:
+                        logging.info(f"taskkill成功终止PowerShell Core进程: {result.stdout}")
+                        terminated_count += 1
+                    else:
+                        logging.info(f"taskkill未找到匹配的PowerShell进程")
+            except Exception as e:
+                logging.error(f"taskkill方法失败: {e}")
+        
+        if terminated_count == 0:
+            logging.warning(f"未找到与PowerShell脚本 {script_name} 相关的进程")
+        
+        return terminated_count > 0
+        
+    except Exception as e:
+        logging.error(f"增强版PowerShell终止功能出错: {e}")
         return False
 
 """
