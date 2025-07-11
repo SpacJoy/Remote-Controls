@@ -436,6 +436,22 @@ def show_detail_window():
     center_window(detail_win)
 
 
+def rebuild_custom_theme_tree() -> None:
+    """
+    重新构建自定义主题树视图，确保索引正确
+    """
+    # 清空树视图中的所有项目
+    for item in custom_theme_tree.get_children():
+        custom_theme_tree.delete(item)
+    
+    # 重新插入所有主题，使用正确的索引
+    for index, theme in enumerate(custom_themes):
+        status = "开" if theme["checked"] else "关"
+        display_name = theme["nickname"] or theme["name"]
+        item_text = f"[{status}] {display_name}"
+        custom_theme_tree.insert("", "end", iid=str(index), values=(item_text,))
+
+
 # 修改自定义主题的函数
 def modify_custom_theme() -> None:
     """
@@ -506,11 +522,8 @@ def modify_custom_theme() -> None:
         theme["nickname"] = theme_nickname_entry.get()
         theme["name"] = theme_name_entry.get()
         theme["value"] = theme_value_entry.get()
-        status = "开" if theme["checked"] else "关"
-        display_name = theme["nickname"] or theme["name"]
-        item_text = f"[{status}] {display_name}"
-        custom_theme_tree.delete(str(index))
-        custom_theme_tree.insert("", "end", iid=str(index), values=(item_text,))
+        # 重新构建整个树视图以确保索引正确
+        rebuild_custom_theme_tree()
         theme_window.destroy()
 
     def delete_theme():
@@ -518,7 +531,8 @@ def modify_custom_theme() -> None:
             "确认删除", "确定要删除这个自定义主题吗？", parent=theme_window
         ):
             custom_themes.pop(index)
-            custom_theme_tree.delete(str(index))
+            # 重新构建整个树视图
+            rebuild_custom_theme_tree()
             theme_window.destroy()
         else:
             theme_window.lift()
@@ -592,10 +606,8 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             "value": theme_value_entry.get(),
         }
         custom_themes.append(theme)
-        status = "开" if theme["checked"] else "关"
-        display_name = theme["nickname"] or theme["name"]
-        item_text = f"[{status}] {display_name}"
-        custom_theme_tree.insert("", "end", iid=str(len(custom_themes) - 1), values=(item_text,))
+        # 重新构建整个树视图以确保索引正确
+        rebuild_custom_theme_tree()
         theme_window.destroy()
 
     ttk.Button(theme_window, text="保存", command=save_theme).grid(
