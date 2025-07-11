@@ -1,32 +1,64 @@
 # 远程控制工具(RC-remote-controls)依赖项
-# 更新日期: 2025-05-12
+# 更新日期: 2025-07-11
+# 版本: v2.1.1
 
 """
 注意:
-Python 3.13使用虚拟环境时，如遇tkinter相关错误，需要将以下文件夹:
-C:\\Program Files\\Python313\\tcl\\tcl8.6
-C:\\Program Files\\Python313\\tcl\\tk8.6
-复制到:
-C:\\Program Files\\Python313\\Lib 文件夹下
-否则报错: _tkinter.TclError: Can't find a usable init.tcl
+1. Python 3.12.10及以上版本推荐使用（当前测试环境：Python 3.12.10）
+2. 建议使用虚拟环境进行依赖管理
+3. Python 3.13使用虚拟环境时，如遇tkinter相关错误，需要将以下文件夹:
+   C:\\Program Files\\Python313\\tcl\\tcl8.6
+   C:\\Program Files\\Python313\\tcl\\tk8.6
+   复制到:
+   C:\\Program Files\\Python313\\Lib 文件夹下
+   否则报错: _tkinter.TclError: Can't find a usable init.tcl
+
+4. 对于PowerShell脚本支持，确保系统已安装PowerShell
+5. 对于Python脚本支持，确保python.exe在系统PATH中
 """
 
-# 基础依赖
-paho-mqtt>=1.6.1     # MQTT通信
-wmi>=1.5.1           # Windows管理工具
-pillow>=10.0.0       # 图像处理
-pystray>=0.19.4      # 系统托盘图标
-setuptools>=65.5.1   # 安装工具
+# 基础依赖（基于实际测试环境）
+paho-mqtt>=2.1.0     # MQTT通信库（当前：2.1.0）
+wmi>=1.5.1           # Windows管理工具接口（当前：1.5.1）
+pillow>=11.2.0       # 图像处理库（当前：11.2.1）
+pystray>=0.19.5      # 系统托盘图标（当前：0.19.5）
+setuptools>=80.0.0   # Python包安装工具（当前：80.1.0）
 
 # 系统交互
-pywin32>=305         # Windows API访问
-psutil>=5.9.5        # 进程和系统监控
-comtypes>=1.2.0      # COM组件接口
-pycaw>=20230407      # 音量控制
+pywin32>=310         # Windows API访问（当前：310）
+psutil>=7.0.0        # 进程和系统监控（当前：7.0.0）
+comtypes>=1.4.10     # COM组件接口（当前：1.4.10）
+pycaw>=20240210      # Windows音量控制（当前：20240210）
 
 # 通知和用户界面
-win11toast>=0.34     # Windows通知
-pyautogui>=0.9.54    # 自动化控制
+win11toast>=0.35     # Windows 10/11通知（当前：0.35）
+pyautogui>=0.9.54    # GUI自动化和媒体键控制（当前：0.9.54）
 
-# 可选依赖
-# Tkinter已内置在Python标准库中，用于GUI界面
+# 可选依赖和说明
+# Tkinter - 已内置在Python标准库中，用于GUI界面
+# PowerShell - 系统内置，用于.ps1脚本执行
+# CMD - 系统内置，用于.cmd/.bat脚本执行
+
+# 开发和打包工具（可选）
+# pyinstaller>=6.13.0  # 打包为exe文件（当前测试环境：6.13.0）
+
+# 虚拟环境创建和管理:
+# python -m venv .venv
+# .venv\Scripts\activate
+# pip install -r requirements.txt
+
+# 安装命令示例:
+# pip install -r requirements.txt
+# pip install --upgrade setuptools
+
+# 当前测试环境信息:
+# Python 3.12.10 (Virtual Environment)
+# 所有依赖包均为实际测试验证版本
+
+# 功能特性说明:
+# - 支持PowerShell (.ps1)、Python (.py/.pyw)、批处理 (.cmd/.bat) 脚本
+# - 智能进程管理，精确终止脚本相关进程
+# - 媒体控制功能，支持播放/暂停、切换曲目
+# - 自动管理员权限检测和提权
+# - 多种终止方法：wmic、psutil、taskkill
+# - 系统托盘管理和MQTT远程控制
