@@ -1,0 +1,46 @@
+{
+	"_comment": "MQTT认证配置示例 - 兼容多种IoT平台",
+
+	"_comment_auth_modes": "支持两种认证模式: private_key（私钥模式，适用于巴法云等）或 username_password（账号密码模式，适用于大多数IoT平台）",
+
+	"_comment_private_key_mode": "方式一：私钥模式 - 兼容巴法云等平台",
+	"broker": "bemfa.com",
+	"secret_id": "your_private_key_here",
+	"port": 9501,
+	"auth_mode": "private_key",
+
+	"_comment_username_password_mode": "方式二：账号密码模式 - 兼容阿里云IoT、腾讯云IoT、AWS IoT等",
+	"mqtt_username": "your_username_device_id_or_appid",
+	"mqtt_password": "your_password_secret_key",
+	"client_id": "your_device_id_or_client_id",
+
+	"_comment_aliyun_example": "阿里云IoT配置示例：broker为产品密钥.iot-as-mqtt.地域.aliyuncs.com，username为设备名&产品密钥",
+	"_comment_tencent_example": "腾讯云IoT配置示例：broker为产品ID.iotcloud.tencentdevices.com，username为产品ID;设备名",
+
+	"_comment_topics": "主题配置示例",
+	"Computer": "your_computer_topic",
+	"Computer_checked": 1,
+	"screen": "your_screen_topic",
+	"screen_checked": 1,
+	"volume": "your_volume_topic",
+	"volume_checked": 1,
+	"sleep": "your_sleep_topic",
+	"sleep_checked": 0,
+	"media": "your_media_topic",
+	"media_checked": 1,
+
+	"_comment_custom_apps": "自定义应用程序配置",
+	"application1": "your_app_topic1",
+	"application1_checked": 1,
+	"application1_directory1": "C:\\path\\to\\your\\app.exe",
+	"application1_name": "我的应用",
+
+	"_comment_custom_services": "自定义服务配置（需要管理员权限）",
+	"serve1": "your_service_topic1",
+	"serve1_checked": 0,
+	"serve1_value": "YourServiceName",
+	"serve1_name": "我的服务",
+
+	"_comment_other_settings": "其他设置",
+	"test": 0
+}

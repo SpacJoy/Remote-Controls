@@ -14,7 +14,7 @@ import subprocess
 import win32com.client
 from typing import Any, Dict, List, Union
 
-BANBEN = "V2.1.3"
+BANBEN = "V2.1.4"
 # 创建一个命名的互斥体
 # mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "RC-main-GUI")
 
@@ -629,6 +629,10 @@ def generate_config() -> None:
         "secret_id": secret_entry.get(),
         "port": int(port_entry.get()),
         "test": test_var.get(),
+        "auth_mode": auth_mode_var.get(),
+        "mqtt_username": mqtt_username_entry.get(),
+        "mqtt_password": mqtt_password_entry.get(),
+        "client_id": client_id_entry.get(),
     }
 
     # 内置主题配置
@@ -862,13 +866,40 @@ port_entry = ttk.Entry(system_frame)
 port_entry.grid(row=2, column=1, sticky="ew")
 port_entry.insert(0, str(config.get("port", "")))
 
+# MQTT认证模式选择
+ttk.Label(system_frame, text="认证模式：").grid(row=3, column=0, sticky="e")
+auth_mode_var = tk.StringVar(value=config.get("auth_mode", "private_key"))
+auth_mode_combo = ttk.Combobox(system_frame, 
+                               values=["私钥模式", "账号密码模式"], 
+                               state="readonly", width=15)
+auth_mode_combo.grid(row=3, column=1, sticky="w")
+
+# 设置下拉框显示文本
+def update_auth_mode_display():
+    current_value = auth_mode_var.get()
+    if current_value == "private_key":
+        auth_mode_combo.set("私钥模式")
+    elif current_value == "username_password":
+        auth_mode_combo.set("账号密码模式")
+
+# 绑定选择事件
+def on_auth_mode_change(event):
+    selected_text = auth_mode_combo.get()
+    if selected_text == "私钥模式":
+        auth_mode_var.set("private_key")
+    elif selected_text == "账号密码模式":
+        auth_mode_var.set("username_password")
+
+auth_mode_combo.bind("<<ComboboxSelected>>", on_auth_mode_change)
+update_auth_mode_display()
+
 test_var = tk.IntVar(value=config.get("test", 0))
 test_check = ttk.Checkbutton(system_frame, text="test模式", variable=test_var)
-test_check.grid(row=3, column=0, columnspan=2, sticky="w")
+test_check.grid(row=4, column=0, columnspan=2, sticky="w")
 
 #添加打开任务计划按钮
 task_button = ttk.Button(system_frame, text="点击此按钮可以手动设置", command=lambda:os.startfile("taskschd.msc"))
-task_button.grid(row=3, column=2, sticky="n", padx=15)
+task_button.grid(row=4, column=2, sticky="n", padx=15)
 
 # 添加设置开机自启动按钮上面的提示
 auto_start_label = ttk.Label(
@@ -886,6 +917,59 @@ auto_start_label1.grid(row=1, column=2, sticky="n")
 auto_start_button = ttk.Button(system_frame, text="", command=set_auto_start)
 auto_start_button.grid(row=2, column=2,  sticky="n")
 
+# MQTT认证配置部分
+auth_frame = ttk.LabelFrame(root, text="MQTT认证配置")
+auth_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
+for i in range(3):
+    auth_frame.rowconfigure(i, weight=1)
+for j in range(3):
+    auth_frame.columnconfigure(j, weight=1)
+
+# 用户名配置
+ttk.Label(auth_frame, text="用户名：").grid(row=0, column=0, sticky="e")
+mqtt_username_entry = ttk.Entry(auth_frame)
+mqtt_username_entry.grid(row=0, column=1, sticky="ew")
+mqtt_username_entry.insert(0, config.get("mqtt_username", ""))
+
+# 密码配置
+ttk.Label(auth_frame, text="密码：").grid(row=1, column=0, sticky="e")
+mqtt_password_entry = ttk.Entry(auth_frame, show="*")
+mqtt_password_entry.grid(row=1, column=1, sticky="ew")
+mqtt_password_entry.insert(0, config.get("mqtt_password", ""))
+
+# 客户端ID配置
+ttk.Label(auth_frame, text="客户端ID：").grid(row=2, column=0, sticky="e")
+client_id_entry = ttk.Entry(auth_frame)
+client_id_entry.grid(row=2, column=1, sticky="ew")
+client_id_entry.insert(0, config.get("client_id", ""))
+
+# 认证模式说明
+auth_info_label = ttk.Label(
+    auth_frame,
+    text="私钥模式：兼容巴法云等平台\n账号密码模式：兼容大多数IoT平台",
+    justify="left"
+)
+auth_info_label.grid(row=0, column=2, rowspan=2, sticky="n", padx=10)
+
+def toggle_auth_mode(*args):
+    """根据MQTT认证模式切换界面显示"""
+    mode = auth_mode_var.get()
+    if mode == "username_password":
+        # 账号密码模式：适用于大多数IoT平台
+        mqtt_username_entry.config(state="normal")
+        mqtt_password_entry.config(state="normal")
+        client_id_entry.config(state="normal")
+    else:
+        # 私钥模式：兼容巴法云等特殊平台
+        mqtt_username_entry.config(state="disabled")
+        mqtt_password_entry.config(state="disabled")
+        client_id_entry.config(state="disabled")
+
+# 绑定认证模式变化事件
+auth_mode_var.trace("w", toggle_auth_mode)
+# 初始化界面状态
+toggle_auth_mode()
+
 # 程序标题栏
 if IS_GUI_ADMIN:
     check_task()
@@ -895,7 +979,7 @@ else:
 
 # 主题配置部分
 theme_frame = ttk.LabelFrame(root, text="主题配置")
-theme_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
+theme_frame.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
 for i in range(6):
     theme_frame.rowconfigure(i, weight=1)
 for j in range(4):
@@ -1008,7 +1092,7 @@ custom_theme_tree.bind("<Double-Button-1>", on_double_click)
 
 # 添加按钮到框架中
 button_frame = tk.Frame(root)
-button_frame.grid(row=2, column=0, pady=15, sticky="ew")
+button_frame.grid(row=3, column=0, pady=15, sticky="ew")
 button_frame.grid_rowconfigure(0, weight=1)
 button_frame.grid_columnconfigure(0, weight=1)
 button_frame.grid_columnconfigure(1, weight=1)

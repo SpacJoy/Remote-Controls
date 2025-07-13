@@ -29,7 +29,7 @@ from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 import pyautogui
 from pyautogui import press as pyautogui_press
 
-BANBEN = "V2.1.3"
+BANBEN = "V2.1.4"
 
 # 禁用 PyAutoGUI 安全模式，确保即使鼠标在屏幕角落也能执行命令
 pyautogui.FAILSAFE = False
@@ -1363,6 +1363,11 @@ broker = config.get("broker")
 secret_id = config.get("secret_id")
 port = int(config.get("port"))
 
+# 获取MQTT认证信息
+mqtt_username = config.get("mqtt_username", "")  # 用户名（appID）
+mqtt_password = config.get("mqtt_password", "")  # 密码（secretKey）
+auth_mode = config.get("auth_mode", "private_key")  # 认证模式：private_key（私钥）或 username_password（账号密码）
+
 
 # 动态加载主题
 def load_theme(key):
@@ -1504,7 +1509,30 @@ mqttc.on_subscribe = on_subscribe
 mqttc.on_unsubscribe = on_unsubscribe
 
 mqttc.user_data_set([])
-mqttc._client_id = secret_id
+
+# 根据认证模式设置连接参数
+if auth_mode == "username_password" and mqtt_username and mqtt_password:
+    # 方式二：使用用户名密码进行身份验证（适用于大多数IoT平台）
+    logging.info("使用账号密码方式连接MQTT服务器")
+    logging.info(f"用户名: {mqtt_username}")
+    logging.info("密码: [已隐藏]")
+    
+    # 设置用户名和密码
+    mqttc.username_pw_set(mqtt_username, mqtt_password)
+    
+    # 客户端ID可以设置为任意值
+    client_id = config.get("client_id", mqtt_username)
+    mqttc._client_id = client_id
+    logging.info(f"客户端ID: {client_id}")
+else:
+    # 方式一：使用私钥作为客户端ID（兼容巴法云等平台）
+    logging.info("使用私钥方式连接MQTT服务器")
+    logging.info(f"客户端ID（私钥）: {secret_id}")
+    
+    # 设置私钥作为客户端ID
+    mqttc._client_id = secret_id
+    # 不设置用户名和密码
+
 try:
     mqttc.connect(broker, port)
 except socket.timeout:
