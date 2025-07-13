@@ -922,14 +922,33 @@ def on_connect(client, userdata: list, flags: dict, reason_code, properties=None
     # 兼容 int 和 ReasonCode 类型
     try:
         is_fail = reason_code.is_failure
+        reason_str = str(reason_code)
     except AttributeError:
         is_fail = reason_code != 0
+        reason_str = str(reason_code)
 
     if is_fail:
-        notify_in_thread(
-            f"连接MQTT失败: {reason_code}. 重新连接中..."
-        )
-        logging.error(f"连接失败: {reason_code}. loop_forever() 将重试连接")
+        # 检查是否是认证失败（错误代码5表示Not authorized）
+        if "Not authorized" in reason_str or reason_code == 5:
+            error_msg = f"MQTT认证失败: {reason_str}\n\n可能的原因：\n• 账号密码模式：用户名或密码错误\n• 私钥模式：客户端ID（私钥）错误\n• 服务器配置问题\n\n程序将停止重试，请检查配置后重新启动。"
+            logging.error(f"MQTT认证失败: {reason_str}，停止重试")
+            notify_in_thread("MQTT认证失败，程序即将退出")
+            
+            # 认证失败时停止重试并退出程序
+            try:
+                messagebox.showerror("MQTT认证失败", error_msg)
+                open_gui()
+                client.loop_stop()
+                client.disconnect()
+            except Exception as e:
+                logging.error(f"处理认证失败时出错: {e}")
+            finally:
+                logging.info("因认证失败退出程序")
+                threading.Timer(0.5, lambda: os._exit(0)).start()
+                sys.exit(0)
+        else:
+            notify_in_thread(f"连接MQTT失败: {reason_str}. 重新连接中...")
+            logging.error(f"连接失败: {reason_str}. loop_forever() 将重试连接")
     else:
         notify_in_thread(f"MQTT成功连接至{broker}")
         logging.info(f"连接到 {broker}")
@@ -1528,6 +1547,16 @@ if auth_mode == "username_password" and mqtt_username and mqtt_password:
 else:
     # 方式一：使用私钥作为客户端ID（兼容巴法云等平台）
     logging.info("使用私钥方式连接MQTT服务器")
+    
+    # 检查客户端ID是否为空
+    if not client_id or client_id.strip() == "":
+        error_msg = "私钥模式下客户端ID不能为空！\n请在配置文件中设置客户端ID（私钥）。"
+        logging.error(error_msg)
+        messagebox.showerror("配置错误", error_msg)
+        open_gui()
+        threading.Timer(0.5, lambda: os._exit(0)).start()
+        sys.exit(0)
+    
     logging.info(f"客户端ID（私钥）: {client_id}")
     
     # 设置私钥作为客户端ID
