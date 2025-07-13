@@ -626,7 +626,6 @@ def generate_config() -> None:
     global config
     config = {
         "broker": website_entry.get(),
-        "secret_id": client_id_entry.get(),  # 使用client_id作为secret_id
         "port": int(port_entry.get()),
         "test": test_var.get(),
         "auth_mode": auth_mode_var.get(),
@@ -936,8 +935,8 @@ mqtt_password_entry.insert(0, config.get("mqtt_password", ""))
 ttk.Label(auth_frame, text="客户端ID：").grid(row=2, column=0, sticky="e")
 client_id_entry = ttk.Entry(auth_frame)
 client_id_entry.grid(row=2, column=1, sticky="ew")
-# 优先使用client_id，如果没有则使用secret_id
-client_id_value = config.get("client_id", "") or config.get("secret_id", "")
+# 读取client_id配置
+client_id_value = config.get("client_id", "")
 client_id_entry.insert(0, client_id_value)
 
 # 认证模式说明

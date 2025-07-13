@@ -1360,8 +1360,8 @@ else:
         logging.info("至少已有一个主题被启用")
 
 broker = config.get("broker")
-# 统一使用client_id，兼容旧配置的secret_id
-client_id = config.get("client_id", "") or config.get("secret_id", "")
+# 读取客户端ID配置
+client_id = config.get("client_id", "")
 port = int(config.get("port"))
 
 # 获取MQTT认证信息
