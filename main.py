@@ -1571,12 +1571,28 @@ except socket.timeout:
     )
     open_gui()
     threading.Timer(0.5, lambda: os._exit(0)).start()
+    sys.exit(0)
 except socket.gaierror:
     messagebox.showerror(
         "Error", "无法解析 MQTT 服务器地址，请重试或检查服务器地址是否正确！"
     )
     open_gui()
     threading.Timer(0.5, lambda: os._exit(0)).start()
+    sys.exit(0)
+except ConnectionRefusedError:
+    error_msg = f"连接被拒绝，无法连接到MQTT服务器！\n\n可能的原因：\n• 服务器地址错误：{broker}\n• 端口号错误：{port}\n• 服务器未启动或不可用\n• 防火墙阻止连接\n\n请检查配置文件中的服务器信息。"
+    logging.error(f"连接被拒绝: {broker}:{port}")
+    messagebox.showerror("连接被拒绝", error_msg)
+    open_gui()
+    threading.Timer(0.5, lambda: os._exit(0)).start()
+    sys.exit(0)
+except Exception as e:
+    error_msg = f"连接MQTT服务器时发生未知错误：\n{str(e)}\n\n请检查网络连接和服务器配置。"
+    logging.error(f"MQTT连接异常: {e}")
+    messagebox.showerror("连接错误", error_msg)
+    open_gui()
+    threading.Timer(0.5, lambda: os._exit(0)).start()
+    sys.exit(0)
 try:
     mqttc.loop_forever()
 except KeyboardInterrupt:
