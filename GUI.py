@@ -626,7 +626,7 @@ def generate_config() -> None:
     global config
     config = {
         "broker": website_entry.get(),
-        "secret_id": secret_entry.get(),
+        "secret_id": client_id_entry.get(),  # 使用client_id作为secret_id
         "port": int(port_entry.get()),
         "test": test_var.get(),
         "auth_mode": auth_mode_var.get(),
@@ -846,7 +846,7 @@ root.columnconfigure(0, weight=1)
 # 系统配置部分
 system_frame = ttk.LabelFrame(root, text="系统配置")
 system_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
-for i in range(4):
+for i in range(3):
     system_frame.rowconfigure(i, weight=1)
 for j in range(3):
     system_frame.columnconfigure(j, weight=1)
@@ -856,23 +856,18 @@ website_entry = ttk.Entry(system_frame)
 website_entry.grid(row=0, column=1, sticky="ew")
 website_entry.insert(0, config.get("broker", ""))
 
-ttk.Label(system_frame, text="密钥：").grid(row=1, column=0, pady=10,sticky="e")
-secret_entry = ttk.Entry(system_frame,show="*")
-secret_entry.grid(row=1, column=1, sticky="ew")
-secret_entry.insert(0, config.get("secret_id", ""))
-
-ttk.Label(system_frame, text="端口：").grid(row=2, column=0, sticky="e")
+ttk.Label(system_frame, text="端口：").grid(row=1, column=0, sticky="e")
 port_entry = ttk.Entry(system_frame)
-port_entry.grid(row=2, column=1, sticky="ew")
+port_entry.grid(row=1, column=1, sticky="ew")
 port_entry.insert(0, str(config.get("port", "")))
 
 # MQTT认证模式选择
-ttk.Label(system_frame, text="认证模式：").grid(row=3, column=0, sticky="e")
+ttk.Label(system_frame, text="认证模式：").grid(row=2, column=0, sticky="e")
 auth_mode_var = tk.StringVar(value=config.get("auth_mode", "private_key"))
 auth_mode_combo = ttk.Combobox(system_frame, 
                                values=["私钥模式", "账号密码模式"], 
                                state="readonly", width=15)
-auth_mode_combo.grid(row=3, column=1, sticky="w")
+auth_mode_combo.grid(row=2, column=1, sticky="w")
 
 # 设置下拉框显示文本
 def update_auth_mode_display():
@@ -895,11 +890,11 @@ update_auth_mode_display()
 
 test_var = tk.IntVar(value=config.get("test", 0))
 test_check = ttk.Checkbutton(system_frame, text="test模式", variable=test_var)
-test_check.grid(row=4, column=0, columnspan=2, sticky="w")
+test_check.grid(row=3, column=0, columnspan=2, sticky="w")
 
 #添加打开任务计划按钮
 task_button = ttk.Button(system_frame, text="点击此按钮可以手动设置", command=lambda:os.startfile("taskschd.msc"))
-task_button.grid(row=4, column=2, sticky="n", padx=15)
+task_button.grid(row=3, column=2, sticky="n", padx=15)
 
 # 添加设置开机自启动按钮上面的提示
 auto_start_label = ttk.Label(
@@ -941,12 +936,14 @@ mqtt_password_entry.insert(0, config.get("mqtt_password", ""))
 ttk.Label(auth_frame, text="客户端ID：").grid(row=2, column=0, sticky="e")
 client_id_entry = ttk.Entry(auth_frame)
 client_id_entry.grid(row=2, column=1, sticky="ew")
-client_id_entry.insert(0, config.get("client_id", ""))
+# 优先使用client_id，如果没有则使用secret_id
+client_id_value = config.get("client_id", "") or config.get("secret_id", "")
+client_id_entry.insert(0, client_id_value)
 
 # 认证模式说明
 auth_info_label = ttk.Label(
     auth_frame,
-    text="私钥模式：兼容巴法云等平台\n账号密码模式：兼容大多数IoT平台",
+    text="私钥模式：使用客户端ID作为私钥\n账号密码模式：兼容大多数IoT平台",
     justify="left"
 )
 auth_info_label.grid(row=0, column=2, rowspan=2, sticky="n", padx=10)
@@ -958,12 +955,12 @@ def toggle_auth_mode(*args):
         # 账号密码模式：适用于大多数IoT平台
         mqtt_username_entry.config(state="normal")
         mqtt_password_entry.config(state="normal")
-        client_id_entry.config(state="normal")
+        client_id_entry.config(state="normal", show="")
     else:
-        # 私钥模式：兼容巴法云等特殊平台
+        # 私钥模式：兼容巴法云等特殊平台，客户端ID作为私钥需要保密
         mqtt_username_entry.config(state="disabled")
         mqtt_password_entry.config(state="disabled")
-        client_id_entry.config(state="disabled")
+        client_id_entry.config(state="normal", show="*")
 
 # 绑定认证模式变化事件
 auth_mode_var.trace("w", toggle_auth_mode)
