@@ -1,5 +1,5 @@
 {
-	"broker": "bemfa.com// 服务器地址",
+	"broker": "server.example.com",
 	"port": 9501,
 	"test": 0,
 	"auth_mode": "private_key",
