@@ -1,6 +1,6 @@
 # 远程控制工具（RC-remote-controls）
-## 并非传统意义上的远程控制，是将电脑模拟成智能家居，通过mqtt实现远程开关，执行脚本等功能！！
-#### 免责声明：本项目仅供学习交流使用，本人不对使用本程序产生的任何后果负责，请勿用于非法用途，否则后果自负
+### 并非传统意义上的远程控制，是将电脑模拟成智能家居，通过mqtt实现远程开关，执行脚本等功能！！
+#### 声明：本项目仅供学习交流使用，本人不对使用本程序产生的任何后果负责，请勿用于非法用途，否则后果自负
 
 ## 项目简介
 
@@ -19,53 +19,6 @@
 - 支持开机自启、管理员权限检测和自动提权
 - 支持 test 模式（测试/调试用）
 
-## 环境依赖与安装
-
-### 1. 环境要求
-
-- **Python版本**: Python 3.12.10 及以上（推荐使用虚拟环境）
-- **操作系统**: Windows 10/11（有跨平台计划，但暂无Mac支持）
-- **系统组件**: PowerShell（用于.ps1脚本）、CMD（用于批处理脚本）
-
-### 2. 依赖安装
-
-**方式一：使用requirements.txt（推荐）**
-```bash
-# 创建虚拟环境（推荐）
-python -m venv .venv
-.venv\Scripts\activate
-
-# 安装依赖
-pip install -r requirements.txt
-```
-
-**方式二：手动安装核心依赖**
-```bash
-pip install paho-mqtt>=2.1.0 wmi>=1.5.1 win11toast>=0.35 pillow>=11.2.0 pystray>=0.19.5 comtypes>=1.4.10 pycaw>=20240210 psutil>=7.0.0 pywin32>=310 pyautogui>=0.9.54
-pip install --upgrade setuptools
-```
-
-**常见问题解决：**
-- 如遇 tkinter 相关报错（如 init.tcl 找不到），请将 `tcl/tk` 文件夹复制到 Python 的 `Lib` 目录下
-- 确保 PowerShell 执行策略允许脚本运行：`Set-ExecutionPolicy RemoteSigned`
-
-### 3. 打包说明
-
-如需打包为exe，使用PyInstaller 6.13.0及以上版本：
-
-```bash
-# 安装打包工具
-pip install pyinstaller>=6.13.0
-
-# 打包GUI程序
-pyinstaller -F -n RC-GUI --noconsole --icon=res\\icon_GUI.ico GUI.py
-
-# 打包主程序
-pyinstaller -F -n RC-main --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." main.py
-
-# 打包托盘程序
-pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." tray.py
-```
 
 ## 项目文件说明
 
@@ -118,6 +71,36 @@ pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.
 
 1. **自动管理**：托盘程序会自动检测主程序是否运行，如未运行则自动启动
 
+![Star History Chart](https://api.star-history.com/svg?repos=chen6019/Remote-Controls&type=Date)
+
+## 教程（参考）
+
+### 1. 修改 MQTT 服务器信息
+
+修改你的巴法云订阅和密钥，并创建相应主题（记得修改主题昵称） 具体主题命名规则可以看巴法云接入文档（右上角里面智能音箱部分）[接入文档](https://cloud.bemfa.com/docs/src/speaker_mi.html)  
+例如：（记得复制密钥备用）
+
+- ![巴法云配置](res/巴法云.png)
+
+### 2. 启动程序
+
+可以直接下载执行文件，也可以下载源码自行编译：  
+- `RC-GUI.exe`：配置界面程序
+- `RC-main.exe`：主程序，负责MQTT连接和控制功能
+- `RC-tray.exe`：托盘程序，用于管理和监控主程序
+
+打开 GUI 程序，输入巴法云密钥(或账号密码)等信息，点击保存。
+例：（可分别启用主题（test 模式可不启用主题））
+
+- ![GUI配置界面](res/GUI.png)
+
+### 3. 米家绑定巴法云账号
+
+绑定后同步设备，小爱就能控制了
+
+- ![米家绑定](res/米家.jpg)
+- ![小爱同学](res/小爱同学.jpg)
+
 ## 常见问题（FAQ）
 
 - Q: 启动报错“应用程序已在运行”？
@@ -144,33 +127,53 @@ pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.
 - Q: 打包后程序无法运行？
   A: 确保使用PyInstaller 6.13.0及以上版本，检查是否正确添加资源文件。
 
-## 教程（参考）
+## 手动打包：环境依赖与安装
 
-### 1. 修改 MQTT 服务器信息
+### 1. 环境要求
 
-修改你的巴法云订阅和密钥，并创建相应主题（记得修改主题昵称） 具体主题命名规则可以看巴法云接入文档（右上角里面智能音箱部分）[接入文档](https://cloud.bemfa.com/docs/src/speaker_mi.html)  
-例如：（记得复制密钥备用）
+- **Python版本**: Python 3.12.10 及以上（推荐使用虚拟环境）
+- **操作系统**: Windows 10/11（有跨平台计划，但暂无Mac支持）
+- **系统组件**: PowerShell（用于.ps1脚本）、CMD（用于批处理脚本）
 
-- ![巴法云配置](res/巴法云.png)
+### 2. 依赖安装
 
-### 2. 启动程序
+**方式一：使用requirements.txt（推荐）**
+```bash
+# 创建虚拟环境（推荐）
+python -m venv .venv
+.venv\Scripts\activate
 
-可以直接下载执行文件，也可以下载源码自行编译：  
-- `RC-GUI.exe`：配置界面程序
-- `RC-main.exe`：主程序，负责MQTT连接和控制功能
-- `RC-tray.exe`：托盘程序，用于管理和监控主程序
+# 安装依赖
+pip install -r requirements.txt
+```
 
-打开 GUI 程序，输入巴法云密钥等信息，点击保存。
-例：（可分别启用主题（test 模式可不启用主题））
+**方式二：手动安装核心依赖**
+```bash
+pip install paho-mqtt>=2.1.0 wmi>=1.5.1 win11toast>=0.35 pillow>=11.2.0 pystray>=0.19.5 comtypes>=1.4.10 pycaw>=20240210 psutil>=7.0.0 pywin32>=310 pyautogui>=0.9.54
+pip install --upgrade setuptools
+```
 
-- ![GUI配置界面](res/GUI.png)
+**常见问题解决：**
+- 如遇 tkinter 相关报错（如 init.tcl 找不到），请将 `tcl/tk` 文件夹复制到 Python 的 `Lib` 目录下
+- 确保 PowerShell 执行策略允许脚本运行：`Set-ExecutionPolicy RemoteSigned`
 
-### 3. 米家绑定巴法云账号
+### 3. 打包说明
 
-绑定后同步设备，小爱就能控制了
+如需打包为exe，使用PyInstaller 6.13.0及以上版本：
 
-- ![米家绑定](res/米家.jpg)
-- ![小爱同学](res/小爱同学.jpg)
+```bash
+# 安装打包工具
+pip install pyinstaller>=6.13.0
+
+# 打包GUI程序
+pyinstaller -F -n RC-GUI --noconsole --icon=res\\icon_GUI.ico GUI.py
+
+# 打包主程序
+pyinstaller -F -n RC-main --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." main.py
+
+# 打包托盘程序
+pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." tray.py
+```
 
 ## 更新日志
 
