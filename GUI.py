@@ -1027,14 +1027,12 @@ def open_builtin_settings():
     win.title("内置主题设置")
     win.resizable(False, False)
 
-    # 动作映射与显示
+    # 计算机主题动作（去除与睡眠主题重复的“睡眠/休眠”）
     actions = [
         ("none", "不执行"),
         ("lock", "锁屏"),
         ("shutdown", "关机"),
         ("restart", "重启"),
-        ("sleep", "睡眠"),
-        ("hibernate", "休眠"),
         ("logoff", "注销"),
     ]
     key_to_label = {k: v for k, v in actions}

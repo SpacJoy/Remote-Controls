@@ -212,14 +212,14 @@ def perform_computer_action(action: str, delay: int = 0) -> None:
             else:
                 notify_in_thread("电脑即将重启")
             return
-        if act == "sleep":
-            logging.info("执行睡眠操作")
-            execute_command("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
-            return
-        if act == "hibernate":
-            logging.info("执行休眠操作")
-            execute_command("shutdown /h")
-            return
+        # if act == "sleep":
+        #     logging.info("执行睡眠操作")
+        #     execute_command("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+        #     return
+        # if act == "hibernate":
+        #     logging.info("执行休眠操作")
+        #     execute_command("shutdown /h")
+        #     return
         if act == "logoff":
             logging.info("执行注销操作")
             execute_command("shutdown -l")
