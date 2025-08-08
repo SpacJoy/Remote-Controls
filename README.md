@@ -175,30 +175,6 @@ pyinstaller -F -n RC-main --windowed --icon=res\\icon.ico --add-data "res\\icon.
 pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." tray.py
 ```
 
-## 更新日志
-
-### v2.1.2 (2025-07-11)
-- 🔧 修复批处理脚本启动问题，改用cmd /c方式启动
-- 🚀 新增PowerShell脚本(.ps1)完整支持，自动使用powershell.exe启动
-- 🐍 新增Python脚本(.py/.pyw)完整支持，自动使用python.exe启动
-- 🎯 大幅改进脚本进程终止精确度，避免误终止用户进程
-- 📺 新增媒体控制功能（设备类型：窗帘），支持播放/暂停、切换曲目
-- 🔍 增强进程管理：支持wmic、psutil、taskkill多种方式精确终止脚本进程
-- 🛡️ 优化管理员权限检测和自动提权机制
-- 📝 完善日志记录，便于问题排查和调试
-
-### v2.0.0 (2025-05-12)
-- 添加托盘程序功能，方便监控和管理主程序
-- 改进管理员权限检测机制
-- 优化进程管理和启动流程
-- 修复已知问题和稳定性改进
-
-### v1.0.0
-- 初始版本发布
-- 基本的MQTT远程控制功能
-- GUI配置界面
-- 自定义主题支持
-
 ## 反馈与交流
 
 如有问题、建议或 Bug 反馈，请通过 GitHub Issue 或邮箱（mc_chen6019@qq.com）联系作者。
