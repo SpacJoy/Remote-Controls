@@ -177,6 +177,108 @@ def notify_in_thread(message: str) -> None:
     thread.start()
 
 
+def perform_computer_action(action: str, delay: int = 0) -> None:
+    """
+    根据配置执行计算机主题动作。
+
+    参数:
+    - action: 'lock'|'shutdown'|'restart'|'sleep'|'hibernate'|'logoff'|'none'
+    - delay: 延时秒数，仅对shutdown/restart有效
+    """
+    try:
+        act = (action or "").lower()
+        if act == "none":
+            logging.info("计算机主题设置为不执行动作")
+            return
+        if act == "lock":
+            logging.info("执行锁屏操作")
+            ctypes.windll.user32.LockWorkStation()
+            return
+        if act == "shutdown":
+            d = max(0, int(delay or 0))
+            logging.info(f"执行关机操作，延时: {d}s")
+            execute_command(f"shutdown -s -t {d}")
+            if d > 0:
+                notify_in_thread(f"电脑将在{d}秒后关机")
+            else:
+                notify_in_thread("电脑即将关机")
+            return
+        if act == "restart":
+            d = max(0, int(delay or 0))
+            logging.info(f"执行重启操作，延时: {d}s")
+            execute_command(f"shutdown -r -t {d}")
+            if d > 0:
+                notify_in_thread(f"电脑将在{d}秒后重启")
+            else:
+                notify_in_thread("电脑即将重启")
+            return
+        if act == "sleep":
+            logging.info("执行睡眠操作")
+            execute_command("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+            return
+        if act == "hibernate":
+            logging.info("执行休眠操作")
+            execute_command("shutdown /h")
+            return
+        if act == "logoff":
+            logging.info("执行注销操作")
+            execute_command("shutdown -l")
+            return
+        logging.warning(f"未知计算机动作: {action}")
+    except Exception as e:
+        logging.error(f"执行计算机动作失败: {e}")
+
+
+def set_display_power(mode: str) -> None:
+    """
+    控制显示器电源状态：mode='off' 关闭显示器，mode='on' 打开显示器。
+    """
+    try:
+        HWND_BROADCAST = 0xFFFF
+        WM_SYSCOMMAND = 0x0112
+        SC_MONITORPOWER = 0xF170
+        if mode == 'off':
+            ctypes.windll.user32.SendMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2)
+        else:
+            ctypes.windll.user32.SendMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, -1)
+    except Exception as e:
+        logging.error(f"设置显示器电源状态失败: {e}")
+
+
+def perform_sleep_action(action: str) -> None:
+    """
+    执行睡眠主题动作：'sleep'|'hibernate'|'display_off'|'display_on'|'lock'|'none'
+    """
+    try:
+        act = (action or '').lower()
+        if act == 'none':
+            logging.info("睡眠主题：不执行动作")
+            return
+        if act == 'sleep':
+            logging.info("执行睡眠操作")
+            execute_command("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+            return
+        if act == 'hibernate':
+            logging.info("执行休眠操作")
+            execute_command("shutdown /h")
+            return
+        if act == 'display_off':
+            logging.info("关闭显示器")
+            set_display_power('off')
+            return
+        if act == 'display_on':
+            logging.info("打开显示器")
+            set_display_power('on')
+            return
+        if act == 'lock':
+            logging.info("锁屏")
+            ctypes.windll.user32.LockWorkStation()
+            return
+        logging.warning(f"未知睡眠动作: {action}")
+    except Exception as e:
+        logging.error(f"执行睡眠动作失败: {e}")
+
+
 """
 根据接收到的命令和主题来处理相应的操作。
 
@@ -359,14 +461,24 @@ def process_command(command: str, topic: str) -> None:
 
     # 若不匹配应用程序或服务，再判断是否为内置主题
     if topic == Computer:
-        # 电脑开关机控制
+        # 电脑主题：根据配置执行
+        on_action = config.get("computer_on_action", "lock")
+        off_action = config.get("computer_off_action", "none")
+        on_delay = 0
+        off_delay = 60
+        try:
+            on_delay = int(config.get("computer_on_delay", 0) or 0)
+        except Exception:
+            on_delay = 0
+        try:
+            off_delay = int(config.get("computer_off_delay", 60) or 60)
+        except Exception:
+            off_delay = 60
+
         if command == "on":
-            logging.info("执行锁屏操作")
-            ctypes.windll.user32.LockWorkStation()
+            perform_computer_action(on_action, on_delay)
         elif command == "off":
-            logging.info("60秒后执行重启操作")
-            execute_command("shutdown -r -t 60")
-            notify_in_thread("电脑将在60秒后重启")
+            perform_computer_action(off_action, off_delay)
     elif topic == screen:
         # 屏幕亮度控制
         if command == "off":
@@ -418,12 +530,32 @@ def process_command(command: str, topic: str) -> None:
             logging.error(f"未知的音量控制命令: {command}")
             notify_in_thread(f"未知的音量控制命令: {command}")
     elif topic == sleep:
-        if command == "off":
-            logging.info("执行关闭睡眠模式操作")
-            notify_in_thread("当前还没有进入睡眠模式哦！")
-        elif command == "on":
-            logging.info("执行开启睡眠模式操作")
-            execute_command("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+        # 睡眠主题：根据配置执行，可配置延时
+        on_action = config.get("sleep_on_action", "sleep")
+        off_action = config.get("sleep_off_action", "none")
+        try:
+            on_delay = int(config.get("sleep_on_delay", 0) or 0)
+        except Exception:
+            on_delay = 0
+        try:
+            off_delay = int(config.get("sleep_off_delay", 0) or 0)
+        except Exception:
+            off_delay = 0
+
+        if command == "on":
+            if on_delay > 0:
+                notify_in_thread(f"将在{on_delay}秒后执行睡眠动作")
+                logging.info(f"{on_delay}s 后执行睡眠动作: {on_action}")
+                threading.Timer(on_delay, lambda: perform_sleep_action(on_action)).start()
+            else:
+                perform_sleep_action(on_action)
+        elif command == "off":
+            if off_delay > 0:
+                notify_in_thread(f"将在{off_delay}秒后执行睡眠关闭动作")
+                logging.info(f"{off_delay}s 后执行睡眠关闭动作: {off_action}")
+                threading.Timer(off_delay, lambda: perform_sleep_action(off_action)).start()
+            else:
+                perform_sleep_action(off_action)
     elif topic == media:
         # 媒体控制（作为窗帘设备）
         try:

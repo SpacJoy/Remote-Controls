@@ -624,7 +624,10 @@ def generate_config() -> None:
     中文: 根据输入生成并保存配置文件(JSON格式)
     """
     global config
-    config = {
+    # 从现有配置复制，保留扩展键（如 computer_* / sleep_*）
+    config = dict(config)
+    # 覆盖基础配置项
+    config.update({
         "broker": website_entry.get(),
         "port": int(port_entry.get()),
         "test": test_var.get(),
@@ -632,7 +635,7 @@ def generate_config() -> None:
         "mqtt_username": mqtt_username_entry.get(),
         "mqtt_password": mqtt_password_entry.get(),
         "client_id": client_id_entry.get(),
-    }
+    })
 
     # 内置主题配置
     for theme in builtin_themes:
@@ -1016,6 +1019,150 @@ builtin_themes: List[Dict[str, Any]] = [
 ]
 
 ttk.Label(theme_frame, text="内置").grid(row=0, column=0, sticky="w")
+
+# 更多：打开内置主题设置
+def open_builtin_settings():
+    import json, os
+    win = tk.Toplevel(root)
+    win.title("内置主题设置")
+    win.resizable(False, False)
+
+    # 动作映射与显示
+    actions = [
+        ("none", "不执行"),
+        ("lock", "锁屏"),
+        ("shutdown", "关机"),
+        ("restart", "重启"),
+        ("sleep", "睡眠"),
+        ("hibernate", "休眠"),
+        ("logoff", "注销"),
+    ]
+    key_to_label = {k: v for k, v in actions}
+    labels = [label for _, label in actions]
+    key_by_label = {v: k for k, v in actions}
+
+    # 读取计算机主题配置（带默认值）
+    cur_on = config.get("computer_on_action", "lock")
+    cur_off = config.get("computer_off_action", "restart")
+    cur_on_delay = int(config.get("computer_on_delay", 0) or 0)
+    cur_off_delay = int(config.get("computer_off_delay", 60) or 60)
+
+    row_i = 0
+    ttk.Label(win, text="计算机(Computer) 主题动作").grid(row=row_i, column=0, columnspan=3, padx=10, pady=(10, 6), sticky="w")
+    row_i += 1
+
+    ttk.Label(win, text="打开(on)：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    on_var = tk.StringVar(value=key_to_label.get(cur_on, "锁屏"))
+    on_combo = ttk.Combobox(win, values=labels, textvariable=on_var, state="readonly", width=18)
+    on_combo.grid(row=row_i, column=1, sticky="w")
+    ttk.Label(win, text="延时(秒)：").grid(row=row_i, column=2, sticky="e", padx=8)
+    on_delay_var = tk.StringVar(value=str(cur_on_delay))
+    on_delay_entry = ttk.Entry(win, textvariable=on_delay_var, width=8)
+    on_delay_entry.grid(row=row_i, column=3, sticky="w")
+    row_i += 1
+
+    ttk.Label(win, text="关闭(off)：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    off_var = tk.StringVar(value=key_to_label.get(cur_off, "重启"))
+    off_combo = ttk.Combobox(win, values=labels, textvariable=off_var, state="readonly", width=18)
+    off_combo.grid(row=row_i, column=1, sticky="w")
+    ttk.Label(win, text="延时(秒)：").grid(row=row_i, column=2, sticky="e", padx=8)
+    off_delay_var = tk.StringVar(value=str(cur_off_delay))
+    off_delay_entry = ttk.Entry(win, textvariable=off_delay_var, width=8)
+    off_delay_entry.grid(row=row_i, column=3, sticky="w")
+    row_i += 1
+
+    tip = ttk.Label(win, text="提示：计算机主题延时仅对关机/重启有效，其它动作忽略延时。")
+    tip.grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
+    row_i += 1
+
+    # 分隔线
+    ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
+    row_i += 1
+
+    # 睡眠主题设置
+    sleep_actions_on = [
+        ("sleep", "睡眠"),
+        ("hibernate", "休眠"),
+        ("display_off", "关闭显示器"),
+        ("none", "不执行"),
+    ]
+    sleep_actions_off = [
+        ("none", "不执行"),
+        ("display_on", "打开显示器"),
+        ("lock", "锁屏"),
+    ]
+    s_labels_on = [label for _, label in sleep_actions_on]
+    s_labels_off = [label for _, label in sleep_actions_off]
+    s_key_by_label_on = {v: k for k, v in sleep_actions_on}
+    s_key_by_label_off = {v: k for k, v in sleep_actions_off}
+    s_key_to_label_on = {k: v for k, v in sleep_actions_on}
+    s_key_to_label_off = {k: v for k, v in sleep_actions_off}
+
+    s_cur_on = config.get("sleep_on_action", "sleep")
+    s_cur_off = config.get("sleep_off_action", "none")
+    s_cur_on_delay = int(config.get("sleep_on_delay", 0) or 0)
+    s_cur_off_delay = int(config.get("sleep_off_delay", 0) or 0)
+
+    ttk.Label(win, text="睡眠(sleep) 主题动作").grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
+    row_i += 1
+
+    ttk.Label(win, text="打开(on)：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    s_on_var = tk.StringVar(value=s_key_to_label_on.get(s_cur_on, "睡眠"))
+    ttk.Combobox(win, values=s_labels_on, textvariable=s_on_var, state="readonly", width=18).grid(row=row_i, column=1, sticky="w")
+    ttk.Label(win, text="延时(秒)：").grid(row=row_i, column=2, sticky="e", padx=8)
+    s_on_delay_var = tk.StringVar(value=str(s_cur_on_delay))
+    ttk.Entry(win, textvariable=s_on_delay_var, width=8).grid(row=row_i, column=3, sticky="w")
+    row_i += 1
+
+    ttk.Label(win, text="关闭(off)：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    s_off_var = tk.StringVar(value=s_key_to_label_off.get(s_cur_off, "不执行"))
+    ttk.Combobox(win, values=s_labels_off, textvariable=s_off_var, state="readonly", width=18).grid(row=row_i, column=1, sticky="w")
+    ttk.Label(win, text="延时(秒)：").grid(row=row_i, column=2, sticky="e", padx=8)
+    s_off_delay_var = tk.StringVar(value=str(s_cur_off_delay))
+    ttk.Entry(win, textvariable=s_off_delay_var, width=8).grid(row=row_i, column=3, sticky="w")
+    row_i += 1
+
+    ttk.Label(win, text="提示：睡眠主题延时将在执行动作前等待指定秒数。").grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
+    row_i += 1
+
+    def save_builtin_settings():
+        try:
+            # 更新内存配置
+            config["computer_on_action"] = key_by_label.get(on_var.get(), "lock")
+            config["computer_off_action"] = key_by_label.get(off_var.get(), "restart")
+            try:
+                config["computer_on_delay"] = max(0, int(on_delay_var.get()))
+            except Exception:
+                config["computer_on_delay"] = 0
+            try:
+                config["computer_off_delay"] = max(0, int(off_delay_var.get()))
+            except Exception:
+                config["computer_off_delay"] = 60
+
+            config["sleep_on_action"] = s_key_by_label_on.get(s_on_var.get(), "sleep")
+            config["sleep_off_action"] = s_key_by_label_off.get(s_off_var.get(), "none")
+            try:
+                config["sleep_on_delay"] = max(0, int(s_on_delay_var.get()))
+            except Exception:
+                config["sleep_on_delay"] = 0
+            try:
+                config["sleep_off_delay"] = max(0, int(s_off_delay_var.get()))
+            except Exception:
+                config["sleep_off_delay"] = 0
+
+            # 统一通过 generate_config 保存并刷新
+            generate_config()
+            win.destroy()
+        except Exception as e:
+            messagebox.showerror("错误", f"保存失败: {e}")
+
+    btn_frame = ttk.Frame(win)
+    btn_frame.grid(row=row_i, column=0, columnspan=4, pady=(0, 10))
+    ttk.Button(btn_frame, text="保存", command=save_builtin_settings).grid(row=0, column=0, padx=6)
+    ttk.Button(btn_frame, text="取消", command=win.destroy).grid(row=0, column=1, padx=6)
+
+ttk.Button(theme_frame, text="更多", command=open_builtin_settings).grid(row=6, column=1, sticky="e")
+
 ttk.Button(theme_frame, text="详情", command=show_detail_window).grid(row=0, column=1, sticky="e", columnspan=2)
 ttk.Label(theme_frame, text="主题:").grid(row=0, column=2, sticky="w")
 ttk.Label(theme_frame, text="自定义(服务需管理员)").grid(
