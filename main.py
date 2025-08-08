@@ -249,44 +249,64 @@ def process_command(command: str, topic: str) -> None:
                 
                 # 检查文件类型，选择合适的启动方式
                 if directory.lower().endswith('.ps1'):
-                    # PowerShell脚本需要通过PowerShell解释器启动
+                    # PowerShell脚本需要通过PowerShell解释器启动（设置工作目录）
                     try:
-                        subprocess.Popen(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", directory])
+                        abs_path = os.path.abspath(directory)
+                        work_dir = os.path.dirname(abs_path)
+                        subprocess.Popen(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", abs_path], cwd=work_dir)
                         notify_in_thread(f"启动PowerShell脚本: {os.path.basename(directory)}")
                         logging.info(f"成功启动PowerShell脚本: {directory}")
                     except Exception as e:
                         logging.error(f"启动PowerShell脚本失败: {e}")
                         notify_in_thread(f"启动PowerShell脚本失败: {os.path.basename(directory)}")
                 elif directory.lower().endswith(('.py', '.pyw')):
-                    # Python脚本需要通过Python解释器启动
+                    # Python脚本需要通过Python解释器启动（设置工作目录）
                     try:
-                        subprocess.Popen(["python", directory])
+                        abs_path = os.path.abspath(directory)
+                        work_dir = os.path.dirname(abs_path)
+                        subprocess.Popen(["python", abs_path], cwd=work_dir)
                         notify_in_thread(f"启动Python脚本: {os.path.basename(directory)}")
                         logging.info(f"成功启动Python脚本: {directory}")
                     except Exception as e:
                         logging.error(f"启动Python脚本失败: {e}")
                         notify_in_thread(f"启动Python脚本失败: {os.path.basename(directory)}")
                 elif directory.lower().endswith(('.cmd', '.bat')):
-                    # 批处理文件需要通过cmd启动
+                    # 批处理文件需要通过cmd启动（设置工作目录）
                     try:
+                        abs_path = os.path.abspath(directory)
+                        work_dir = os.path.dirname(abs_path)
                         # 使用cmd /c来启动批处理文件，确保路径正确处理
-                        subprocess.Popen(["cmd", "/c", directory], shell=False)
+                        subprocess.Popen(["cmd", "/c", abs_path], shell=False, cwd=work_dir)
                         notify_in_thread(f"启动批处理脚本: {os.path.basename(directory)}")
                         logging.info(f"成功启动批处理脚本: {directory}")
                     except Exception as e:
                         logging.error(f"启动批处理脚本失败: {e}")
                         notify_in_thread(f"启动批处理脚本失败: {os.path.basename(directory)}")
                 else:
-                    # 其他可执行文件
+                    # 其他可执行文件（使用ShellExecuteW模拟双击，必要时兜底）
                     try:
-                        subprocess.Popen(directory)
+                        abs_path = os.path.abspath(directory)
+                        work_dir = os.path.dirname(abs_path)
+                        # 优先使用ShellExecuteW，lpDirectory指定工作目录
+                        try:
+                            hinst = ctypes.windll.shell32.ShellExecuteW(None, 'open', abs_path, None, work_dir, 1)
+                        except Exception:
+                            hinst = 0
+                        # 统一成整数进行判断
+                        if not isinstance(hinst, int) and hasattr(hinst, 'value'):
+                            hinst = int(hinst.value)
+                        if hinst is None:
+                            hinst = 0
+                        if hinst <= 32:
+                            # 回退到Popen，并指定工作目录
+                            subprocess.Popen([abs_path], cwd=work_dir)
                         notify_in_thread(f"启动程序: {os.path.basename(directory)}")
                         logging.info(f"成功启动程序: {directory}")
                     except Exception as e:
                         logging.error(f"启动程序失败: {e}")
                         notify_in_thread(f"启动程序失败: {os.path.basename(directory)}")
             return
-    
+            
     def check_service_status(service_name):
         result = subprocess.run(["sc", "query", service_name], capture_output=True, text=True)
         if "RUNNING" in result.stdout:
