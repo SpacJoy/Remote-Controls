@@ -14,7 +14,7 @@ import subprocess
 import win32com.client
 from typing import Any, Dict, List, Union
 
-BANBEN = "V2.1.5"
+BANBEN = "V2.1.6"
 # 创建一个命名的互斥体
 # mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "RC-main-GUI")
 
@@ -1043,7 +1043,7 @@ def open_builtin_settings():
     cur_on = config.get("computer_on_action", "lock")
     cur_off = config.get("computer_off_action", "restart")
     cur_on_delay = int(config.get("computer_on_delay", 0) or 0)
-    cur_off_delay = int(config.get("computer_off_delay", 60) or 60)
+    cur_off_delay = int(config.get("computer_off_delay", 0) or 0)
 
     row_i = 0
     ttk.Label(win, text="计算机(Computer) 主题动作").grid(row=row_i, column=0, columnspan=3, padx=10, pady=(10, 6), sticky="w")
