@@ -676,6 +676,53 @@ def register_command_process(topic: str, pid: int) -> None:
     lst = command_process_registry.setdefault(topic, [])
     lst.append(pid)
 
+def _send_ctrl_break_via_console(pid: int) -> bool:
+    """
+    尝试通过附加到目标控制台并发送 CTRL_BREAK 实现中断。
+    要求目标进程以 CREATE_NEW_PROCESS_GROUP 启动，且具备控制台（我们使用 CREATE_NEW_CONSOLE）。
+    返回是否成功触发事件。
+    """
+    try:
+        kernel32 = ctypes.windll.kernel32
+        # 确保当前进程没有附着其他控制台
+        try:
+            kernel32.FreeConsole()
+        except Exception:
+            pass
+
+        if kernel32.AttachConsole(ctypes.c_uint(pid)) == 0:
+            err = ctypes.GetLastError()
+            logging.warning(f"AttachConsole 失败 PID={pid}, 错误码={err}")
+            return False
+
+        try:
+            # 忽略本进程的控制台信号，避免自身受影响
+            kernel32.SetConsoleCtrlHandler(None, True)
+        except Exception:
+            pass
+
+        CTRL_BREAK_EVENT = 1
+        if kernel32.GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, ctypes.c_uint(pid)) == 0:
+            err = ctypes.GetLastError()
+            logging.warning(f"GenerateConsoleCtrlEvent 失败 PID={pid}, 错误码={err}")
+            try:
+                kernel32.FreeConsole()
+            except Exception:
+                pass
+            return False
+
+        # 给子进程一点时间处理中断
+        time.sleep(0.5)
+
+        try:
+            kernel32.FreeConsole()
+        except Exception:
+            pass
+        return True
+    except Exception as e:
+        logging.error(f"通过控制台发送CTRL_BREAK失败 PID={pid}: {e}")
+        return False
+
 def cleanup_dead_pids(pid_list: list[int]) -> list[int]:
     alive = []
     for pid in pid_list:
@@ -709,14 +756,20 @@ def interrupt_command_processes(topic: str) -> bool:
     did_any = False
     for pid in list(pids):
         try:
-            # 首选发送 CTRL_BREAK_EVENT（仅对创建为新进程组的控制台进程有效）
-            try:
-                os.kill(pid, signal.CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
+            # 首选：通过附加控制台并发送 CTRL_BREAK（更可靠）
+            if _send_ctrl_break_via_console(pid):
                 did_any = True
                 logging.info(f"已发送CTRL_BREAK给PID={pid}")
                 continue
+
+            # 次选：os.kill（在某些场景下仍可能有效）
+            try:
+                os.kill(pid, signal.CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
+                did_any = True
+                logging.info(f"通过os.kill发送CTRL_BREAK给PID={pid}")
+                continue
             except Exception as e:
-                logging.warning(f"CTRL_BREAK失败 PID={pid}: {e}")
+                logging.warning(f"os.kill CTRL_BREAK 失败 PID={pid}: {e}")
 
             # 次选优雅终止
             try:
