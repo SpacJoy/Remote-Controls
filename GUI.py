@@ -384,6 +384,7 @@ def load_custom_themes() -> None:
     global config
     app_index = 1
     serve_index = 1
+    command_index = 1
     while True:
         app_key = f"application{app_index}"
         if app_key in config:
@@ -420,6 +421,27 @@ def load_custom_themes() -> None:
             tree_iid = str(len(custom_themes) - 1)
             custom_theme_tree.insert("", "end", iid=tree_iid, values=(item_text,))
             serve_index += 1
+        else:
+            break
+
+    # 加载命令类型
+    while True:
+        cmd_key = f"command{command_index}"
+        if cmd_key in config:
+            theme = {
+                "type": "命令",
+                "checked": config.get(f"{cmd_key}_checked", 0),
+                "nickname": config.get(f"{cmd_key}_name", ""),
+                "name": config.get(cmd_key, ""),
+                "value": config.get(f"{cmd_key}_value", ""),
+            }
+            custom_themes.append(theme)
+            status = "开" if theme["checked"] else "关"
+            display_name = theme["nickname"] or theme["name"]
+            item_text = f"[{status}] {display_name}"
+            tree_iid = str(len(custom_themes) - 1)
+            custom_theme_tree.insert("", "end", iid=tree_iid, values=(item_text,))
+            command_index += 1
         else:
             break
 
@@ -476,11 +498,11 @@ def modify_custom_theme() -> None:
     theme_type_combobox = ttk.Combobox(
         theme_window, 
         textvariable=theme_type_var, 
-        values=["程序或脚本", "服务(需管理员权限)"],
+        values=["程序或脚本", "服务(需管理员权限)", "命令"],
         state="readonly"
     )
     theme_type_combobox.grid(row=0, column=1, sticky="w")
-    type_index = ["程序或脚本", "服务(需管理员权限)"].index(theme["type"])
+    type_index = ["程序或脚本", "服务(需管理员权限)", "命令"].index(theme["type"])
     theme_type_combobox.current(type_index)
 
     ttk.Label(theme_window, text="服务时主程序").grid(row=0, column=2, sticky="w")
@@ -561,7 +583,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     theme_type_combobox = ttk.Combobox(
         theme_window, 
         textvariable=theme_type_var, 
-        values=["程序或脚本", "服务(需管理员权限)"],
+        values=["程序或脚本", "服务(需管理员权限)", "命令"],
         state="readonly"
     )
     theme_type_combobox.grid(row=0, column=1, sticky="w")
@@ -647,6 +669,7 @@ def generate_config() -> None:
     # 自定义主题配置
     app_index = 1
     serve_index = 1
+    command_index = 1
     for theme in custom_themes:
         if theme["type"] == "程序或脚本":
             prefix = f"application{app_index}"
@@ -662,6 +685,13 @@ def generate_config() -> None:
             config[f"{prefix}_checked"] = theme["checked"]
             config[f"{prefix}_value"] = theme["value"]
             serve_index += 1
+        elif theme["type"] == "命令":
+            prefix = f"command{command_index}"
+            config[prefix] = theme["name"]
+            config[f"{prefix}_name"] = theme["nickname"]
+            config[f"{prefix}_checked"] = theme["checked"]
+            config[f"{prefix}_value"] = theme["value"]
+            command_index += 1
 
     # 保存为 JSON 文件
     with open(config_file_path, "w", encoding="utf-8") as f:

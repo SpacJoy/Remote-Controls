@@ -25,6 +25,7 @@ import time
 import ctypes
 import socket
 from comtypes import CLSCTX_ALL
+import signal
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 import pyautogui
 from pyautogui import press as pyautogui_press
@@ -408,6 +409,30 @@ def process_command(command: str, topic: str) -> None:
                         logging.error(f"启动程序失败: {e}")
                         notify_in_thread(f"启动程序失败: {os.path.basename(directory)}")
             return
+    
+    # 命令类型
+    for cmd_topic, cmd_text in commands:
+        if topic == cmd_topic:
+            if not cmd_text:
+                logging.error(f"命令为空，无法执行: {cmd_topic}")
+                notify_in_thread(f"命令为空: {cmd_topic}")
+                return
+            if command == "on":
+                try:
+                    creationflags = 0x00000200  # CREATE_NEW_PROCESS_GROUP
+                    proc = subprocess.Popen(cmd_text, shell=True, creationflags=creationflags)
+                    register_command_process(cmd_topic, proc.pid)
+                    notify_in_thread(f"已执行命令: {commands}")
+                    logging.info(f"执行命令[{cmd_topic}]: {cmd_text}; PID={proc.pid}")
+                except Exception as e:
+                    logging.error(f"执行命令失败[{cmd_topic}]: {e}")
+                    notify_in_thread(f"执行命令失败: {commands}")
+            elif command == "off":
+                if interrupt_command_processes(cmd_topic):
+                    notify_in_thread(f"已发送中断信号: {cmd_topic}")
+                else:
+                    notify_in_thread(f"未找到可中断进程或中断失败: {cmd_topic}")
+            return
             
     def check_service_status(service_name):
         result = subprocess.run(["sc", "query", service_name], capture_output=True, text=True)
@@ -597,6 +622,79 @@ def process_command(command: str, topic: str) -> None:
         logging.error(f"未知主题: {topic}")
         notify_in_thread(f"未知主题: {topic}")
         
+
+# 命令类型进程注册与中断支持
+command_process_registry: dict[str, list[int]] = {}
+
+def register_command_process(topic: str, pid: int) -> None:
+    lst = command_process_registry.setdefault(topic, [])
+    lst.append(pid)
+
+def cleanup_dead_pids(pid_list: list[int]) -> list[int]:
+    alive = []
+    for pid in pid_list:
+        try:
+            if psutil.pid_exists(pid):
+                p = psutil.Process(pid)
+                if p.is_running():
+                    alive.append(pid)
+        except Exception:
+            continue
+    return alive
+
+def interrupt_command_processes(topic: str) -> bool:
+    """
+    尝试对该命令下由本程序启动的进程发送中断信号(CTRL_BREAK)。
+    若失败，则尝试优雅结束；最后回退 taskkill。
+    返回是否至少对一个进程采取了动作。
+    """
+    pids = command_process_registry.get(topic, [])
+    if not pids:
+        logging.warning(f"命令[{topic}]未记录到任何PID")
+        return False
+
+    # 清理已退出的PID
+    pids = cleanup_dead_pids(pids)
+    if not pids:
+        command_process_registry[topic] = []
+        logging.info(f"命令[{topic}]持有PID均已退出")
+        return False
+
+    did_any = False
+    for pid in list(pids):
+        try:
+            # 首选发送 CTRL_BREAK_EVENT（仅对创建为新进程组的控制台进程有效）
+            try:
+                os.kill(pid, signal.CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
+                did_any = True
+                logging.info(f"已发送CTRL_BREAK给PID={pid}")
+                continue
+            except Exception as e:
+                logging.warning(f"CTRL_BREAK失败 PID={pid}: {e}")
+
+            # 次选优雅终止
+            try:
+                proc = psutil.Process(pid)
+                proc.terminate()
+                did_any = True
+                logging.info(f"已尝试优雅终止 PID={pid}")
+                continue
+            except Exception as e:
+                logging.warning(f"优雅终止失败 PID={pid}: {e}")
+
+            # 兜底 taskkill
+            result = subprocess.run(["taskkill", "/PID", str(pid)], capture_output=True, text=True)
+            if result.returncode == 0:
+                did_any = True
+                logging.info(f"taskkill 返回成功 PID={pid}: {result.stdout}")
+            else:
+                logging.warning(f"taskkill 失败 PID={pid}: {result.stderr}")
+        except Exception as e:
+            logging.error(f"中断命令进程失败 PID={pid}: {e}")
+
+    # 清理注册表中已退出或被终止的PID
+    command_process_registry[topic] = cleanup_dead_pids(pids)
+    return did_any
 
 def terminate_script_process(script_path: str) -> bool:
     """
@@ -1599,6 +1697,18 @@ for i in range(1, 50):
         serves.append((serve, serve_name))
 logging.info(f"读取的服务列表: {serves}\n")
 
+# 加载命令主题到命令列表
+commands = []
+for i in range(1, 50):
+    cmd_key = f"command{i}"
+    cmd_value_key = f"command{i}_value"
+    cmd_topic = load_theme(cmd_key)
+    cmd_value = config.get(cmd_value_key) if cmd_topic else None
+    if cmd_topic:
+        logging.info(f"加载命令: {cmd_key}, 命令: {cmd_value}")
+        commands.append((cmd_topic, cmd_value))
+logging.info(f"读取的命令列表: {commands}\n")
+
 # 如果主题不为空，将其记录到日志中
 for key in ["Computer", "screen", "volume", "sleep", "media"]:
     if config.get(key):
@@ -1609,6 +1719,8 @@ for application, directory in applications:
 
 for serve, serve_name in serves:
     logging.info(f'主题"{serve}"，值："{serve_name}"')
+for cmd_topic, cmd_value in commands:
+    logging.info(f'主题"{cmd_topic}"，值："{cmd_value}"')
     
 """
 托盘图标
