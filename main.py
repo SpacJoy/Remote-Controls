@@ -1453,38 +1453,6 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logger.addHandler(log_handler)
 
-# 检查程序是以脚本形式运行还是打包后的exe运行
-is_script_mode = not getattr(sys, "frozen", False)
-if is_script_mode:
-    # 如果是脚本形式运行，先清空日志文件
-    try:
-        with open(log_path, 'w', encoding='utf-8') as f:
-            f.write('')  # 清空文件内容
-        logging.info(f"已清空日志文件: {log_path}")
-        print(f"已清空日志文件: {log_path}")
-    except Exception as e:
-        logging.error(f"清空日志文件失败: {e}")
-        print(f"清空日志文件失败: {e}")
-
-# 记录程序启动信息
-logging.info("=" * 50)
-logging.info("程序启动")
-logging.info(f"当前工作目录: {os.getcwd()}")
-logging.info(f"日志文件路径: {log_path}")
-logging.info(f"配置文件路径: {config_path}")
-logging.info(f"Python版本: {sys.version}")
-logging.info("=" * 50)
-
-# 在程序启动时查询托盘程序的管理员权限状态并保存为全局变量
-IS_ADMIN = False
-try:
-    IS_ADMIN = ctypes.windll.shell32.IsUserAnAdmin() != 0
-    logging.info(f"管理员权限状态: {'已获得' if IS_ADMIN else '未获得'}")
-except Exception as e:
-    logging.error(f"检查管理员权限时出错: {e}")
-    IS_ADMIN = False
-
-
 # 检查配置文件是否存在
 if os.path.exists(config_path):
     try:
@@ -1503,8 +1471,59 @@ else:
     threading.Timer(0.5, lambda: os._exit(0)).start()
     sys.exit()
 
+# 检查程序是以脚本形式运行还是打包后的exe运行
+is_script_mode = not getattr(sys, "frozen", False)
+if is_script_mode:
+    # 如果是脚本形式运行，先清空日志文件
+    try:
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.write('')  # 清空文件内容
+        logging.info(f"已清空日志文件: {log_path}")
+        print(f"已清空日志文件: {log_path}")
+        
+        # 记录程序启动信息
+        logging.info("=" * 50)
+        logging.info("程序启动")
+        logging.info(f"当前工作目录: {os.getcwd()}")
+        logging.info(f"日志文件路径: {log_path}")
+        logging.info(f"配置文件路径: {config_path}")
+        logging.info(f"Python版本: {sys.version}")
+        logging.info("=" * 50)
+    except Exception as e:
+        logging.error(f"清空日志文件失败: {e}")
+        print(f"清空日志文件失败: {e}")
+
 
 # 确保config已经定义后再继续
+# 如果启用测试模式，并且当前不是脚本模式，则清空旧日志（与脚本模式一致）
+try:
+    if config.get("test") == 1 and not is_script_mode:
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.write('')
+        logging.info(f"测试模式启用，已清空日志文件: {log_path}")
+        print(f"测试模式启用，已清空日志文件: {log_path}")
+        # 记录程序启动信息
+        logging.info("=" * 50)
+        logging.info("程序启动")
+        logging.info(f"当前工作目录: {os.getcwd()}")
+        logging.info(f"日志文件路径: {log_path}")
+        logging.info(f"配置文件路径: {config_path}")
+        logging.info(f"Python版本: {sys.version}")
+        logging.info("=" * 50)
+except Exception as e:
+    logging.error(f"测试模式清空日志失败: {e}")
+
+
+# 在程序启动时查询托盘程序的管理员权限状态并保存为全局变量
+IS_ADMIN = False
+try:
+    IS_ADMIN = ctypes.windll.shell32.IsUserAnAdmin() != 0
+    logging.info(f"管理员权限状态: {'已获得' if IS_ADMIN else '未获得'}")
+except Exception as e:
+    logging.error(f"检查管理员权限时出错: {e}")
+    IS_ADMIN = False
+    
+
 if config.get("test") == 1:
     logging.warning("开启测试模式:可以不启用任何主题")
 else:

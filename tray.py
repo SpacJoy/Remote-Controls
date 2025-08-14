@@ -67,6 +67,27 @@ if is_script_mode:
         logging.error(f"清空日志文件失败: {e}")
         print(f"清空日志文件失败: {e}")
 
+# 若开启测试模式，在非脚本模式下同样清空旧日志，保持与脚本一致
+try:
+    # 配置文件位于当前程序目录
+    appdata_dir_cfg = os.path.abspath(os.path.dirname(sys.argv[0]))
+    config_path = os.path.join(appdata_dir_cfg, "config.json")
+    if os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            _cfg = None
+            try:
+                import json
+                _cfg = json.load(f)
+            except Exception:
+                _cfg = None
+        if _cfg and _cfg.get('test') == 1 and not is_script_mode:
+            with open(tray_log_path, 'w', encoding='utf-8') as f:
+                f.write('')
+            logging.info(f"测试模式启用，已清空日志文件: {tray_log_path}")
+            print(f"测试模式启用，已清空日志文件: {tray_log_path}")
+except Exception as e:
+    logging.error(f"测试模式清空日志失败: {e}")
+
 # 记录程序启动信息
 logging.info("="*50)
 logging.info("远程控制托盘程序启动")
