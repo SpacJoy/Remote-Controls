@@ -491,7 +491,15 @@ def modify_custom_theme() -> None:
 
     theme_window = tk.Toplevel(root)
     theme_window.title("修改自定义主题")
-    # theme_window.resizable(False, False)  # 禁用窗口大小调整
+    # 允许窗口大小调整，并设置网格权重使输入控件随窗口拉伸
+    theme_window.resizable(True, True)
+    try:
+        theme_window.columnconfigure(0, weight=0)
+        theme_window.columnconfigure(1, weight=1)
+        theme_window.columnconfigure(2, weight=0)
+        theme_window.columnconfigure(3, weight=0)
+    except Exception:
+        pass
 
     ttk.Label(theme_window, text="类型：").grid(row=0, column=0, sticky="e")
     theme_type_var = tk.StringVar(value=theme["type"])
@@ -502,7 +510,7 @@ def modify_custom_theme() -> None:
         values=["程序或脚本", "服务(需管理员权限)", "命令"],
         state="readonly"
     )
-    theme_type_combobox.grid(row=0, column=1, sticky="w")
+    theme_type_combobox.grid(row=0, column=1, sticky="we")
     type_index = ["程序或脚本", "服务(需管理员权限)", "命令"].index(theme["type"])
     theme_type_combobox.current(type_index)
 
@@ -518,26 +526,50 @@ def modify_custom_theme() -> None:
     ttk.Label(theme_window, text="昵称：").grid(row=2, column=0, sticky="e")
     theme_nickname_entry = ttk.Entry(theme_window)
     theme_nickname_entry.insert(0, theme["nickname"])
-    theme_nickname_entry.grid(row=2, column=1, sticky="w")
+    theme_nickname_entry.grid(row=2, column=1, sticky="we")
 
     ttk.Label(theme_window, text="主题：").grid(row=3, column=0, sticky="e")
     theme_name_entry = ttk.Entry(theme_window)
     theme_name_entry.insert(0, theme["name"])
-    theme_name_entry.grid(row=3, column=1, sticky="w")
+    theme_name_entry.grid(row=3, column=1, sticky="we")
 
-    ttk.Label(theme_window, text="值：").grid(row=4, column=0, sticky="e")
-    theme_value_entry = ttk.Entry(theme_window)
-    theme_value_entry.insert(0, theme["value"])
-    theme_value_entry.grid(row=4, column=1, sticky="w")
+    ttk.Label(theme_window, text="值：").grid(row=4, column=0, sticky="ne")
+    # 可纵向拉伸的多行文本框 + 滚动条
+    value_frame_mod = ttk.Frame(theme_window)
+    value_frame_mod.grid(row=4, column=1, sticky="nsew")
+    try:
+        theme_window.rowconfigure(4, weight=2)
+    except Exception:
+        pass
+    theme_value_text = tk.Text(value_frame_mod, height=4, wrap="word")
+    theme_value_text.insert("1.0", theme["value"])
+    theme_value_text.grid(row=0, column=0, sticky="nsew")
+    value_scroll_y = ttk.Scrollbar(value_frame_mod, orient="vertical", command=theme_value_text.yview)
+    value_scroll_y.grid(row=0, column=1, sticky="ns")
+    theme_value_text.configure(yscrollcommand=value_scroll_y.set)
+    try:
+        value_frame_mod.columnconfigure(0, weight=1)
+        value_frame_mod.rowconfigure(0, weight=1)
+    except Exception:
+        pass
 
     def select_file():
         file_path = filedialog.askopenfilename()
-        theme_value_entry.delete(0, tk.END)
-        theme_value_entry.insert(0, file_path)
+        if file_path:
+            theme_value_text.delete("1.0", tk.END)
+            theme_value_text.insert("1.0", file_path)
 
     ttk.Button(theme_window, text="选择文件", command=select_file).grid(
         row=4, column=2, sticky="w", padx=15
     )
+
+    # 垂直方向自适应：占位扩展区，推开底部按钮
+    try:
+        theme_window.rowconfigure(5, weight=1)
+        _spacer_mod = ttk.Frame(theme_window)
+        _spacer_mod.grid(row=5, column=0, columnspan=4, sticky="nsew")
+    except Exception:
+        pass
 
     # 命令类型：命令窗口显示/隐藏 -> 改为复选框，放在“状态”后面
     cmd_window_var = tk.IntVar(value=0 if theme.get("window", "show") == "hide" else 1)
@@ -545,8 +577,8 @@ def modify_custom_theme() -> None:
 
     def update_cmd_window_visibility(*_):
         if theme_type_var.get() == "命令":
-            # 放在“状态”后面（行1，列1右边）
-            cmd_window_check.grid(row=1, column=1, sticky="e")
+            # 放在“状态”后面（行1，列1）
+            cmd_window_check.grid(row=1, column=1, sticky="n")
         else:
             cmd_window_check.grid_remove()
 
@@ -558,7 +590,7 @@ def modify_custom_theme() -> None:
         theme["checked"] = theme_checked_var.get()
         theme["nickname"] = theme_nickname_entry.get()
         theme["name"] = theme_name_entry.get()
-        theme["value"] = theme_value_entry.get()
+        theme["value"] = theme_value_text.get("1.0", "end-1c").strip()
         if theme["type"] == "命令":
             theme["window"] = "show" if cmd_window_var.get() else "hide"
         # 重新构建整个树视图以确保索引正确
@@ -593,7 +625,15 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     """
     theme_window = tk.Toplevel(root)
     theme_window.title("添加自定义主题")
-    # theme_window.resizable(False, False)  # 禁用窗口大小调整
+    # 允许窗口大小调整，并设置网格权重使输入控件随窗口拉伸
+    theme_window.resizable(True, True)
+    try:
+        theme_window.columnconfigure(0, weight=0)
+        theme_window.columnconfigure(1, weight=1)
+        theme_window.columnconfigure(2, weight=0)
+        theme_window.columnconfigure(3, weight=0)
+    except Exception:
+        pass
 
     ttk.Label(theme_window, text="类型：").grid(row=0, column=0, sticky="e")
     theme_type_var = tk.StringVar(value="程序或脚本")
@@ -603,7 +643,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         values=["程序或脚本", "服务(需管理员权限)", "命令"],
         state="readonly"
     )
-    theme_type_combobox.grid(row=0, column=1, sticky="w")
+    theme_type_combobox.grid(row=0, column=1, sticky="we")
 
 
     ttk.Label(theme_window, text="服务时主程序").grid(row=0, column=2, sticky="w")
@@ -617,24 +657,48 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
 
     ttk.Label(theme_window, text="昵称：").grid(row=2, column=0, sticky="e")
     theme_nickname_entry = ttk.Entry(theme_window)
-    theme_nickname_entry.grid(row=2, column=1, sticky="w")
+    theme_nickname_entry.grid(row=2, column=1, sticky="we")
 
     ttk.Label(theme_window, text="主题：").grid(row=3, column=0, sticky="e")
     theme_name_entry = ttk.Entry(theme_window)
-    theme_name_entry.grid(row=3, column=1, sticky="w")
+    theme_name_entry.grid(row=3, column=1, sticky="we")
 
-    ttk.Label(theme_window, text="值：").grid(row=4, column=0, sticky="e")
-    theme_value_entry = ttk.Entry(theme_window)
-    theme_value_entry.grid(row=4, column=1, sticky="w")
+    ttk.Label(theme_window, text="值：").grid(row=4, column=0, sticky="ne")
+    # 可纵向拉伸的多行文本框 + 滚动条
+    value_frame_add = ttk.Frame(theme_window)
+    value_frame_add.grid(row=4, column=1, sticky="nsew")
+    try:
+        theme_window.rowconfigure(4, weight=2)
+    except Exception:
+        pass
+    theme_value_text2 = tk.Text(value_frame_add, height=4, wrap="word")
+    theme_value_text2.grid(row=0, column=0, sticky="nsew")
+    value2_scroll_y = ttk.Scrollbar(value_frame_add, orient="vertical", command=theme_value_text2.yview)
+    value2_scroll_y.grid(row=0, column=1, sticky="ns")
+    theme_value_text2.configure(yscrollcommand=value2_scroll_y.set)
+    try:
+        value_frame_add.columnconfigure(0, weight=1)
+        value_frame_add.rowconfigure(0, weight=1)
+    except Exception:
+        pass
 
     def select_file():
         file_path = filedialog.askopenfilename()
-        theme_value_entry.delete(0, tk.END)
-        theme_value_entry.insert(0, file_path)
+        if file_path:
+            theme_value_text2.delete("1.0", tk.END)
+            theme_value_text2.insert("1.0", file_path)
 
     ttk.Button(theme_window, text="选择文件", command=select_file).grid(
         row=4, column=2, sticky="w", padx=15
     )
+
+    # 垂直方向自适应：占位扩展区，推开底部按钮
+    try:
+        theme_window.rowconfigure(5, weight=1)
+        _spacer_add = ttk.Frame(theme_window)
+        _spacer_add.grid(row=5, column=0, columnspan=4, sticky="nsew")
+    except Exception:
+        pass
 
     # 命令类型：命令窗口显示/隐藏 -> 改为复选框，放在“状态”后面
     cmd_window_var = tk.IntVar(value=1)
@@ -642,7 +706,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
 
     def update_cmd_window_row_add(*_):
         if theme_type_var.get() == "命令":
-            cmd_window_check.grid(row=1, column=1, sticky="e")
+            cmd_window_check.grid(row=1, column=1, sticky="n")
         else:
             cmd_window_check.grid_remove()
 
@@ -655,7 +719,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             "checked": theme_checked_var.get(),
             "nickname": theme_nickname_entry.get(),
             "name": theme_name_entry.get(),
-            "value": theme_value_entry.get(),
+            "value": theme_value_text2.get("1.0", "end-1c").strip(),
         }
         if theme["type"] == "命令":
             theme["window"] = "show" if cmd_window_var.get() else "hide"
