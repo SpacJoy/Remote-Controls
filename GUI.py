@@ -1137,8 +1137,16 @@ def open_builtin_settings():
             except Exception:
                 config["computer_off_delay"] = 60
 
-            config["sleep_on_action"] = s_key_by_label_on.get(s_on_var.get(), "sleep")
-            config["sleep_off_action"] = s_key_by_label_off.get(s_off_var.get(), "none")
+            # 读取睡眠动作选择
+            _sleep_on_sel = s_key_by_label_on.get(s_on_var.get(), "sleep")
+            _sleep_off_sel = s_key_by_label_off.get(s_off_var.get(), "none")
+
+            # 保存前，如涉及显示器开/关，给出风险警告（不阻断保存）
+            if (_sleep_on_sel in ("display_off", "display_on")) or (_sleep_off_sel in ("display_off", "display_on")):
+                messagebox.showwarning("警告", "依赖于 Windows 的系统 API 来控制显示器电源状态\n未经过测试\n可能造成不可逆后果\n谨慎使用“开/关显示器功能”")
+
+            config["sleep_on_action"] = _sleep_on_sel
+            config["sleep_off_action"] = _sleep_off_sel
             try:
                 config["sleep_on_delay"] = max(0, int(s_on_delay_var.get()))
             except Exception:
