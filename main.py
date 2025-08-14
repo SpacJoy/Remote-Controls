@@ -30,7 +30,7 @@ from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 import pyautogui
 from pyautogui import press as pyautogui_press
 
-BANBEN = "V2.1.6"
+BANBEN = "V2.1.7"
 
 # 禁用 PyAutoGUI 安全模式，确保即使鼠标在屏幕角落也能执行命令
 pyautogui.FAILSAFE = False
@@ -754,42 +754,49 @@ def interrupt_command_processes(topic: str) -> bool:
         return False
 
     did_any = False
-    for pid in list(pids):
-        try:
-            # 首选：通过附加控制台并发送 CTRL_BREAK（更可靠）
-            if _send_ctrl_break_via_console(pid):
-                did_any = True
-                logging.info(f"已发送CTRL_BREAK给PID={pid}")
-                continue
+    # 只针对“最新的存活 PID”发送中断，避免影响旧窗口
+    target_pid = None
+    if pids:
+        alive_pids = cleanup_dead_pids(pids)
+        if alive_pids:
+            target_pid = alive_pids[-1]
+            command_process_registry[topic] = alive_pids
 
+    if target_pid is None:
+        logging.warning(f"命令[{topic}]没有可中断的存活PID")
+        return False
+
+    try:
+        pid = target_pid
+        # 首选：通过附加控制台并发送 CTRL_BREAK（更可靠）
+        if _send_ctrl_break_via_console(pid):
+            did_any = True
+            logging.info(f"已发送CTRL_BREAK给PID={pid}")
+        else:
             # 次选：os.kill（在某些场景下仍可能有效）
             try:
                 os.kill(pid, signal.CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
                 did_any = True
                 logging.info(f"通过os.kill发送CTRL_BREAK给PID={pid}")
-                continue
             except Exception as e:
                 logging.warning(f"os.kill CTRL_BREAK 失败 PID={pid}: {e}")
-
-            # 次选优雅终止
-            try:
-                proc = psutil.Process(pid)
-                proc.terminate()
-                did_any = True
-                logging.info(f"已尝试优雅终止 PID={pid}")
-                continue
-            except Exception as e:
-                logging.warning(f"优雅终止失败 PID={pid}: {e}")
-
-            # 兜底 taskkill
-            result = subprocess.run(["taskkill", "/PID", str(pid)], capture_output=True, text=True)
-            if result.returncode == 0:
-                did_any = True
-                logging.info(f"taskkill 返回成功 PID={pid}: {result.stdout}")
-            else:
-                logging.warning(f"taskkill 失败 PID={pid}: {result.stderr}")
-        except Exception as e:
-            logging.error(f"中断命令进程失败 PID={pid}: {e}")
+                # 次选优雅终止
+                try:
+                    proc = psutil.Process(pid)
+                    proc.terminate()
+                    did_any = True
+                    logging.info(f"已尝试优雅终止 PID={pid}")
+                except Exception as e2:
+                    logging.warning(f"优雅终止失败 PID={pid}: {e2}")
+                    # 兜底 taskkill
+                    result = subprocess.run(["taskkill", "/PID", str(pid)], capture_output=True, text=True)
+                    if result.returncode == 0:
+                        did_any = True
+                        logging.info(f"taskkill 返回成功 PID={pid}: {result.stdout}")
+                    else:
+                        logging.warning(f"taskkill 失败 PID={pid}: {result.stderr}")
+    except Exception as e:
+        logging.error(f"中断命令进程失败 PID={target_pid}: {e}")
 
     # 清理注册表中已退出或被终止的PID
     command_process_registry[topic] = cleanup_dead_pids(pids)
