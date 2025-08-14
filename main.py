@@ -431,28 +431,119 @@ def process_command(command: str, topic: str) -> None:
                                 break
                     except Exception:
                         window_mode = "show"
+                    if window_mode is None:
+                        window_mode = "show"
+
+                    # 检测是否更像 PowerShell 命令（irm/iex/管道等）
+                    lower_cmd = (cmd_text or "").lower()
+                    looks_like_ps = (
+                        (" irm " in f" {lower_cmd} ")
+                        or (" iex" in lower_cmd)
+                        or ("|" in lower_cmd)
+                        or ("get-" in lower_cmd)
+                        or ("set-" in lower_cmd)
+                    )
+                    already_ps = lower_cmd.strip().startswith("powershell") or lower_cmd.strip().startswith("pwsh")
+
+                    # 检测是否更像 CMD 批处理命令（set/goto/变量/重定向/多命令连接等）
+                    looks_like_cmd = (
+                        (" set " in f" {lower_cmd} ")
+                        or (" goto " in f" {lower_cmd} ")
+                        or ("%" in lower_cmd)
+                        or (" && " in f" {lower_cmd} ")
+                        or (" || " in f" {lower_cmd} ")
+                        or (" & " in f" {lower_cmd} ")
+                        or (">" in lower_cmd or "<" in lower_cmd)
+                        or (" timeout " in f" {lower_cmd} ")
+                        or (":" in lower_cmd and "goto" in lower_cmd)
+                    )
+                    already_cmd = lower_cmd.strip().startswith("cmd ") or lower_cmd.strip().startswith("cmd.exe ")
 
                     startupinfo = None
                     use_creationflags = creationflags
+
                     if window_mode == "hide":
                         # 隐藏窗口启动
                         startupinfo = subprocess.STARTUPINFO()
                         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                         startupinfo.wShowWindow = 0  # SW_HIDE
-                        # 对于无控制台的隐藏，附加 CREATE_NO_WINDOW
                         use_creationflags |= 0x08000000  # CREATE_NO_WINDOW
-                    proc = subprocess.Popen(
-                        cmd_text,
-                        shell=True,
-                        creationflags=use_creationflags,
-                        startupinfo=startupinfo,
-                    )
+                        if looks_like_ps and not already_ps:
+                            # 通过 PowerShell 隐藏执行
+                            args = [
+                                "powershell.exe",
+                                "-NoProfile",
+                                "-ExecutionPolicy", "Bypass",
+                                "-WindowStyle", "Hidden",
+                                "-Command", cmd_text,
+                            ]
+                            proc = subprocess.Popen(
+                                args,
+                                shell=False,
+                                creationflags=use_creationflags,
+                                startupinfo=startupinfo,
+                            )
+                        elif looks_like_cmd and not already_cmd:
+                            # 通过 CMD 隐藏执行
+                            args = [
+                                "cmd.exe",
+                                "/C",
+                                cmd_text,
+                            ]
+                            proc = subprocess.Popen(
+                                args,
+                                shell=False,
+                                creationflags=use_creationflags,
+                                startupinfo=startupinfo,
+                            )
+                        else:
+                            # 原样隐藏执行（可能是可执行或已显式指定shell）
+                            proc = subprocess.Popen(
+                                cmd_text,
+                                shell=True,
+                                creationflags=use_creationflags,
+                                startupinfo=startupinfo,
+                            )
+                    else:
+                        # 显示窗口：强制创建新控制台窗口
+                        use_creationflags |= 0x00000010  # CREATE_NEW_CONSOLE
+                        if looks_like_ps and not already_ps:
+                            args = [
+                                "powershell.exe",
+                                "-NoProfile",
+                                "-ExecutionPolicy", "Bypass",
+                                "-NoExit",
+                                "-Command", cmd_text,
+                            ]
+                            proc = subprocess.Popen(
+                                args,
+                                shell=False,
+                                creationflags=use_creationflags,
+                            )
+                        elif looks_like_cmd and not already_cmd:
+                            # 通过 CMD 显示执行并保持窗口
+                            args = [
+                                "cmd.exe",
+                                "/K",
+                                cmd_text,
+                            ]
+                            proc = subprocess.Popen(
+                                args,
+                                shell=False,
+                                creationflags=use_creationflags,
+                            )
+                        else:
+                            proc = subprocess.Popen(
+                                cmd_text,
+                                shell=True,
+                                creationflags=use_creationflags,
+                            )
                     register_command_process(cmd_topic, proc.pid)
-                    notify_in_thread(f"已执行命令: {commands}")
-                    logging.info(f"执行命令[{cmd_topic}]: {cmd_text}; PID={proc.pid}")
+                    notify_in_thread(f"已执行命令: {cmd_topic}")
+                    logging.info(f"执行命令[{cmd_topic}] (window={window_mode}): {cmd_text}; PID={proc.pid}")
                 except Exception as e:
                     logging.error(f"执行命令失败[{cmd_topic}]: {e}")
-                    notify_in_thread(f"执行命令失败: {commands}")
+                    notify_in_thread(f"执行命令失败: {cmd_topic}")
             elif command == "off":
                 if interrupt_command_processes(cmd_topic):
                     notify_in_thread(f"已发送中断信号: {cmd_topic}")
