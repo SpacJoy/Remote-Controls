@@ -6,6 +6,7 @@ import os
 import tkinter as tk
 from tkinter import messagebox, filedialog
 import tkinter.ttk as ttk
+import tkinter.font as tkfont
 import json
 import ctypes
 import sys
@@ -181,6 +182,111 @@ def startup_admin_check():
     except Exception as e:
         messagebox.showerror("管理员权限检查", f"管理员权限检查过程中出现异常: {e}")
 
+
+# DPI 与字体优化
+def _enable_dpi_awareness() -> None:
+    """
+    Windows: 使进程 DPI 感知，避免高分屏字体/控件发糊。
+    优先 Per-Monitor (v1)，回退到 System DPI Aware。
+    """
+    try:
+        shcore = ctypes.windll.shcore
+        # 2 = PROCESS_PER_MONITOR_DPI_AWARE # 每个监视器 DPI 感知
+        shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+def _apply_font_readability_and_scaling(root: tk.Tk) -> None:
+    """
+    统一设置更易读的字体族，并根据系统缩放设置 Tk scaling。
+    """
+    # 优选中文/中英皆宜的清晰字体
+    preferred_ui = ("Microsoft YaHei UI", "Segoe UI", "Microsoft YaHei")
+    preferred_fixed = ("Consolas", "Cascadia Mono", "Courier New")
+
+    def _set_font(name: str, family_choices, min_size=9):
+        try:
+            f = tkfont.nametofont(name)
+            # 选择第一个系统可用字体
+            family = next((fam for fam in family_choices if tkfont.families() and fam in tkfont.families()), None)
+            if family:
+                f.configure(family=family)
+            # 合理的最小字号
+            size = f.cget("size")
+            if isinstance(size, int) and size < min_size:
+                f.configure(size=min_size)
+        except Exception:
+            pass
+
+    _set_font("TkDefaultFont", preferred_ui)
+    _set_font("TkTextFont", preferred_ui)
+    _set_font("TkMenuFont", preferred_ui)
+    _set_font("TkHeadingFont", preferred_ui, min_size=10)
+    _set_font("TkCaptionFont", preferred_ui)
+    _set_font("TkSmallCaptionFont", preferred_ui)
+    _set_font("TkIconFont", preferred_ui)
+    _set_font("TkTooltipFont", preferred_ui)
+    _set_font("TkFixedFont", preferred_fixed)
+
+    # 按系统缩放设置 Tk scaling（像素/pt，pt=1/72英寸）
+    try:
+        scale_pct = None
+        try:
+            # Windows 8.1+ 可用，返回 100/125/150...
+            scale_pct = ctypes.c_uint()
+            ctypes.windll.shcore.GetScaleFactorForDevice(0, ctypes.byref(scale_pct))
+            scale_pct = scale_pct.value
+        except Exception:
+            scale_pct = None
+
+        if scale_pct:
+            dpi = 96 * (scale_pct / 100.0)
+            scaling = dpi / 72.0
+            root.tk.call("tk", "scaling", scaling)
+    except Exception:
+        pass
+
+def _apply_ttk_ui_fonts(root: tk.Tk) -> None:
+    """
+    为 ttk 控件统一应用更清晰的 UI 字体，并根据字体行距调整 Treeview 行高。
+    """
+    try:
+        style = ttk.Style(root)
+        default_font = tkfont.nametofont("TkDefaultFont")
+        heading_font = tkfont.nametofont("TkHeadingFont")
+
+        # 常见 ttk 控件统一使用 UI 字体
+        for cls in (
+            "TLabel", "TButton", "TEntry", "TCombobox", "TCheckbutton",
+            "TRadiobutton", "TMenubutton", "TNotebook", "TNotebook.Tab",
+        ):
+            try:
+                style.configure(cls, font=default_font)
+            except Exception:
+                pass
+
+        # Treeview 内容与表头字体
+        try:
+            style.configure("Treeview", font=default_font)
+        except Exception:
+            pass
+        try:
+            style.configure("Treeview.Heading", font=heading_font)
+        except Exception:
+            pass
+
+        # 行高根据字体行距微调，避免文字被裁剪
+        try:
+            linespace = default_font.metrics("linespace")
+            row_h = max(22, int(linespace + 10))
+            style.configure("Treeview", rowheight=row_h)
+        except Exception:
+            pass
+    except Exception:
+        pass
 
 # 设置窗口居中
 def center_window(window: Union[tk.Tk, tk.Toplevel]) -> None:
@@ -1018,9 +1124,19 @@ if os.path.exists(config_file_path):
             sys.exit(0)
 
 
+# 创建主窗口前启用 DPI 感知
+_enable_dpi_awareness()
+
 # 创建主窗口
 root = tk.Tk()
 root.title(f"远程控制-{BANBEN}")
+
+# 应用字体与缩放优化
+try:
+    _apply_font_readability_and_scaling(root)
+    _apply_ttk_ui_fonts(root)
+except Exception:
+    pass
 
 # 设置根窗口的行列权重
 root.rowconfigure(0, weight=1)
@@ -1050,7 +1166,7 @@ port_entry.insert(0, str(config.get("port", "")))
 ttk.Label(system_frame, text="认证模式：").grid(row=2, column=0, sticky="e")
 auth_mode_var = tk.StringVar(value=config.get("auth_mode", "private_key"))
 auth_mode_combo = ttk.Combobox(system_frame, 
-                               values=["私钥模式", "账号密码模式"], 
+                               values=["私钥模式", "账密模式"], 
                                state="readonly", width=15)
 auth_mode_combo.grid(row=2, column=1, sticky="w")
 
@@ -1060,14 +1176,14 @@ def update_auth_mode_display():
     if current_value == "private_key":
         auth_mode_combo.set("私钥模式")
     elif current_value == "username_password":
-        auth_mode_combo.set("账号密码模式")
+        auth_mode_combo.set("账密模式")
 
 # 绑定选择事件
 def on_auth_mode_change(event):
     selected_text = auth_mode_combo.get()
     if selected_text == "私钥模式":
         auth_mode_var.set("private_key")
-    elif selected_text == "账号密码模式":
+    elif selected_text == "账密模式":
         auth_mode_var.set("username_password")
 
 auth_mode_combo.bind("<<ComboboxSelected>>", on_auth_mode_change)
@@ -1075,7 +1191,7 @@ update_auth_mode_display()
 
 test_var = tk.IntVar(value=config.get("test", 0))
 test_check = ttk.Checkbutton(system_frame, text="test模式", variable=test_var)
-test_check.grid(row=3, column=0, columnspan=2, sticky="w")
+test_check.grid(row=3, column=0, columnspan=2, sticky="n")
 
 #添加打开任务计划按钮
 task_button = ttk.Button(system_frame, text="点击此按钮可以手动设置", command=lambda:os.startfile("taskschd.msc"))
@@ -1128,16 +1244,16 @@ client_id_entry.insert(0, client_id_value)
 # 认证模式说明
 auth_info_label = ttk.Label(
     auth_frame,
-    text="私钥模式：使用客户端ID作为私钥\n账号密码模式：兼容大多数IoT平台",
+    text="私钥模式：\n        使用客户端ID作为私钥\n账密模式：\n        兼容大多数IoT平台",
     justify="left"
 )
-auth_info_label.grid(row=0, column=2, rowspan=2, sticky="n", padx=10)
+auth_info_label.grid(row=0, column=2, rowspan=3, sticky="n")
 
 def toggle_auth_mode(*args):
     """根据MQTT认证模式切换界面显示"""
     mode = auth_mode_var.get()
     if mode == "username_password":
-        # 账号密码模式：适用于大多数IoT平台
+        # 账密模式：适用于大多数IoT平台
         mqtt_username_entry.config(state="normal")
         mqtt_password_entry.config(state="normal")
         client_id_entry.config(state="normal", show="")
@@ -1205,7 +1321,6 @@ ttk.Label(theme_frame, text="内置").grid(row=0, column=0, sticky="w")
 
 # 更多：打开内置主题设置
 def open_builtin_settings():
-    import json, os
     win = tk.Toplevel(root)
     win.title("内置主题设置")
     win.resizable(False, False)
@@ -1370,11 +1485,10 @@ def open_builtin_settings():
     except Exception:
         pass
 
-ttk.Button(theme_frame, text="更多", command=open_builtin_settings).grid(row=6, column=1, sticky="e")
 
-ttk.Button(theme_frame, text="详情", command=show_detail_window).grid(row=0, column=1, sticky="e", columnspan=2)
-ttk.Label(theme_frame, text="主题:").grid(row=0, column=2, sticky="w")
-ttk.Label(theme_frame, text="自定义(服务需管理员)").grid(
+ttk.Button(theme_frame, text="详情", command=show_detail_window).grid(row=0, column=2, sticky="e", columnspan=2)
+ttk.Label(theme_frame, text="主题：").grid(row=0, column=2, sticky="w")
+ttk.Label(theme_frame, text="自定义：").grid(
     row=0, column=3, sticky="w"
 )
 
@@ -1410,7 +1524,8 @@ for idx, theme in enumerate(builtin_themes):
         entry = ttk.Entry(theme_frame, textvariable=theme["name_var"])
         entry.config(state="disabled")
         entry.grid(row=idx + 1, column=2, sticky="ew")
-        brightness_tip = ttk.Button(theme_frame, text="亮度调节不可用\n系统不支持此功能",command=show_detail_window)
+        # 改为不可点击提示
+        brightness_tip = ttk.Label(theme_frame, text="亮度调节不可用\n系统不支持此功能")
         brightness_tip.grid(row=idx + 1, column=2, sticky="w")
     else:
         ttk.Checkbutton(theme_frame, text=theme["nickname"], variable=theme["checked"]).grid(
@@ -1426,18 +1541,20 @@ custom_themes: List[Dict[str, Any]] = []
 # 自定义主题列表组件
 custom_theme_tree = ttk.Treeview(theme_frame, columns=("theme",), show="headings")
 custom_theme_tree.heading("theme", text="双击即可修改")
-custom_theme_tree.grid(row=1, column=3, rowspan=5, pady=10, sticky="nsew")
+custom_theme_tree.grid(row=1, column=3, rowspan=5, pady=10, padx=15, sticky="nsew")
 
 # 刷新主题配置按钮
 ttk.Button(theme_frame, text="刷新", command=refresh_custom_themes).grid(
-    row=6, column=0, sticky="w"
+    row=6, pady=10, column=0, sticky="w"
 )
+ttk.Button(theme_frame, text="更多", command=open_builtin_settings).grid(row=6, column=2, pady=10, sticky="n")
+
 # 添加和修改按钮
 ttk.Button(theme_frame, text="添加", command=lambda: add_custom_theme(config)).grid(
-    row=6, column=3, sticky="w"
+    row=6, pady=10, column=3, sticky="w"
 )
 ttk.Button(theme_frame, text="修改", command=lambda: modify_custom_theme()).grid(
-    row=6, column=3, sticky="e"
+    row=6, pady=10, column=3, sticky="e"
 )
 
 # 绑定鼠标双击事件到自定义主题列表
