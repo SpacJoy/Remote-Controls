@@ -295,6 +295,61 @@ def perform_sleep_action(action: str) -> None:
     except Exception as e:
         logging.error(f"执行睡眠动作失败: {e}")
 
+def _parse_hotkey_string(hs: str) -> list[str]:
+    """将 'ctrl+alt+delete' 这类组合拆成有序列表，并统一命名。"""
+    if not hs:
+        return []
+    parts = [p.strip().lower() for p in hs.replace(" ", "").split("+") if p.strip()]
+    normalize = {
+        "control": "ctrl", "ctrl": "ctrl",
+        "alt": "alt",
+        "shift": "shift",
+        "win": "win", "super": "win", "meta": "win",
+        "enter": "enter", "return": "enter",
+        "esc": "esc", "escape": "esc",
+    }
+    res = [normalize.get(p, p) for p in parts]
+    order = {"ctrl": 0, "alt": 1, "shift": 2, "win": 3}
+    res.sort(key=lambda x: (order.get(x, 9), x))
+    return res
+
+def perform_hotkey(action_type: str, action_value: str) -> None:
+    """
+    执行按键(Hotkey)动作：
+    - keyboard: 组合键（依次按下修饰键 -> 主键 -> 释放修饰键）
+    - none: 不执行
+    """
+    try:
+        t = (action_type or "none").lower()
+        v = (action_value or "").strip()
+        if t == "none" or not v:
+            logging.info("Hotkey: 不执行")
+            return
+        if t == "keyboard":
+            keys = _parse_hotkey_string(v)
+            if not keys:
+                logging.info("Hotkey: 空组合，忽略")
+                return
+            # 处理 win 键映射（PyAutoGUI 使用 winleft/winright）
+            def map_key(k: str) -> str:
+                return "winleft" if k == "win" else k
+
+            if len(keys) == 1:
+                pyautogui.press(map_key(keys[0]))
+                return
+            mods, main_key = keys[:-1], keys[-1]
+            for k in mods:
+                pyautogui.keyDown(map_key(k))
+            try:
+                pyautogui.press(map_key(main_key))
+            finally:
+                for k in reversed(mods):
+                    pyautogui.keyUp(map_key(k))
+            return
+        logging.warning(f"Hotkey: 未知类型 {t}")
+    except Exception as e:
+        logging.error(f"执行 Hotkey 动作失败: {e}")
+
 
 """
 根据接收到的命令和主题来处理相应的操作。
@@ -679,7 +734,19 @@ def process_command(command: str, topic: str) -> None:
         except Exception as e:
             logging.error(f"媒体控制执行失败: {e}")
             notify_in_thread(f"媒体控制执行失败，详情请查看日志")
+    # 自定义 Hotkey 主题
     else:
+        for hk_topic, hk_conf in hotkeys:
+            if topic == hk_topic:
+                on_type = (hk_conf.get("on_type") or "keyboard").lower()
+                on_value = (hk_conf.get("on_value") or "")
+                off_type = (hk_conf.get("off_type") or "none").lower()
+                off_value = (hk_conf.get("off_value") or "")
+                if command == "on":
+                    perform_hotkey(on_type, on_value)
+                elif command == "off":
+                    perform_hotkey(off_type, off_value)
+                return
         # 未知主题
         logging.error(f"未知主题: {topic}")
         notify_in_thread(f"未知主题: {topic}")
@@ -1830,6 +1897,34 @@ for i in range(1, 50):
         logging.info(f"加载命令: {cmd_key}, 命令: {cmd_value}")
         commands.append((cmd_topic, cmd_value))
 logging.info(f"读取的命令列表: {commands}\n")
+
+# 加载 Hotkey 自定义主题
+hotkeys = []
+for i in range(1, 50):
+    hk_key = f"hotkey{i}"
+    hk_topic = load_theme(hk_key)
+    if hk_topic:
+        hk_conf = {
+            "on_type": (config.get(f"{hk_key}_on_type") or "keyboard"),
+            "on_value": (config.get(f"{hk_key}_on_value") or ""),
+            "off_type": (config.get(f"{hk_key}_off_type") or "none"),
+            "off_value": (config.get(f"{hk_key}_off_value") or ""),
+        }
+        logging.info(f"加载Hotkey: {hk_key}, 配置: {hk_conf}")
+        hotkeys.append((hk_topic, hk_conf))
+logging.info(f"读取的Hotkey列表: {hotkeys}\n")
+
+# 兼容：如果旧版内置 Hotkey 主题仍被勾选，作为热键条目加入（建议迁移到自定义主题）
+legacy_hotkey_topic = load_theme("hotkey")
+if legacy_hotkey_topic:
+    legacy_conf = {
+        "on_type": (config.get("hotkey_on_type") or "keyboard"),
+        "on_value": (config.get("hotkey_on_value") or ""),
+        "off_type": (config.get("hotkey_off_type") or "none"),
+        "off_value": (config.get("hotkey_off_value") or ""),
+    }
+    logging.warning("检测到旧版内置 Hotkey 主题，已临时兼容；建议在GUI中将其迁移为‘按键(Hotkey)’自定义主题。")
+    hotkeys.append((legacy_hotkey_topic, legacy_conf))
 
 # 如果主题不为空，将其记录到日志中
 for key in ["Computer", "screen", "volume", "sleep", "media"]:

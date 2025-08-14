@@ -283,8 +283,9 @@ def _apply_ttk_ui_fonts(root: tk.Tk) -> None:
         # 兼容非 ttk 控件（如 tk.Text 等），通过 option_add 设置全局默认字体
         try:
             fam = default_font.cget("family")
-            size = default_font.cget("size")
-            root.option_add("*Font", f"{fam} {size}")
+            # Tk 需要整数字号；多词字体族需用花括号包裹
+            size = int(default_font.cget("size"))
+            root.option_add("*Font", f"{{{fam}}} {size}")
         except Exception:
             pass
         try:
@@ -330,6 +331,108 @@ def check_task_exists(task_name: str) -> bool:
             return True
     return False
 
+def open_keyboard_recorder(parent: Union[tk.Tk, tk.Toplevel], target_var: tk.StringVar) -> None:
+    """
+    通用“录制键盘组合”弹窗：
+    - 在 parent 之上弹出
+    - 实时显示已按下的组合并自动换行
+    - Enter 完成（不会把 enter 计入组合），Esc 取消
+    - 结果写入 target_var（形如：ctrl+alt+f）
+    """
+    rec = tk.Toplevel(parent)
+    rec.title("录制键盘组合")
+    rec.geometry("360x200")
+    msg = ttk.Label(
+        rec,
+        text=(
+            "请在此窗口按下要录制的组合键，\n"
+            "按 Enter 完成，Esc 取消。\n"
+            "支持：Ctrl/Alt/Shift/Win 与普通键。"
+        ),
+        justify="left",
+    )
+    msg.pack(padx=10, pady=8, anchor="w")
+
+    pressed: set[str] = set()
+    pressed_var = tk.StringVar(value="已按下：(空)")
+    # 使用 tk.Label 以获得 wraplength 自动换行能力
+    pressed_lbl = tk.Label(
+        rec, textvariable=pressed_var, fg="#555", anchor="w", justify="left", wraplength=320
+    )
+    pressed_lbl.pack(padx=10, pady=(0, 8), anchor="w", fill="x")
+
+    normalize = {
+        "control_l": "ctrl",
+        "control_r": "ctrl",
+        "control": "ctrl",
+        "alt_l": "alt",
+        "alt_r": "alt",
+        "alt": "alt",
+        "shift_l": "shift",
+        "shift_r": "shift",
+        "shift": "shift",
+        "super_l": "win",
+        "super_r": "win",
+        "meta_l": "win",
+        "meta_r": "win",
+        "win_l": "win",
+        "win_r": "win",
+        "return": "enter",
+        "escape": "esc",
+    }
+
+    def key_name(event_keysym: str) -> str:
+        k = (event_keysym or "").lower()
+        return normalize.get(k, k)
+
+    def _sorted_keys() -> list[str]:
+        order = {"ctrl": 0, "alt": 1, "shift": 2, "win": 3}
+        ks = list(pressed)
+        ks.sort(key=lambda x: (order.get(x, 9), x))
+        return ks
+
+    def _update_pressed_label():
+        keys = _sorted_keys()
+        pressed_var.set("已按下：" + (" + ".join(keys) if keys else "(空)"))
+
+    def on_key_press(e):
+        k = key_name(getattr(e, "keysym", ""))
+        if k:
+            pressed.add(k)
+            _update_pressed_label()
+
+    def on_key_release(e):
+        pass
+
+    def finish(*_):
+        # 完成时忽略 Enter 本身
+        keys = [k for k in _sorted_keys() if k != "enter"]
+        v = "+".join(keys)
+        target_var.set(v)
+        rec.destroy()
+
+    def cancel(*_):
+        rec.destroy()
+
+    rec.bind("<KeyPress>", on_key_press)
+    rec.bind("<KeyRelease>", on_key_release)
+    rec.bind("<Return>", finish)
+    rec.bind("<KP_Enter>", finish)
+    rec.bind("<Escape>", cancel)
+
+    def _on_rec_configure(event):
+        try:
+            pressed_lbl.configure(wraplength=max(100, event.width - 20))
+        except Exception:
+            pass
+
+    rec.bind("<Configure>", _on_rec_configure)
+    try:
+        rec.focus_force()
+    except Exception:
+        pass
+    center_window(rec)
+
 
 # 设置开机自启动
 def set_auto_start() -> None:
@@ -366,7 +469,7 @@ def set_auto_start() -> None:
     if choice is None:
         messagebox.showinfo("已取消", "已取消设置开机自启动")
         return
-    
+
     quoted_exe_path = shlex.quote(exe_path)
     
     if choice == True:  # 选择"是"，对应方案一
@@ -566,6 +669,32 @@ def load_custom_themes() -> None:
         else:
             break
 
+    # 加载 Hotkey 类型
+    hotkey_index = 1
+    while True:
+        hk_key = f"hotkey{hotkey_index}"
+        if hk_key in config:
+            theme = {
+                "type": "按键(Hotkey)",
+                "checked": config.get(f"{hk_key}_checked", 0),
+                "nickname": config.get(f"{hk_key}_name", ""),
+                "name": config.get(hk_key, ""),
+                "value": "",
+                "on_type": config.get(f"{hk_key}_on_type", "keyboard"),
+                "on_value": config.get(f"{hk_key}_on_value", ""),
+                "off_type": config.get(f"{hk_key}_off_type", "none"),
+                "off_value": config.get(f"{hk_key}_off_value", ""),
+            }
+            custom_themes.append(theme)
+            status = "开" if theme["checked"] else "关"
+            display_name = theme["nickname"] or theme["name"]
+            item_text = f"[{status}] {display_name}"
+            tree_iid = str(len(custom_themes) - 1)
+            custom_theme_tree.insert("", "end", iid=tree_iid, values=(item_text,))
+            hotkey_index += 1
+        else:
+            break
+
 
 def show_detail_window():
     detail_win = tk.Toplevel(root)
@@ -627,11 +756,15 @@ def modify_custom_theme() -> None:
     theme_type_combobox = ttk.Combobox(
         theme_window, 
         textvariable=theme_type_var, 
-        values=["程序或脚本", "服务(需管理员权限)", "命令"],
+        values=["程序或脚本", "服务(需管理员权限)", "命令", "按键(Hotkey)"],
         state="readonly"
     )
     theme_type_combobox.grid(row=0, column=1, sticky="we")
-    type_index = ["程序或脚本", "服务(需管理员权限)", "命令"].index(theme["type"])
+    _type_options = ["程序或脚本", "服务(需管理员权限)", "命令", "按键(Hotkey)"]
+    try:
+        type_index = _type_options.index(theme["type"])
+    except ValueError:
+        type_index = 0
     theme_type_combobox.current(type_index)
 
     ttk.Label(theme_window, text="服务时主程序").grid(row=0, column=2, sticky="w")
@@ -662,7 +795,7 @@ def modify_custom_theme() -> None:
     except Exception:
         pass
     theme_value_text = tk.Text(value_frame_mod, height=4, wrap="word")
-    theme_value_text.insert("1.0", theme["value"])
+    theme_value_text.insert("1.0", theme.get("value", ""))
     theme_value_text.grid(row=0, column=0, sticky="nsew")
     value_scroll_y = ttk.Scrollbar(value_frame_mod, orient="vertical", command=theme_value_text.yview)
     value_scroll_y.grid(row=0, column=1, sticky="ns")
@@ -679,9 +812,8 @@ def modify_custom_theme() -> None:
             theme_value_text.delete("1.0", tk.END)
             theme_value_text.insert("1.0", file_path)
 
-    ttk.Button(theme_window, text="选择文件", command=select_file).grid(
-        row=4, column=2, sticky="w", padx=15
-    )
+    select_file_btn_mod = ttk.Button(theme_window, text="选择文件", command=select_file)
+    select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=15)
 
     # 垂直方向自适应：占位扩展区，推开底部按钮
     try:
@@ -695,15 +827,48 @@ def modify_custom_theme() -> None:
     cmd_window_var = tk.IntVar(value=0 if theme.get("window", "show") == "hide" else 1)
     cmd_window_check = ttk.Checkbutton(theme_window, text="显示窗口", variable=cmd_window_var)
 
-    def update_cmd_window_visibility(*_):
-        if theme_type_var.get() == "命令":
-            # 放在“状态”后面（行1，列1）
+    # Hotkey 专用设置（修改窗口）
+    hotkey_frame_mod = ttk.Labelframe(theme_window, text="按键(Hotkey) 设置")
+    hk_type_labels = ["不执行", "键盘组合"]
+    hk_type_map = {"不执行": "none", "键盘组合": "keyboard"}
+    hk_label_by_type = {v: k for k, v in hk_type_map.items()}
+
+    hk_on_type_var_mod = tk.StringVar(value=hk_label_by_type.get(theme.get("on_type", "keyboard"), "不执行"))
+    hk_on_val_var_mod = tk.StringVar(value=theme.get("on_value", ""))
+    hk_off_type_var_mod = tk.StringVar(value=hk_label_by_type.get(theme.get("off_type", "none"), "不执行"))
+    hk_off_val_var_mod = tk.StringVar(value=theme.get("off_value", ""))
+
+    ttk.Label(hotkey_frame_mod, text="打开(on)：").grid(row=0, column=0, sticky="e", padx=8, pady=4)
+    hk_on_type_combo_mod = ttk.Combobox(hotkey_frame_mod, values=hk_type_labels, textvariable=hk_on_type_var_mod, state="readonly", width=12)
+    hk_on_type_combo_mod.grid(row=0, column=1, sticky="w")
+    hk_on_entry_mod = ttk.Entry(hotkey_frame_mod, textvariable=hk_on_val_var_mod, width=24)
+    hk_on_entry_mod.grid(row=0, column=2, sticky="w")
+    ttk.Button(hotkey_frame_mod, text="录制", command=lambda: open_keyboard_recorder(theme_window, hk_on_val_var_mod)).grid(row=0, column=3, sticky="w")
+
+    ttk.Label(hotkey_frame_mod, text="关闭(off)：").grid(row=1, column=0, sticky="e", padx=8, pady=4)
+    hk_off_type_combo_mod = ttk.Combobox(hotkey_frame_mod, values=hk_type_labels, textvariable=hk_off_type_var_mod, state="readonly", width=12)
+    hk_off_type_combo_mod.grid(row=1, column=1, sticky="w")
+    hk_off_entry_mod = ttk.Entry(hotkey_frame_mod, textvariable=hk_off_val_var_mod, width=24)
+    hk_off_entry_mod.grid(row=1, column=2, sticky="w")
+    ttk.Button(hotkey_frame_mod, text="录制", command=lambda: open_keyboard_recorder(theme_window, hk_off_val_var_mod)).grid(row=1, column=3, sticky="w")
+
+    def _update_type_specific_mod(*_):
+        t = theme_type_var.get()
+        if t == "命令":
             cmd_window_check.grid(row=1, column=1, sticky="n")
         else:
             cmd_window_check.grid_remove()
+        if t == "按键(Hotkey)":
+            value_frame_mod.grid_remove()
+            select_file_btn_mod.grid_remove()
+            hotkey_frame_mod.grid(row=4, column=1, columnspan=2, sticky="we")
+        else:
+            hotkey_frame_mod.grid_remove()
+            value_frame_mod.grid(row=4, column=1, sticky="nsew")
+            select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=15)
 
-    theme_type_combobox.bind("<<ComboboxSelected>>", update_cmd_window_visibility)
-    update_cmd_window_visibility()
+    theme_type_combobox.bind("<<ComboboxSelected>>", _update_type_specific_mod)
+    _update_type_specific_mod()
 
     def save_theme():
         theme["type"] = theme_type_var.get()
@@ -713,6 +878,12 @@ def modify_custom_theme() -> None:
         theme["value"] = theme_value_text.get("1.0", "end-1c").strip()
         if theme["type"] == "命令":
             theme["window"] = "show" if cmd_window_var.get() else "hide"
+        if theme["type"] == "按键(Hotkey)":
+            theme["on_type"] = {"不执行": "none", "键盘组合": "keyboard"}.get(hk_on_type_var_mod.get(), "keyboard")
+            theme["on_value"] = hk_on_val_var_mod.get().strip()
+            theme["off_type"] = {"不执行": "none", "键盘组合": "keyboard"}.get(hk_off_type_var_mod.get(), "none")
+            theme["off_value"] = hk_off_val_var_mod.get().strip()
+            theme["value"] = ""
         # 重新构建整个树视图以确保索引正确
         rebuild_custom_theme_tree()
         theme_window.destroy()
@@ -760,7 +931,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     theme_type_combobox = ttk.Combobox(
         theme_window, 
         textvariable=theme_type_var, 
-        values=["程序或脚本", "服务(需管理员权限)", "命令"],
+        values=["程序或脚本", "服务(需管理员权限)", "命令", "按键(Hotkey)"],
         state="readonly"
     )
     theme_type_combobox.grid(row=0, column=1, sticky="we")
@@ -784,7 +955,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     theme_name_entry.grid(row=3, column=1, sticky="we")
 
     ttk.Label(theme_window, text="值：").grid(row=4, column=0, sticky="ne")
-    # 可纵向拉伸的多行文本框 + 滚动条
+    # 可纵向拉伸的多行文本框 + 滚动条（用于程序/服务/命令）
     value_frame_add = ttk.Frame(theme_window)
     value_frame_add.grid(row=4, column=1, sticky="nsew")
     try:
@@ -808,9 +979,36 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             theme_value_text2.delete("1.0", tk.END)
             theme_value_text2.insert("1.0", file_path)
 
-    ttk.Button(theme_window, text="选择文件", command=select_file).grid(
-        row=4, column=2, sticky="w", padx=15
-    )
+    select_file_btn_add = ttk.Button(theme_window, text="选择文件", command=select_file)
+    select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
+
+    # Hotkey 专用设置区（默认隐藏，选中“按键(Hotkey)”时显示）
+    hotkey_frame_add = ttk.Labelframe(theme_window, text="按键(Hotkey) 设置")
+    # 键盘类型
+    hk_type_labels = ["不执行", "键盘组合"]
+    hk_type_map = {"不执行": "none", "键盘组合": "keyboard"}
+    hk_label_by_type = {v: k for k, v in hk_type_map.items()}
+
+
+    # 变量
+    hk_on_type_var_add = tk.StringVar(value=hk_label_by_type.get("keyboard", "键盘组合"))
+    hk_on_val_var_add = tk.StringVar(value="")
+    hk_off_type_var_add = tk.StringVar(value=hk_label_by_type.get("none", "不执行"))
+    hk_off_val_var_add = tk.StringVar(value="")
+
+    ttk.Label(hotkey_frame_add, text="打开(on)：").grid(row=0, column=0, sticky="e", padx=8, pady=4)
+    hk_on_type_combo_add = ttk.Combobox(hotkey_frame_add, values=hk_type_labels, textvariable=hk_on_type_var_add, state="readonly", width=12)
+    hk_on_type_combo_add.grid(row=0, column=1, sticky="w")
+    hk_on_entry_add = ttk.Entry(hotkey_frame_add, textvariable=hk_on_val_var_add, width=24)
+    hk_on_entry_add.grid(row=0, column=2, sticky="w")
+    ttk.Button(hotkey_frame_add, text="录制", command=lambda: open_keyboard_recorder(theme_window, hk_on_val_var_add)).grid(row=0, column=3, sticky="w")
+
+    ttk.Label(hotkey_frame_add, text="关闭(off)：").grid(row=1, column=0, sticky="e", padx=8, pady=4)
+    hk_off_type_combo_add = ttk.Combobox(hotkey_frame_add, values=hk_type_labels, textvariable=hk_off_type_var_add, state="readonly", width=12)
+    hk_off_type_combo_add.grid(row=1, column=1, sticky="w")
+    hk_off_entry_add = ttk.Entry(hotkey_frame_add, textvariable=hk_off_val_var_add, width=24)
+    hk_off_entry_add.grid(row=1, column=2, sticky="w")
+    ttk.Button(hotkey_frame_add, text="录制", command=lambda: open_keyboard_recorder(theme_window, hk_off_val_var_add)).grid(row=1, column=3, sticky="w")
 
     # 垂直方向自适应：占位扩展区，推开底部按钮
     try:
@@ -824,14 +1022,25 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     cmd_window_var = tk.IntVar(value=1)
     cmd_window_check = ttk.Checkbutton(theme_window, text="显示窗口", variable=cmd_window_var)
 
-    def update_cmd_window_row_add(*_):
-        if theme_type_var.get() == "命令":
+    def _update_type_specific_add(*_):
+        t = theme_type_var.get()
+        if t == "命令":
             cmd_window_check.grid(row=1, column=1, sticky="n")
         else:
             cmd_window_check.grid_remove()
+        # Hotkey 面板显示控制；同时隐藏/显示 值 文本和选择按钮
+        if t == "按键(Hotkey)":
+            # 隐藏值文本和选择按钮
+            value_frame_add.grid_remove()
+            select_file_btn_add.grid_remove()
+            hotkey_frame_add.grid(row=4, column=1, columnspan=2, sticky="we")
+        else:
+            hotkey_frame_add.grid_remove()
+            value_frame_add.grid(row=4, column=1, sticky="nsew")
+            select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
 
-    theme_type_combobox.bind("<<ComboboxSelected>>", update_cmd_window_row_add)
-    update_cmd_window_row_add()
+    theme_type_combobox.bind("<<ComboboxSelected>>", _update_type_specific_add)
+    _update_type_specific_add()
 
     def save_theme():
         theme = {
@@ -843,6 +1052,12 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         }
         if theme["type"] == "命令":
             theme["window"] = "show" if cmd_window_var.get() else "hide"
+        if theme["type"] == "按键(Hotkey)":
+            theme["on_type"] = hk_type_map.get(hk_on_type_var_add.get(), "keyboard")
+            theme["on_value"] = hk_on_val_var_add.get().strip()
+            theme["off_type"] = hk_type_map.get(hk_off_type_var_add.get(), "none")
+            theme["off_value"] = hk_off_val_var_add.get().strip()
+            theme["value"] = ""
         custom_themes.append(theme)
         # 重新构建整个树视图以确保索引正确
         rebuild_custom_theme_tree()
@@ -886,6 +1101,7 @@ def generate_config() -> None:
     app_index = 1
     serve_index = 1
     command_index = 1
+    hotkey_index = 1
     for theme in custom_themes:
         if theme["type"] == "程序或脚本":
             prefix = f"application{app_index}"
@@ -910,6 +1126,16 @@ def generate_config() -> None:
             # 保存命令窗口显示/隐藏设置，默认显示
             config[f"{prefix}_window"] = theme.get("window", "show")
             command_index += 1
+        elif theme["type"] == "按键(Hotkey)":
+            prefix = f"hotkey{hotkey_index}"
+            config[prefix] = theme["name"]
+            config[f"{prefix}_name"] = theme["nickname"]
+            config[f"{prefix}_checked"] = theme["checked"]
+            config[f"{prefix}_on_type"] = theme.get("on_type", "keyboard")
+            config[f"{prefix}_on_value"] = theme.get("on_value", "")
+            config[f"{prefix}_off_type"] = theme.get("off_type", "none")
+            config[f"{prefix}_off_value"] = theme.get("off_value", "")
+            hotkey_index += 1
 
     # 保存为 JSON 文件
     with open(config_file_path, "w", encoding="utf-8") as f:
@@ -1449,6 +1675,12 @@ def open_builtin_settings():
     ttk.Button(op_frame, text="检查睡眠功能状态", command=check_sleep_status_window).grid(row=1, column=2, padx=(0, 8))
     row_i += 1
 
+    # 分隔线
+    ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
+    row_i += 1
+
+    # 移除：按键(Hotkey) 主题设置（改由自定义主题管理）
+
     def save_builtin_settings():
         try:
             # 更新内存配置
@@ -1485,6 +1717,8 @@ def open_builtin_settings():
                 config["sleep_off_delay"] = max(0, int(s_off_delay_var.get()))
             except Exception:
                 config["sleep_off_delay"] = 0
+
+            # Hotkey 不在内置设置中保存
 
             # 统一通过 generate_config 保存并刷新
             generate_config()
