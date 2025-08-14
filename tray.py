@@ -19,7 +19,23 @@ from win11toast import notify as toast
 from PIL import Image
 import psutil
 
-BANBEN = "V2.1.6"
+BANBEN = "V2.1.7"
+
+# DPI 与字体渲染优化（高DPI下更清晰）
+def _enable_dpi_awareness() -> None:
+    """
+    使进程 DPI 感知，避免高分屏托盘菜单/提示发糊。
+    优先 Per-Monitor DPI 感知，回退到 System DPI Aware。
+    """
+    try:
+        shcore = ctypes.windll.shcore
+        # 2 = PROCESS_PER_MONITOR_DPI_AWARE
+        shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 
 # 日志配置
 appdata_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
@@ -712,6 +728,12 @@ icon = pystray.Icon("RC-main-Tray", image, f"远程控制托盘-{BANBEN}", menu)
 timer = threading.Timer(3.0, start_notify)
 timer.daemon = True  # 设置为守护线程，程序退出时自动结束
 timer.start()
+
+# 进程级 DPI 感知（提升托盘菜单/提示在高DPI显示的清晰度）
+try:
+    _enable_dpi_awareness()
+except Exception:
+    pass
 
 # 在带异常处理的环境中运行托盘程序
 try:

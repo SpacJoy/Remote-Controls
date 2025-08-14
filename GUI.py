@@ -268,9 +268,23 @@ def _apply_ttk_ui_fonts(root: tk.Tk) -> None:
             except Exception:
                 pass
 
+        # LabelFrame 标题字体更清晰
+        try:
+            style.configure("TLabelframe.Label", font=heading_font)
+        except Exception:
+            pass
+
         # Treeview 内容与表头字体
         try:
             style.configure("Treeview", font=default_font)
+        except Exception:
+            pass
+
+        # 兼容非 ttk 控件（如 tk.Text 等），通过 option_add 设置全局默认字体
+        try:
+            fam = default_font.cget("family")
+            size = default_font.cget("size")
+            root.option_add("*Font", f"{fam} {size}")
         except Exception:
             pass
         try:
@@ -1194,7 +1208,7 @@ test_check = ttk.Checkbutton(system_frame, text="test模式", variable=test_var)
 test_check.grid(row=3, column=0, columnspan=2, sticky="n")
 
 #添加打开任务计划按钮
-task_button = ttk.Button(system_frame, text="点击此按钮可以手动设置", command=lambda:os.startfile("taskschd.msc"))
+task_button = ttk.Button(system_frame, text="点击打开任务计划", command=lambda:os.startfile("taskschd.msc"))
 task_button.grid(row=3, column=2, sticky="n", padx=15)
 
 # 添加设置开机自启动按钮上面的提示
@@ -1323,7 +1337,7 @@ ttk.Label(theme_frame, text="内置").grid(row=0, column=0, sticky="w")
 def open_builtin_settings():
     win = tk.Toplevel(root)
     win.title("内置主题设置")
-    win.resizable(False, False)
+    # win.resizable(False, False)
 
     # 计算机主题动作（去除与睡眠主题重复的“睡眠/休眠”）
     actions = [
@@ -1453,9 +1467,13 @@ def open_builtin_settings():
             _sleep_on_sel = s_key_by_label_on.get(s_on_var.get(), "sleep")
             _sleep_off_sel = s_key_by_label_off.get(s_off_var.get(), "none")
 
-            # 保存前，如涉及显示器开/关，给出风险警告（不阻断保存）
+            # 保存前，给出风险提示（不阻断保存）
             if (_sleep_on_sel in ("display_off", "display_on")) or (_sleep_off_sel in ("display_off", "display_on")):
                 messagebox.showwarning("警告", "依赖于 Windows 的系统 API 来控制显示器电源状态\n未经过测试\n可能造成不可逆后果\n谨慎使用“开/关显示器功能”")
+
+            # 打开动作为“睡眠/休眠”时提示：设备将离线
+            if _sleep_on_sel in ("sleep", "hibernate"):
+                messagebox.showwarning("提示", "当打开动作设置为“睡眠/休眠”时：\n设备将进入低功耗或断电状态，主程序会离线，\n期间无法接收远程命令，需要人工或计划唤醒。")
 
             config["sleep_on_action"] = _sleep_on_sel
             config["sleep_off_action"] = _sleep_off_sel

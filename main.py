@@ -32,6 +32,22 @@ from pyautogui import press as pyautogui_press
 
 BANBEN = "V2.1.7"
 
+# DPI 与字体渲染优化（高DPI下更清晰）
+def _enable_dpi_awareness() -> None:
+    """
+    使进程 DPI 感知，避免高分屏托盘菜单/提示发糊。
+    优先 Per-Monitor DPI 感知，回退到 System DPI Aware。
+    """
+    try:
+        shcore = ctypes.windll.shcore
+        # 2 = PROCESS_PER_MONITOR_DPI_AWARE
+        shcore.SetProcessDpiAwareness(2)  # type: ignore[attr-defined]
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
 # 禁用 PyAutoGUI 安全模式，确保即使鼠标在屏幕角落也能执行命令
 pyautogui.FAILSAFE = False
 
@@ -1886,6 +1902,12 @@ def tray_():
 
 # 启动时检查管理员权限并请求提权
 check_and_request_uac()
+
+# 提升高DPI下托盘菜单与提示清晰度
+try:
+    _enable_dpi_awareness()
+except Exception:
+    pass
 
 tray_()
 
