@@ -420,7 +420,33 @@ def process_command(command: str, topic: str) -> None:
             if command == "on":
                 try:
                     creationflags = 0x00000200  # CREATE_NEW_PROCESS_GROUP
-                    proc = subprocess.Popen(cmd_text, shell=True, creationflags=creationflags)
+                    # 读取该命令的窗口显示设置（默认为show）
+                    window_mode = None
+                    try:
+                        # 从配置中找到该命令的window设置
+                        for i in range(1, 50):
+                            key = f"command{i}"
+                            if config.get(key) == cmd_topic:
+                                window_mode = config.get(f"{key}_window", "show")
+                                break
+                    except Exception:
+                        window_mode = "show"
+
+                    startupinfo = None
+                    use_creationflags = creationflags
+                    if window_mode == "hide":
+                        # 隐藏窗口启动
+                        startupinfo = subprocess.STARTUPINFO()
+                        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                        startupinfo.wShowWindow = 0  # SW_HIDE
+                        # 对于无控制台的隐藏，附加 CREATE_NO_WINDOW
+                        use_creationflags |= 0x08000000  # CREATE_NO_WINDOW
+                    proc = subprocess.Popen(
+                        cmd_text,
+                        shell=True,
+                        creationflags=use_creationflags,
+                        startupinfo=startupinfo,
+                    )
                     register_command_process(cmd_topic, proc.pid)
                     notify_in_thread(f"已执行命令: {commands}")
                     logging.info(f"执行命令[{cmd_topic}]: {cmd_text}; PID={proc.pid}")

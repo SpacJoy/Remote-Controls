@@ -434,6 +434,7 @@ def load_custom_themes() -> None:
                 "nickname": config.get(f"{cmd_key}_name", ""),
                 "name": config.get(cmd_key, ""),
                 "value": config.get(f"{cmd_key}_value", ""),
+                "window": config.get(f"{cmd_key}_window", "show"),
             }
             custom_themes.append(theme)
             status = "开" if theme["checked"] else "关"
@@ -538,12 +539,31 @@ def modify_custom_theme() -> None:
         row=4, column=2, sticky="w", padx=15
     )
 
+    # 命令类型：命令窗口显示/隐藏
+    cmd_window_label = ttk.Label(theme_window, text="命令窗口：")
+    cmd_window_combo = ttk.Combobox(theme_window, values=["显示", "隐藏"], state="readonly")
+    cmd_window_combo.set("隐藏" if theme.get("window", "show") == "hide" else "显示")
+
+    def update_cmd_window_row(*_):
+        if theme_type_var.get() == "命令":
+            cmd_window_label.grid(row=5, column=0, sticky="e")
+            cmd_window_combo.grid(row=5, column=1, sticky="w")
+        else:
+            cmd_window_label.grid_remove()
+            cmd_window_combo.grid_remove()
+
+    theme_type_combobox.bind("<<ComboboxSelected>>", update_cmd_window_row)
+    update_cmd_window_row()
+
     def save_theme():
         theme["type"] = theme_type_var.get()
         theme["checked"] = theme_checked_var.get()
         theme["nickname"] = theme_nickname_entry.get()
         theme["name"] = theme_name_entry.get()
         theme["value"] = theme_value_entry.get()
+        if theme["type"] == "命令":
+            sel = cmd_window_combo.get()
+            theme["window"] = "hide" if sel == "隐藏" else "show"
         # 重新构建整个树视图以确保索引正确
         rebuild_custom_theme_tree()
         theme_window.destroy()
@@ -560,10 +580,10 @@ def modify_custom_theme() -> None:
             theme_window.lift()
 
     ttk.Button(theme_window, text="保存", command=save_theme).grid(
-        row=5, column=0, pady=15, padx=15
+        row=6, column=0, pady=15, padx=15
     )
-    ttk.Button(theme_window, text="删除", command=delete_theme).grid(row=5, column=1)
-    ttk.Button(theme_window, text="取消", command=lambda:theme_window.destroy()).grid(row=5, column=2)
+    ttk.Button(theme_window, text="删除", command=delete_theme).grid(row=6, column=1)
+    ttk.Button(theme_window, text="取消", command=lambda:theme_window.destroy()).grid(row=6, column=2)
 
     center_window(theme_window)
 
@@ -619,6 +639,22 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         row=4, column=2, sticky="w", padx=15
     )
 
+    # 命令类型：命令窗口显示/隐藏（添加）
+    cmd_window_label = ttk.Label(theme_window, text="命令窗口：")
+    cmd_window_combo = ttk.Combobox(theme_window, values=["显示", "隐藏"], state="readonly")
+    cmd_window_combo.set("显示")
+
+    def update_cmd_window_row_add(*_):
+        if theme_type_var.get() == "命令":
+            cmd_window_label.grid(row=5, column=0, sticky="e")
+            cmd_window_combo.grid(row=5, column=1, sticky="w")
+        else:
+            cmd_window_label.grid_remove()
+            cmd_window_combo.grid_remove()
+
+    theme_type_combobox.bind("<<ComboboxSelected>>", update_cmd_window_row_add)
+    update_cmd_window_row_add()
+
     def save_theme():
         theme = {
             "type": theme_type_var.get(),
@@ -627,15 +663,18 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             "name": theme_name_entry.get(),
             "value": theme_value_entry.get(),
         }
+        if theme["type"] == "命令":
+            sel = cmd_window_combo.get()
+            theme["window"] = "hide" if sel == "隐藏" else "show"
         custom_themes.append(theme)
         # 重新构建整个树视图以确保索引正确
         rebuild_custom_theme_tree()
         theme_window.destroy()
 
     ttk.Button(theme_window, text="保存", command=save_theme).grid(
-        row=5, column=0, pady=15, padx=15
+        row=6, column=0, pady=15, padx=15
     )
-    ttk.Button(theme_window, text="取消", command=theme_window.destroy).grid(row=5, column=2)
+    ttk.Button(theme_window, text="取消", command=theme_window.destroy).grid(row=6, column=2)
 
     center_window(theme_window)
 
@@ -691,6 +730,8 @@ def generate_config() -> None:
             config[f"{prefix}_name"] = theme["nickname"]
             config[f"{prefix}_checked"] = theme["checked"]
             config[f"{prefix}_value"] = theme["value"]
+            # 保存命令窗口显示/隐藏设置，默认显示
+            config[f"{prefix}_window"] = theme.get("window", "show")
             command_index += 1
 
     # 保存为 JSON 文件
