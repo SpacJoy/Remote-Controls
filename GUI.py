@@ -450,10 +450,10 @@ def load_custom_themes() -> None:
 def show_detail_window():
     detail_win = tk.Toplevel(root)
     detail_win.title("详情信息")
-    detail_win.geometry("600x600")
+    detail_win.geometry("600x800")
     detail_text = tk.Text(detail_win, wrap="word")
     sleep()
-    detail_text.insert("end", "\n【内置主题详解】\n屏幕：\n    灯泡设备，通过API调节屏幕亮度(百分比)\n音量：\n    窗帘设备，可调节系统总音量(百分比)，暂停为静音\n媒体控制：\n    窗帘设备，可控制系统媒体播放\n    打开(on)：上一曲\n    关闭(off)：下一曲\n    暂停(pause)：播放/暂停\n    打开百分比(on#80)：\n      1-33%：下一曲\n      34-66%：播放/暂停\n      67-100%：上一曲\n\n\n【自定义主题详解】\n\n注：[均为开关设备]\n程序或脚本：\n    需要填写路径，或调用系统api选择程序或脚本文件\n服务：\n    主程序需要管理员权限（开机自启时默认拥有）\n程序或脚本：\n    需要填写需要执行的命令，关闭为发送中断信号\n填写服务名称\n\n\n【系统睡眠支持检测】\n\n可开启test模式以禁用本程序的睡眠支持检测\n\n可尝试此命令启用：powercfg.exe /hibernate on\n\n" + sleep_status_message+"\n\n\n")
+    detail_text.insert("end", "\n【内置主题详解】\n\n屏幕：\n\n        灯泡设备，通过API调节屏幕亮度(百分比)\n\n\n音量：\n\n        窗帘设备，可调节系统总音量(百分比)，暂停为静音\n\n\n媒体控制：\n\n        窗帘设备，可控制系统媒体播放\n\n        打开(on)：上一曲\n\n        关闭(off)：下一曲\n\n        暂停(pause)：播放/暂停\n\n        打开百分比(on#80)：\n\n          1-33%：下一曲\n\n          34-66%：播放/暂停\n\n          67-100%：上一曲\n\n\n【自定义主题详解】\n\n\n注：[均为开关设备]\n\n程序或脚本：\n\n        需要填写路径，或调用系统api选择程序或脚本文件\n\n\n服务：\n\n        主程序需要管理员权限（开机自启时默认拥有）\n        填写服务名称\n\n\n命令：\n\n        需要填写需要执行的命令，关闭为发送中断信号\n\n\n")
     detail_text.config(state="disabled")
     detail_text.pack(expand=True, fill="both", padx=10, pady=10)
     center_window(detail_win)
@@ -898,12 +898,18 @@ def check_brightness_support():
     else:
         brightness_status_message = "test模式已开启，未检测系统亮度调节支持。"
 
-def enable_window() -> None:
+def enable_sleep_window() -> None:
     """
     
     中文: 通过命令启用睡眠/休眠功能
     """
-    #检查是否有管理员权限
+    # 二次确认
+    if not messagebox.askyesno(
+        "确认启用？",
+        "将启用系统的休眠/睡眠功能。\n\n此操作会更改系统电源配置，需管理员权限。\n\n是否继续？",
+    ):
+        return
+    # 检查是否有管理员权限
     if not IS_GUI_ADMIN:
         messagebox.showerror("错误", "需要管理员权限才能启用休眠/睡眠功能")
         return
@@ -916,6 +922,55 @@ def enable_window() -> None:
             messagebox.showerror("错误", f"启用失败: \n{result.stderr.strip()}")
     except Exception as e:
         messagebox.showerror("错误", f"启用失败: {e}")
+
+def disable_sleep_window() -> None:
+    """
+    中文: 通过命令关闭睡眠/休眠功能
+    """
+    # 二次确认
+    if not messagebox.askyesno(
+        "确认关闭",
+        "将关闭系统的休眠/睡眠功能。\n\n此操作会更改系统电源配置，需管理员权限。\n\n是否继续？",
+    ):
+        return
+    # 检查是否有管理员权限
+    if not IS_GUI_ADMIN:
+        messagebox.showerror("错误", "需要管理员权限才能关闭休眠/睡眠功能")
+        return
+    # 尝试关闭休眠/睡眠功能
+    try:
+        result = subprocess.run(["powercfg", "/hibernate", "off"], capture_output=True, text=True, shell=True)
+        if result.returncode == 0:
+            messagebox.showinfo("提示", "休眠/睡眠功能已关闭")
+        else:
+            messagebox.showerror("错误", f"关闭失败: \n{result.stderr.strip()}")
+    except Exception as e:
+        messagebox.showerror("错误", f"关闭失败: {e}")
+
+def check_sleep_status_window() -> None:
+    """
+    中文: 检查系统睡眠/休眠功能是否启用，并弹窗显示详细状态
+    """
+    try:
+        result = subprocess.run(["powercfg", "-a"], capture_output=True, text=True, shell=True)
+        output = (result.stdout or "") + (result.stderr or "")
+        if result.returncode != 0:
+            messagebox.showerror("检查失败", f"命令执行失败：\n{output.strip()}")
+            return
+
+        enabled = True
+        if ("尚未启用休眠" in output) or ("休眠不可用" in output):
+            enabled = False
+        else:
+            lines = output.splitlines()
+            hibernate_line = next((l for l in lines if l.strip().startswith("休眠")), None)
+            if hibernate_line and ("不可用" in hibernate_line):
+                enabled = False
+
+        status_text = "已启用（可用）" if enabled else "未启用或不可用"
+        messagebox.showinfo("睡眠功能状态", f"休眠/睡眠状态：{status_text}\n\n详细信息：\n{output.strip()}")
+    except Exception as e:
+        messagebox.showerror("检查失败", f"检查时出错：{e}")
 
 # 在程序启动时查询程序的管理员权限状态并保存为全局变量
 IS_GUI_ADMIN = False
@@ -1251,6 +1306,20 @@ def open_builtin_settings():
     ttk.Label(win, text="提示：睡眠主题延时将在执行动作前等待指定秒数。").grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
     row_i += 1
 
+    # 分隔线（睡眠动作 与 睡眠功能开关）
+    ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
+    row_i += 1
+
+    # 睡眠支持操作：将启用/关闭睡眠功能搬到“更多”中
+    op_frame = ttk.Frame(win)
+    op_frame.grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 10), sticky="w")
+    ttk.Label(op_frame, text="系统睡眠功能开关：").grid(row=0, column=0, sticky="w")
+    ttk.Label(op_frame, text="注：需要管理员权限").grid(row=0, column=1, sticky="n")
+    ttk.Button(op_frame, text=" 启用 睡眠(休眠)功能", command=enable_sleep_window).grid(row=1, column=0, padx=(0, 8))
+    ttk.Button(op_frame, text=" 关闭 睡眠(休眠)功能", command=disable_sleep_window).grid(row=1, column=1, padx=(0, 8))
+    ttk.Button(op_frame, text="检查睡眠功能状态", command=check_sleep_status_window).grid(row=1, column=2, padx=(0, 8))
+    row_i += 1
+
     def save_builtin_settings():
         try:
             # 更新内存配置
@@ -1295,6 +1364,12 @@ def open_builtin_settings():
     ttk.Button(btn_frame, text="保存", command=save_builtin_settings).grid(row=0, column=0, padx=6)
     ttk.Button(btn_frame, text="取消", command=win.destroy).grid(row=0, column=1, padx=6)
 
+    # 窗口居中
+    try:
+        center_window(win)
+    except Exception:
+        pass
+
 ttk.Button(theme_frame, text="更多", command=open_builtin_settings).grid(row=6, column=1, sticky="e")
 
 ttk.Button(theme_frame, text="详情", command=show_detail_window).grid(row=0, column=1, sticky="e", columnspan=2)
@@ -1323,7 +1398,8 @@ for idx, theme in enumerate(builtin_themes):
         entry = ttk.Entry(theme_frame, textvariable=theme["name_var"])
         entry.config(state="disabled")
         entry.grid(row=idx + 1, column=2, sticky="ew")
-        sleep_tip = ttk.Button(theme_frame, text="休眠/睡眠不可用\n点击(详情)查看原因",command=enable_window)
+        # 改为不可点击提示
+        sleep_tip = ttk.Label(theme_frame, text="休眠/睡眠不可用\n系统未启用休眠功能")
         sleep_tip.grid(row=idx + 1, column=2, sticky="w")
     elif theme_key == "screen" and brightness_disabled:
         theme["checked"].set(0)
