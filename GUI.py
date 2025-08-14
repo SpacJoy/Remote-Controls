@@ -491,7 +491,7 @@ def modify_custom_theme() -> None:
 
     theme_window = tk.Toplevel(root)
     theme_window.title("修改自定义主题")
-    theme_window.resizable(False, False)  # 禁用窗口大小调整
+    # theme_window.resizable(False, False)  # 禁用窗口大小调整
 
     ttk.Label(theme_window, text="类型：").grid(row=0, column=0, sticky="e")
     theme_type_var = tk.StringVar(value=theme["type"])
@@ -539,21 +539,19 @@ def modify_custom_theme() -> None:
         row=4, column=2, sticky="w", padx=15
     )
 
-    # 命令类型：命令窗口显示/隐藏
-    cmd_window_label = ttk.Label(theme_window, text="命令窗口：")
-    cmd_window_combo = ttk.Combobox(theme_window, values=["显示", "隐藏"], state="readonly")
-    cmd_window_combo.set("隐藏" if theme.get("window", "show") == "hide" else "显示")
+    # 命令类型：命令窗口显示/隐藏 -> 改为复选框，放在“状态”后面
+    cmd_window_var = tk.IntVar(value=0 if theme.get("window", "show") == "hide" else 1)
+    cmd_window_check = ttk.Checkbutton(theme_window, text="显示窗口", variable=cmd_window_var)
 
-    def update_cmd_window_row(*_):
+    def update_cmd_window_visibility(*_):
         if theme_type_var.get() == "命令":
-            cmd_window_label.grid(row=5, column=0, sticky="e")
-            cmd_window_combo.grid(row=5, column=1, sticky="w")
+            # 放在“状态”后面（行1，列1右边）
+            cmd_window_check.grid(row=1, column=1, sticky="e")
         else:
-            cmd_window_label.grid_remove()
-            cmd_window_combo.grid_remove()
+            cmd_window_check.grid_remove()
 
-    theme_type_combobox.bind("<<ComboboxSelected>>", update_cmd_window_row)
-    update_cmd_window_row()
+    theme_type_combobox.bind("<<ComboboxSelected>>", update_cmd_window_visibility)
+    update_cmd_window_visibility()
 
     def save_theme():
         theme["type"] = theme_type_var.get()
@@ -562,8 +560,7 @@ def modify_custom_theme() -> None:
         theme["name"] = theme_name_entry.get()
         theme["value"] = theme_value_entry.get()
         if theme["type"] == "命令":
-            sel = cmd_window_combo.get()
-            theme["window"] = "hide" if sel == "隐藏" else "show"
+            theme["window"] = "show" if cmd_window_var.get() else "hide"
         # 重新构建整个树视图以确保索引正确
         rebuild_custom_theme_tree()
         theme_window.destroy()
@@ -596,7 +593,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     """
     theme_window = tk.Toplevel(root)
     theme_window.title("添加自定义主题")
-    theme_window.resizable(False, False)  # 禁用窗口大小调整
+    # theme_window.resizable(False, False)  # 禁用窗口大小调整
 
     ttk.Label(theme_window, text="类型：").grid(row=0, column=0, sticky="e")
     theme_type_var = tk.StringVar(value="程序或脚本")
@@ -639,18 +636,15 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         row=4, column=2, sticky="w", padx=15
     )
 
-    # 命令类型：命令窗口显示/隐藏（添加）
-    cmd_window_label = ttk.Label(theme_window, text="命令窗口：")
-    cmd_window_combo = ttk.Combobox(theme_window, values=["显示", "隐藏"], state="readonly")
-    cmd_window_combo.set("显示")
+    # 命令类型：命令窗口显示/隐藏 -> 改为复选框，放在“状态”后面
+    cmd_window_var = tk.IntVar(value=1)
+    cmd_window_check = ttk.Checkbutton(theme_window, text="显示窗口", variable=cmd_window_var)
 
     def update_cmd_window_row_add(*_):
         if theme_type_var.get() == "命令":
-            cmd_window_label.grid(row=5, column=0, sticky="e")
-            cmd_window_combo.grid(row=5, column=1, sticky="w")
+            cmd_window_check.grid(row=1, column=1, sticky="e")
         else:
-            cmd_window_label.grid_remove()
-            cmd_window_combo.grid_remove()
+            cmd_window_check.grid_remove()
 
     theme_type_combobox.bind("<<ComboboxSelected>>", update_cmd_window_row_add)
     update_cmd_window_row_add()
@@ -664,8 +658,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             "value": theme_value_entry.get(),
         }
         if theme["type"] == "命令":
-            sel = cmd_window_combo.get()
-            theme["window"] = "hide" if sel == "隐藏" else "show"
+            theme["window"] = "show" if cmd_window_var.get() else "hide"
         custom_themes.append(theme)
         # 重新构建整个树视图以确保索引正确
         rebuild_custom_theme_tree()
