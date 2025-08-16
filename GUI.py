@@ -708,7 +708,7 @@ def show_detail_window():
     detail_win.geometry("600x800")
     detail_text = tk.Text(detail_win, wrap="word")
     sleep()
-    detail_text.insert("end", "\n【内置主题详解】\n\n屏幕：\n\n        灯泡设备，通过API调节屏幕亮度(百分比)\n\n\n音量：\n\n        窗帘设备，可调节系统总音量(百分比)，暂停为静音\n\n\n媒体控制：\n\n        窗帘设备，可控制系统媒体播放\n\n        打开(on)：上一曲\n\n        关闭(off)：下一曲\n\n        暂停(pause)：播放/暂停\n\n        打开百分比(on#80)：\n\n          1-33%：下一曲\n\n          34-66%：播放/暂停\n\n          67-100%：上一曲\n\n\n【自定义主题详解】\n\n\n注：[均为开关设备]\n\n程序或脚本：\n\n        需要填写路径，或调用系统api选择程序或脚本文件\n\n\n服务：\n\n        主程序需要管理员权限（开机自启时默认拥有）\n        填写服务名称\n\n\n命令：\n\n        需要填写需要执行的命令，关闭为发送中断信号\n\n\n")
+    detail_text.insert("end", "\n【内置主题详解】\n\n屏幕：\n\n        灯泡设备，通过API调节屏幕亮度(百分比)\n\n\n音量：\n\n        窗帘设备，可调节系统总音量(百分比)，暂停为静音\n\n\n媒体控制：\n\n        窗帘设备，可控制系统媒体播放\n\n        打开(on)：上一曲\n\n        关闭(off)：下一曲\n\n        暂停(pause)：播放/暂停\n\n        打开百分比(on#80)：\n\n          1-33%：下一曲\n\n          34-66%：播放/暂停\n\n          67-100%：上一曲\n\n\n【自定义主题详解】\n\n\n注：[均为开关设备]\n\n程序或脚本：\n\n        需要填写路径，或调用系统api选择程序或脚本文件\n\n\n服务：\n\n        主程序需要管理员权限（开机自启时默认拥有）\n        填写服务名称\n\n\n命令：\n\n        需要填写需要执行的命令，关闭为发送中断信号\n\n\n模拟按键：\n\n        字母段延迟受pyautogui模块影响，至少25ms左右")
     detail_text.config(state="disabled")
     detail_text.pack(expand=True, fill="both", padx=10, pady=10)
     center_window(detail_win)
