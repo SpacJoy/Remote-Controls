@@ -19,7 +19,7 @@ import subprocess
 import win32com.client
 from typing import Any, Dict, List, Union
 
-BANBEN = "V2.2.1"
+BANBEN = "V2.2.2"
 # 资源路径（兼容 PyInstaller _MEIPASS）
 def resource_path(relative_path: str) -> str:
     base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
