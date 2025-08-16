@@ -1,6 +1,10 @@
 """
 打包指令:
-pyinstaller -F -n RC-main --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;."  main.py
+1) 推荐：使用 spec 文件
+    pyinstaller RC-main.spec --noconfirm
+
+2) 直接命令行（仅 icon.ico，放到根目录）
+pyinstaller -F -n RC-main --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." main.py
 程序名：RC-main.exe
 运行用户：当前登录用户（通过计划任务启动）
 """
@@ -2064,7 +2068,7 @@ def tray() -> None:
         image = Image.open(io.BytesIO(image_data))
         menu = (
             pystray.MenuItem(f"{admin_status}", None),
-            pystray.MenuItem("打开配置", open_gui),
+            pystray.MenuItem("打开配置", open_gui, default=True),
             pystray.MenuItem("退出", exit_program),
         )
         icon.menu = menu

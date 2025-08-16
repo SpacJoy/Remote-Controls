@@ -20,3 +20,4 @@ RC-main.exe
 RC-GUI.exe
 RC-tray.exe
 *.pyc
+res/top.png

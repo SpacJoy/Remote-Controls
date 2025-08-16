@@ -1,7 +1,13 @@
 """
 程序文件名RC-tray.exe
 运行用户：当前登录用户（可能有管理员权限）
-pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;."  tray.py
+
+打包（仅包含固定图片：icon.ico 与 cd1~cd5；根目录额外放置 icon.ico）：
+1) 推荐：使用 spec 文件
+    pyinstaller RC-tray.spec --noconfirm
+
+2) 直接命令行（等价）：
+pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\cd1.jpg;res" --add-data "res\\cd2.jpg;res" --add-data "res\\cd3.png;res" --add-data "res\\cd4.png;res" --add-data "res\\cd5.png;res" --add-data "res\\icon.ico;." tray.py
 """
 
 import os
@@ -18,6 +24,8 @@ import pystray
 from win11toast import notify as toast
 from PIL import Image
 import psutil
+import webbrowser
+import random
 
 BANBEN = "V2.2.1"
 
@@ -135,6 +143,79 @@ GUI_PY = os.path.join(appdata_dir, GUI_PY_)
 def resource_path(relative_path):
     base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
     return os.path.join(base_path, relative_path)
+
+def _find_first_existing(paths:list[str]) -> str | None:
+    """在候选路径中返回第一个存在的文件路径。"""
+    for p in paths:
+        try:
+            if p and os.path.exists(p):
+                return p
+        except Exception:
+            continue
+    return None
+
+def _open_url(url: str) -> None:
+    try:
+        webbrowser.open_new_tab(url)
+    except Exception as e:
+        logging.error(f"打开链接失败: {e}")
+        notify(f"无法打开链接:\n{url}", level="error", show_error=True)
+
+def _open_image_window_or_viewer(title: str, prefer: list[str]) -> None:
+    """
+    打开一张图片：优先从程序目录的 res 目录查找，其次尝试打包资源路径；找不到则提示。
+    为避免与托盘 UI 冲突，直接调用系统默认查看器打开图片。
+    """
+    # 程序目录 res/
+    side_by_side = [os.path.join(appdata_dir, "res", os.path.basename(p)) for p in prefer]
+    # 打包资源路径（_MEIPASS）或脚本路径
+    embedded = [resource_path(p) for p in prefer] + [resource_path(os.path.join("res", os.path.basename(p))) for p in prefer]
+    cand = side_by_side + embedded
+    img_path = _find_first_existing(cand)
+    if img_path:
+        try:
+            os.startfile(img_path)  # 使用系统默认图片查看器
+            return
+        except Exception as e:
+            logging.error(f"打开图片失败: {e}")
+    notify(f"未找到图片，已尝试位置:\n" + "\n".join(cand[:4]) + ("\n..." if len(cand) > 4 else ""), level="warning")
+
+def _open_random_egg_image() -> None:
+    """
+    打开彩蛋图片：在 res 中查找 cd1~cd5.*（支持 .png/.jpg/.jpeg/.gif/.ico），
+    每次随机挑选一张存在的图片，用系统默认查看器打开。
+    """
+    names: list[str] = []
+    for i in range(1, 6):
+        for ext in (".png", ".jpg", ".jpeg", ".gif", ".ico"):
+            names.append(f"cd{i}{ext}")
+
+    found: list[str] = []
+    for name in names:
+        side = os.path.join(appdata_dir, "res", name)
+        emb1 = resource_path(name)
+        emb2 = resource_path(os.path.join("res", name))
+        chosen = None
+        for p in (side, emb1, emb2):
+            try:
+                if p and os.path.exists(p):
+                    chosen = p
+                    break
+            except Exception:
+                continue
+        if chosen:
+            found.append(chosen)
+
+    if not found:
+        notify("未找到图片（res/cd1~cd5.*）", level="warning")
+        return
+
+    pick = random.choice(found)
+    try:
+        os.startfile(pick)
+    except Exception as e:
+        logging.error(f"打开图片失败: {e}")
+        notify("打开图片失败", level="error")
 
 # 信号处理函数，用于捕获CTRL+C等中断信号
 def signal_handler(signum, frame):
@@ -687,11 +768,12 @@ def get_menu_items():
       # 添加运行模式提示
     mode_info = "【脚本模式】" if is_script_mode else "【EXE模式】"
     return [
-        pystray.MenuItem(f"{mode_info} 版本-{BANBEN}", None),
-        # 显示权限状态的纯文本项
-        pystray.MenuItem(f"托盘状态: {admin_status}", None),
+    # 版本点击 -> 打开项目主页
+    pystray.MenuItem(f"{mode_info} 版本-{BANBEN}", lambda icon, item: _open_url("https://github.com/chen6019/Remote-Controls")),
+    # 托盘状态点击 -> 打开彩蛋随机图片（cd1~cd5.*）
+    pystray.MenuItem(f"托盘状态: {admin_status}", lambda icon, item: _open_random_egg_image()),
         # 其他功能菜单项
-        pystray.MenuItem("打开配置界面", open_gui),
+    pystray.MenuItem("打开配置界面", open_gui, default=True),
         pystray.MenuItem("检查主程序管理员权限", check_admin),
         pystray.MenuItem("启动主程序", is_admin_start_main),
         pystray.MenuItem("重启主程序", lambda icon, item: restart_main(icon, item)),        

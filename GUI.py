@@ -1,5 +1,9 @@
 """打包命令
-pyinstaller -F -n RC-GUI --noconsole --icon=res\\icon_GUI.ico GUI.py
+1) 推荐：使用 spec 文件
+    pyinstaller RC-GUI.spec --noconfirm
+
+2) 直接命令行（仅 icon_GUI.ico、top.ico）
+pyinstaller -F -n RC-GUI --noconsole --icon=res\\icon_GUI.ico --add-data "res\\icon_GUI.ico;res" --add-data "res\\top.ico;res" GUI.py
 程序名：RC-GUI.exe
 """
 import os
@@ -16,6 +20,11 @@ import win32com.client
 from typing import Any, Dict, List, Union
 
 BANBEN = "V2.2.1"
+# 资源路径（兼容 PyInstaller _MEIPASS）
+def resource_path(relative_path: str) -> str:
+    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base_path, relative_path)
+
 # 创建一个命名的互斥体
 # mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "RC-main-GUI")
 
@@ -1549,6 +1558,23 @@ _enable_dpi_awareness()
 # 创建主窗口
 root = tk.Tk()
 root.title(f"远程控制-{BANBEN}")
+
+# 设置窗口左上角与任务栏图标为 top.ico（优先打包资源，其次侧边 res/）
+try:
+    icon_candidates = [
+        resource_path("res/top.ico"),
+        resource_path("top.ico"),
+        os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])), "res", "top.ico"),
+    ]
+    for _p in icon_candidates:
+        if _p and os.path.exists(_p):
+            try:
+                root.iconbitmap(_p)
+                break
+            except Exception:
+                continue
+except Exception:
+    pass
 
 # 应用字体与缩放优化
 try:
