@@ -708,7 +708,7 @@ def show_detail_window():
     detail_win.geometry("600x800")
     detail_text = tk.Text(detail_win, wrap="word")
     sleep()
-    detail_text.insert("end", "\n【内置主题详解】\n\n屏幕：\n\n        灯泡设备，通过API调节屏幕亮度(百分比)\n\n\n音量：\n\n        窗帘设备，可调节系统总音量(百分比)，暂停为静音\n\n\n媒体控制：\n\n        窗帘设备，可控制系统媒体播放\n\n        打开(on)：上一曲\n\n        关闭(off)：下一曲\n\n        暂停(pause)：播放/暂停\n\n        打开百分比(on#80)：\n\n          1-33%：下一曲\n\n          34-66%：播放/暂停\n\n          67-100%：上一曲\n\n\n【自定义主题详解】\n\n\n注：[均为开关设备]\n\n程序或脚本：\n\n        需要填写路径，或调用系统api选择程序或脚本文件\n\n\n服务：\n\n        主程序需要管理员权限（开机自启时默认拥有）\n        填写服务名称\n\n\n命令：\n\n        需要填写需要执行的命令，关闭为发送中断信号\n\n\n模拟按键：\n\n        字母段延迟受pyautogui模块影响，至少25ms左右")
+    detail_text.insert("end", "\n【内置主题详解】\n\n屏幕：\n\n        灯泡设备，通过API调节屏幕亮度(百分比)\n\n\n音量：\n\n        窗帘设备，可调节系统总音量(百分比)，暂停为静音\n\n\n媒体控制：\n\n        窗帘设备，可控制系统媒体播放\n\n        打开(on)：上一曲\n\n        关闭(off)：下一曲\n\n        暂停(pause)：播放/暂停\n\n        打开百分比(on#80)：\n\n          1-33%：下一曲\n\n          34-66%：播放/暂停\n\n          67-100%：上一曲\n\n\n【自定义主题详解】\n\n\n注：[均为开关设备]\n\n程序或脚本：\n\n        需要填写路径，或调用系统api选择程序或脚本文件\n\n\n服务：\n\n        主程序需要管理员权限（开机自启时默认拥有）\n        填写服务名称\n\n\n命令：\n\n        需要填写需要执行的命令，关闭为发送中断信号\n\n\n模拟按键：\n\n        字母段延迟受pyautogui模块影响，至少25ms左右\n\n\n\n")
     detail_text.config(state="disabled")
     detail_text.pack(expand=True, fill="both", padx=10, pady=10)
     center_window(detail_win)
@@ -823,6 +823,37 @@ def modify_custom_theme() -> None:
             theme_value_text.delete("1.0", tk.END)
             theme_value_text.insert("1.0", file_path)
 
+    def open_services():
+        try:
+            os.startfile("services.msc")
+        except Exception:
+            try:
+                subprocess.Popen(["services.msc"])  # 备用方式
+            except Exception as e:
+                messagebox.showerror("错误", f"无法打开服务管理器: {e}")
+
+    def test_command_in_powershell():
+        cmd = theme_value_text.get("1.0", "end-1c").strip()
+        if not cmd:
+            messagebox.showwarning("提示", "请先在“值”中输入要测试的命令")
+            return
+        # 在 PowerShell 中显示命令，等待用户按回车后再执行
+        ps_script = (
+            "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
+            "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
+            "\nWrite-Host $cmd -ForegroundColor Yellow;"
+            "\nRead-Host '按回车后执行';"
+            "\nWrite-Host '正在执行...' -ForegroundColor Green;"
+            "\ntry { iex $cmd } catch { Write-Host ('发生错误: ' + $_.Exception.Message) -ForegroundColor Red }"
+        )
+        try:
+            subprocess.Popen(
+                ["powershell.exe", "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            )
+        except Exception as e:
+            messagebox.showerror("错误", f"无法启动 PowerShell: {e}")
+
     select_file_btn_mod = ttk.Button(theme_window, text="选择文件", command=select_file)
     select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=15)
 
@@ -881,7 +912,16 @@ def modify_custom_theme() -> None:
         else:
             hotkey_frame_mod.grid_remove()
             value_frame_mod.grid(row=4, column=1, sticky="nsew")
-            select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=15)
+            # 根据类型设置按钮文本与功能
+            if t == "程序或脚本":
+                select_file_btn_mod.configure(text="选择文件", command=select_file)
+                select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=15)
+            elif t == "服务(需管理员权限)":
+                select_file_btn_mod.configure(text="打开服务", command=open_services)
+                select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=15)
+            elif t == "命令":
+                select_file_btn_mod.configure(text="PowerShell测试", command=test_command_in_powershell)
+                select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=15)
 
     theme_type_combobox.bind("<<ComboboxSelected>>", _update_type_specific_mod)
     _update_type_specific_mod()
@@ -1033,6 +1073,36 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             theme_value_text2.delete("1.0", tk.END)
             theme_value_text2.insert("1.0", file_path)
 
+    def open_services():
+        try:
+            os.startfile("services.msc")
+        except Exception:
+            try:
+                subprocess.Popen(["services.msc"])  # 备用方式
+            except Exception as e:
+                messagebox.showerror("错误", f"无法打开服务管理器: {e}")
+
+    def test_command_in_powershell():
+        cmd = theme_value_text2.get("1.0", "end-1c").strip()
+        if not cmd:
+            messagebox.showwarning("提示", "请先在“值”中输入要测试的命令")
+            return
+        ps_script = (
+            "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
+            "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
+            "\nWrite-Host $cmd -ForegroundColor Yellow;"
+            "\nRead-Host '按回车后执行';"
+            "\nWrite-Host '正在执行...' -ForegroundColor Green;"
+            "\ntry { iex $cmd } catch { Write-Host ('发生错误: ' + $_.Exception.Message) -ForegroundColor Red }"
+        )
+        try:
+            subprocess.Popen(
+                ["powershell.exe", "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            )
+        except Exception as e:
+            messagebox.showerror("错误", f"无法启动 PowerShell: {e}")
+
     select_file_btn_add = ttk.Button(theme_window, text="选择文件", command=select_file)
     select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
 
@@ -1096,7 +1166,16 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         else:
             hotkey_frame_add.grid_remove()
             value_frame_add.grid(row=4, column=1, sticky="nsew")
-            select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
+            # 根据类型设置按钮文本与功能
+            if t == "程序或脚本":
+                select_file_btn_add.configure(text="选择文件", command=select_file)
+                select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
+            elif t == "服务(需管理员权限)":
+                select_file_btn_add.configure(text="打开服务", command=open_services)
+                select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
+            elif t == "命令":
+                select_file_btn_add.configure(text="PowerShell测试", command=test_command_in_powershell)
+                select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
 
     theme_type_combobox.bind("<<ComboboxSelected>>", _update_type_specific_add)
     _update_type_specific_add()
