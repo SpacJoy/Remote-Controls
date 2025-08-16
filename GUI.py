@@ -689,7 +689,7 @@ def load_custom_themes() -> None:
                 "on_value": config.get(f"{hk_key}_on_value", ""),
                 "off_type": config.get(f"{hk_key}_off_type", "none"),
                 "off_value": config.get(f"{hk_key}_off_value", ""),
-                "char_delay_ms": int(config.get(f"{hk_key}_char_delay_ms", 25) or 25),
+                "char_delay_ms": int(config.get(f"{hk_key}_char_delay_ms", 0) or 0),
             }
             custom_themes.append(theme)
             status = "开" if theme["checked"] else "关"
@@ -1049,7 +1049,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     hk_on_val_var_add = tk.StringVar(value="")
     hk_off_type_var_add = tk.StringVar(value=hk_label_by_type.get("none", "不执行"))
     hk_off_val_var_add = tk.StringVar(value="")
-    hk_char_delay_var_add = tk.StringVar(value="25")
+    hk_char_delay_var_add = tk.StringVar(value="0")
 
     ttk.Label(hotkey_frame_add, text="打开(on)：").grid(row=0, column=0, sticky="e", padx=8, pady=4)
     hk_on_type_combo_add = ttk.Combobox(hotkey_frame_add, values=hk_type_labels, textvariable=hk_on_type_var_add, state="readonly", width=12)

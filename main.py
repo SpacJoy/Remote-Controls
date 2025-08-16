@@ -836,13 +836,13 @@ def process_command(command: str, topic: str) -> None:
                 on_value = (hk_conf.get("on_value") or "")
                 off_type = (hk_conf.get("off_type") or "none").lower()
                 off_value = (hk_conf.get("off_value") or "")
-                char_delay_ms = 25
+                char_delay_ms = None
                 try:
                     _d = hk_conf.get("char_delay_ms")
                     if _d is not None:
                         char_delay_ms = int(_d)
                 except Exception:
-                    char_delay_ms = 25
+                    char_delay_ms = None
                 if command == "on":
                     perform_hotkey(on_type, on_value, char_delay_ms)
                 elif command == "off":
