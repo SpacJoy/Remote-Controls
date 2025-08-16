@@ -115,11 +115,13 @@
 
 托盘程序(`RC-tray.exe`)提供主程序管理（若未运行，主程序会启用内置托盘）：
 
-1. **运行方式**：双击`RC-tray.exe`启动，推荐以管理员权限运行
+1. **运行方式**：双击`RC-tray.exe`启动，推荐以管理员权限运行；单击托盘图标可直接打开配置界面
 2. **功能菜单**： 
    ![tray](res/tray.png)
    - 显示当前运行模式(EXE/脚本)和权限状态
-   - 打开配置界面：快速访问GUI配置工具
+  - 打开配置界面：快速访问GUI配置工具（托盘图标单击同样触发）
+  - 版本菜单：点击打开项目主页
+  - 托盘状态：点击随机打开 res 下的彩蛋图片（cd1~cd5）
    - 检查主程序管理员权限：查看主程序是否具有管理员权限
    - 启动主程序：以管理员权限启动主程序
    - 重启主程序：重新启动主程序(先关闭后启动)
@@ -202,13 +204,19 @@ pip install --upgrade setuptools
 pip install pyinstaller>=6.13.0
 
 # 打包GUI程序
-pyinstaller -F -n RC-GUI --noconsole --icon=res\\icon_GUI.ico GUI.py
+pyinstaller -F -n RC-GUI --noconsole --icon=res\\icon_GUI.ico \
+  --add-data "res\\icon_GUI.ico;res" --add-data "res\\top.ico;res" GUI.py
 
 # 打包主程序
 pyinstaller -F -n RC-main --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." main.py
 
 # 打包托盘程序
 pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." tray.py
+# 可选：如需将托盘彩蛋图片一起打包，请按实际扩展名添加（示例：cd1、cd2 为 .jpg）
+# pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico \
+#   --add-data "res\\cd1.jpg;res" --add-data "res\\cd2.jpg;res" \
+#   --add-data "res\\cd3.png;res" --add-data "res\\cd4.png;res" --add-data "res\\cd5.png;res" \
+#   --add-data "res\\icon.ico;." tray.py
 ```
 
 提示：打包后首次运行 GUI 以生成/更新 `config.json`；如设置了计划任务自启，移动文件位置后需重新设置任务。
