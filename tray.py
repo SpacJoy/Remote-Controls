@@ -19,7 +19,7 @@ from win11toast import notify as toast
 from PIL import Image
 import psutil
 
-BANBEN = "V2.2.0"
+BANBEN = "V2.2.1"
 
 # DPI 与字体渲染优化（高DPI下更清晰）
 def _enable_dpi_awareness() -> None:

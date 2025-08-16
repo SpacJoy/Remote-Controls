@@ -30,7 +30,7 @@ from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 import pyautogui
 from pyautogui import press as pyautogui_press
 
-BANBEN = "V2.2.0"
+BANBEN = "V2.2.1"
 
 # DPI 与字体渲染优化（高DPI下更清晰）
 def _enable_dpi_awareness() -> None:

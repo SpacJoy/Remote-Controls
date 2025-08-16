@@ -15,7 +15,7 @@ import subprocess
 import win32com.client
 from typing import Any, Dict, List, Union
 
-BANBEN = "V2.2.0"
+BANBEN = "V2.2.1"
 # 创建一个命名的互斥体
 # mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "RC-main-GUI")
 
