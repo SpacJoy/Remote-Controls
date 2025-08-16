@@ -180,11 +180,16 @@ def set_volume(value: int) -> None:
     volume.SetMasterVolumeLevelScalar(value / 100, None)  # type: ignore
 
 
+NOTIFY_ENABLED = True
+
 def notify_in_thread(message: str) -> None:
     """
     English: Displays a Windows toast notification in a separate thread
     中文: 在单独线程中显示 Windows toast 通知
     """
+    if not NOTIFY_ENABLED:
+        logging.info(f"通知(已禁用): {message}")
+        return
     logging.info(f"通知: {message}")
     def notify_message():
         notify(message)
@@ -313,7 +318,7 @@ def _parse_hotkey_string(hs: str) -> list[str]:
     res.sort(key=lambda x: (order.get(x, 9), x))
     return res
 
-def perform_hotkey(action_type: str, action_value: str) -> None:
+def perform_hotkey(action_type: str, action_value: str, char_delay_ms: int | None = None) -> None:
     """
     执行按键(Hotkey)动作：
     - keyboard: 组合键（依次按下修饰键 -> 主键 -> 释放修饰键）
@@ -326,25 +331,114 @@ def perform_hotkey(action_type: str, action_value: str) -> None:
             logging.info("Hotkey: 不执行")
             return
         if t == "keyboard":
-            keys = _parse_hotkey_string(v)
-            if not keys:
+            delay_s = 0.0
+            try:
+                if char_delay_ms is not None and int(char_delay_ms) > 0:
+                    delay_s = int(char_delay_ms) / 1000.0
+            except Exception:
+                delay_s = 0.0
+            # 无连接符（+）时，将字符串按字符序列依次按下，例如 "f4" => 'f' 然后 '4'
+            if "+" not in v:
+                seq = [ch for ch in v if not ch.isspace()]
+                if not seq:
+                    logging.info("Hotkey: 空组合，忽略")
+                    return
+                # 与组合键路径保持一致的映射
+                def map_key(k: str) -> str:
+                    return "winleft" if k.lower() == "win" else k.lower()
+                for i, ch in enumerate(seq):
+                    if i > 0 and delay_s > 0:
+                        time.sleep(delay_s)
+                    pyautogui.press(map_key(ch))
+                return
+
+            # 有连接符：支持按键后缀 {down}/{up} 显式控制，字母段按字符序列依次输入
+            raw_tokens = [t for t in v.replace(" ", "").split("+") if t]
+            if not raw_tokens:
                 logging.info("Hotkey: 空组合，忽略")
                 return
-            # 处理 win 键映射（PyAutoGUI 使用 winleft/winright）
+
+            normalize = {
+                "control": "ctrl", "ctrl": "ctrl",
+                "alt": "alt",
+                "shift": "shift",
+                "win": "win", "super": "win", "meta": "win",
+                "enter": "enter", "return": "enter",
+                "esc": "esc", "escape": "esc",
+            }
+            mod_prio = {"ctrl": 0, "alt": 1, "shift": 2, "win": 3}
+
             def map_key(k: str) -> str:
                 return "winleft" if k == "win" else k
 
-            if len(keys) == 1:
-                pyautogui.press(map_key(keys[0]))
-                return
-            mods, main_key = keys[:-1], keys[-1]
-            for k in mods:
-                pyautogui.keyDown(map_key(k))
+            def split_suffix(tok: str) -> tuple[str, str]:
+                t = tok.lower()
+                for suf, act in (("{down}", "down"), ("{up}", "up"), ("_down", "down"), ("_up", "up")):
+                    if t.endswith(suf):
+                        return t[: -len(suf)], act
+                return t, "press"
+
+            parsed = []  # (key, action)
+            for t in raw_tokens:
+                base, act = split_suffix(t)
+                base = normalize.get(base, base)
+                parsed.append((base, act))
+
+            # 先找出需要全程按住的修饰键（无显式 down/up）
+            mods_held: list[str] = []
+            seen = set()
+            for k, act in parsed:
+                if k in mod_prio and act == "press" and k not in seen:
+                    seen.add(k)
+                    mods_held.append(k)
+            mods_held.sort(key=lambda m: mod_prio[m])
+
+            # 按下这些修饰键
+            to_release_end = list(mods_held)
+            for m in mods_held:
+                pyautogui.keyDown(map_key(m))
+
+            # 顺序处理各 token；显式 down/up 立即生效；纯字母段展开为字符序列
             try:
-                pyautogui.press(map_key(main_key))
+                active_down: set[str] = set()  # 记录通过显式 down 按下的键
+                for key, act in parsed:
+                    if key in mod_prio:
+                        if act == "press":
+                            # 已由 mods_held 处理，跳过
+                            continue
+                        if act == "down":
+                            if key not in mods_held and key not in active_down:
+                                pyautogui.keyDown(map_key(key))
+                                active_down.add(key)
+                            continue
+                        if act == "up":
+                            # 若本来作为 held，则提前释放并从收尾释放列表移除
+                            if key in to_release_end:
+                                pyautogui.keyUp(map_key(key))
+                                to_release_end.remove(key)
+                            elif key in active_down:
+                                pyautogui.keyUp(map_key(key))
+                                active_down.discard(key)
+                            continue
+                    # 非修饰键
+                    if act == "down":
+                        pyautogui.keyDown(map_key(key))
+                        continue
+                    if act == "up":
+                        pyautogui.keyUp(map_key(key))
+                        continue
+                    # 默认 press：纯字母段展开，否则按原样按压
+                    if key.isalpha():
+                        for i, ch in enumerate(key):
+                            if i > 0 and delay_s > 0:
+                                time.sleep(delay_s)
+                            pyautogui.press(ch)
+                    else:
+                        pyautogui.press(map_key(key) if key == "win" else key)
             finally:
-                for k in reversed(mods):
-                    pyautogui.keyUp(map_key(k))
+                # 释放仍按住的修饰键（倒序）
+                for m in reversed(to_release_end):
+                    pyautogui.keyUp(map_key(m))
             return
         logging.warning(f"Hotkey: 未知类型 {t}")
     except Exception as e:
@@ -742,10 +836,17 @@ def process_command(command: str, topic: str) -> None:
                 on_value = (hk_conf.get("on_value") or "")
                 off_type = (hk_conf.get("off_type") or "none").lower()
                 off_value = (hk_conf.get("off_value") or "")
+                char_delay_ms = 25
+                try:
+                    _d = hk_conf.get("char_delay_ms")
+                    if _d is not None:
+                        char_delay_ms = int(_d)
+                except Exception:
+                    char_delay_ms = 25
                 if command == "on":
-                    perform_hotkey(on_type, on_value)
+                    perform_hotkey(on_type, on_value, char_delay_ms)
                 elif command == "off":
-                    perform_hotkey(off_type, off_value)
+                    perform_hotkey(off_type, off_value, char_delay_ms)
                 return
         # 未知主题
         logging.error(f"未知主题: {topic}")
@@ -1745,6 +1846,11 @@ if os.path.exists(config_path):
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
+            # 读取通知开关
+            try:
+                globals()["NOTIFY_ENABLED"] = bool(config.get("notify", 1))
+            except Exception:
+                pass
     except json.JSONDecodeError:
         messagebox.showerror("Error", "配置文件格式错误\n请检查config.json文件")
         logging.error("config.json 文件格式错误")
@@ -1909,6 +2015,7 @@ for i in range(1, 50):
             "on_value": (config.get(f"{hk_key}_on_value") or ""),
             "off_type": (config.get(f"{hk_key}_off_type") or "none"),
             "off_value": (config.get(f"{hk_key}_off_value") or ""),
+            "char_delay_ms": (config.get(f"{hk_key}_char_delay_ms") or 0),
         }
         logging.info(f"加载Hotkey: {hk_key}, 配置: {hk_conf}")
         hotkeys.append((hk_topic, hk_conf))

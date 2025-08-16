@@ -341,19 +341,25 @@ def open_keyboard_recorder(parent: Union[tk.Tk, tk.Toplevel], target_var: tk.Str
     """
     rec = tk.Toplevel(parent)
     rec.title("录制键盘组合")
-    rec.geometry("360x200")
+    rec.geometry("580x360")
     msg = ttk.Label(
         rec,
         text=(
             "请在此窗口按下要录制的组合键，\n"
             "按 Enter 完成，Esc 取消。\n"
-            "支持：Ctrl/Alt/Shift/Win 与普通键。"
+            "支持：Ctrl/Alt/Shift/Win 与普通键。\n\n"
+            "若不包含 +（加号），按字符序列逐个发送：例 f4 => f 然后 4。\n\n"
+            "包含 + 时：字母段会按顺序逐个输入（例 qste）\n功能键（F1..F24、Tab、Enter、Esc 等）按原键发送。\n\n"
+            "同时支持后缀 {down}/{up} 或 _down/_up 显式按下/抬起。\n"
+            "提示：中文输入法状态下，仅记录英文字母/数字/功能键，中文字符将被忽略。\n"
+            "示例：ctrl{down}+shift{down}+f4+shift{up}+d+ctrl{up}"
         ),
         justify="left",
     )
     msg.pack(padx=10, pady=8, anchor="w")
 
-    pressed: set[str] = set()
+    # 记录按下顺序：允许重复键，使用列表保存顺序
+    pressed_order: list[str] = []
     pressed_var = tk.StringVar(value="已按下：(空)")
     # 使用 tk.Label 以获得 wraplength 自动换行能力
     pressed_lbl = tk.Label(
@@ -385,28 +391,27 @@ def open_keyboard_recorder(parent: Union[tk.Tk, tk.Toplevel], target_var: tk.Str
         k = (event_keysym or "").lower()
         return normalize.get(k, k)
 
-    def _sorted_keys() -> list[str]:
-        order = {"ctrl": 0, "alt": 1, "shift": 2, "win": 3}
-        ks = list(pressed)
-        ks.sort(key=lambda x: (order.get(x, 9), x))
-        return ks
+    def _current_keys() -> list[str]:
+        return list(pressed_order)
 
     def _update_pressed_label():
-        keys = _sorted_keys()
+        keys = _current_keys()
         pressed_var.set("已按下：" + (" + ".join(keys) if keys else "(空)"))
 
     def on_key_press(e):
         k = key_name(getattr(e, "keysym", ""))
-        if k:
-            pressed.add(k)
-            _update_pressed_label()
+        # 过滤非 ASCII（如中文输入法产生的字符名），仅保留英数字/功能键名
+        if not k or not k.isascii():
+            return
+        pressed_order.append(k)
+        _update_pressed_label()
 
     def on_key_release(e):
         pass
 
     def finish(*_):
-        # 完成时忽略 Enter 本身
-        keys = [k for k in _sorted_keys() if k != "enter"]
+        # 完成时忽略 Enter 本身；按按下顺序保存
+        keys = [k for k in _current_keys() if k != "enter"]
         v = "+".join(keys)
         target_var.set(v)
         rec.destroy()
@@ -684,6 +689,7 @@ def load_custom_themes() -> None:
                 "on_value": config.get(f"{hk_key}_on_value", ""),
                 "off_type": config.get(f"{hk_key}_off_type", "none"),
                 "off_value": config.get(f"{hk_key}_off_value", ""),
+                "char_delay_ms": int(config.get(f"{hk_key}_char_delay_ms", 25) or 25),
             }
             custom_themes.append(theme)
             status = "开" if theme["checked"] else "关"
@@ -740,6 +746,11 @@ def modify_custom_theme() -> None:
 
     theme_window = tk.Toplevel(root)
     theme_window.title("修改自定义主题")
+    # 增加默认高度
+    try:
+        theme_window.geometry("780x310")
+    except Exception:
+        pass
     # 允许窗口大小调整，并设置网格权重使输入控件随窗口拉伸
     theme_window.resizable(True, True)
     try:
@@ -837,6 +848,7 @@ def modify_custom_theme() -> None:
     hk_on_val_var_mod = tk.StringVar(value=theme.get("on_value", ""))
     hk_off_type_var_mod = tk.StringVar(value=hk_label_by_type.get(theme.get("off_type", "none"), "不执行"))
     hk_off_val_var_mod = tk.StringVar(value=theme.get("off_value", ""))
+    hk_char_delay_var_mod = tk.StringVar(value=str(theme.get("char_delay_ms", 0)))
 
     ttk.Label(hotkey_frame_mod, text="打开(on)：").grid(row=0, column=0, sticky="e", padx=8, pady=4)
     hk_on_type_combo_mod = ttk.Combobox(hotkey_frame_mod, values=hk_type_labels, textvariable=hk_on_type_var_mod, state="readonly", width=12)
@@ -851,6 +863,10 @@ def modify_custom_theme() -> None:
     hk_off_entry_mod = ttk.Entry(hotkey_frame_mod, textvariable=hk_off_val_var_mod, width=24)
     hk_off_entry_mod.grid(row=1, column=2, sticky="w")
     ttk.Button(hotkey_frame_mod, text="录制", command=lambda: open_keyboard_recorder(theme_window, hk_off_val_var_mod)).grid(row=1, column=3, sticky="w")
+
+    ttk.Label(hotkey_frame_mod, text="字母段间隔(ms)：").grid(row=2, column=0, sticky="e", padx=8, pady=4)
+    hk_char_delay_entry_mod = ttk.Entry(hotkey_frame_mod, textvariable=hk_char_delay_var_mod, width=12)
+    hk_char_delay_entry_mod.grid(row=2, column=1, sticky="w")
 
     def _update_type_specific_mod(*_):
         t = theme_type_var.get()
@@ -879,10 +895,43 @@ def modify_custom_theme() -> None:
         if theme["type"] == "命令":
             theme["window"] = "show" if cmd_window_var.get() else "hide"
         if theme["type"] == "按键(Hotkey)":
-            theme["on_type"] = {"不执行": "none", "键盘组合": "keyboard"}.get(hk_on_type_var_mod.get(), "keyboard")
-            theme["on_value"] = hk_on_val_var_mod.get().strip()
-            theme["off_type"] = {"不执行": "none", "键盘组合": "keyboard"}.get(hk_off_type_var_mod.get(), "none")
-            theme["off_value"] = hk_off_val_var_mod.get().strip()
+            # 读取临时值以便在保存前校验
+            _on_type = {"不执行": "none", "键盘组合": "keyboard"}.get(hk_on_type_var_mod.get(), "keyboard")
+            _on_value = hk_on_val_var_mod.get().strip()
+            _off_type = {"不执行": "none", "键盘组合": "keyboard"}.get(hk_off_type_var_mod.get(), "none")
+            _off_value = hk_off_val_var_mod.get().strip()
+            try:
+                _char_delay_ms = int(hk_char_delay_var_mod.get() or 0)
+                if _char_delay_ms < 0:
+                    _char_delay_ms = 0
+            except Exception:
+                _char_delay_ms = 0
+
+            def _has_non_ascii(s: str) -> bool:
+                try:
+                    return any(ord(ch) > 127 for ch in s)
+                except Exception:
+                    return False
+
+            warn_fields = []
+            if _on_type == "keyboard" and _on_value and _has_non_ascii(_on_value):
+                warn_fields.append("- 打开(on)")
+            if _off_type == "keyboard" and _off_value and _has_non_ascii(_off_value):
+                warn_fields.append("- 关闭(off)")
+            if warn_fields:
+                msg = (
+                    "检测到以下热键包含中文或全角字符：\n" + "\n".join(warn_fields) +
+                    "\n\n这些字符可能无法被正确解析，导致按键不生效或行为异常。\n是否仍然要保存？"
+                )
+                if not messagebox.askyesno("确认包含中文字符", msg, parent=theme_window):
+                    theme_window.lift()
+                    return
+
+            theme["on_type"] = _on_type
+            theme["on_value"] = _on_value
+            theme["off_type"] = _off_type
+            theme["off_value"] = _off_value
+            theme["char_delay_ms"] = _char_delay_ms
             theme["value"] = ""
         # 重新构建整个树视图以确保索引正确
         rebuild_custom_theme_tree()
@@ -916,6 +965,11 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     """
     theme_window = tk.Toplevel(root)
     theme_window.title("添加自定义主题")
+    # 增加默认高度
+    try:
+        theme_window.geometry("780x310")
+    except Exception:
+        pass
     # 允许窗口大小调整，并设置网格权重使输入控件随窗口拉伸
     theme_window.resizable(True, True)
     try:
@@ -995,6 +1049,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     hk_on_val_var_add = tk.StringVar(value="")
     hk_off_type_var_add = tk.StringVar(value=hk_label_by_type.get("none", "不执行"))
     hk_off_val_var_add = tk.StringVar(value="")
+    hk_char_delay_var_add = tk.StringVar(value="25")
 
     ttk.Label(hotkey_frame_add, text="打开(on)：").grid(row=0, column=0, sticky="e", padx=8, pady=4)
     hk_on_type_combo_add = ttk.Combobox(hotkey_frame_add, values=hk_type_labels, textvariable=hk_on_type_var_add, state="readonly", width=12)
@@ -1009,6 +1064,10 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     hk_off_entry_add = ttk.Entry(hotkey_frame_add, textvariable=hk_off_val_var_add, width=24)
     hk_off_entry_add.grid(row=1, column=2, sticky="w")
     ttk.Button(hotkey_frame_add, text="录制", command=lambda: open_keyboard_recorder(theme_window, hk_off_val_var_add)).grid(row=1, column=3, sticky="w")
+
+    ttk.Label(hotkey_frame_add, text="字母段间隔(ms)：").grid(row=2, column=0, sticky="e", padx=8, pady=4)
+    hk_char_delay_entry_add = ttk.Entry(hotkey_frame_add, textvariable=hk_char_delay_var_add, width=12)
+    hk_char_delay_entry_add.grid(row=2, column=1, sticky="w")
 
     # 垂直方向自适应：占位扩展区，推开底部按钮
     try:
@@ -1053,10 +1112,42 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         if theme["type"] == "命令":
             theme["window"] = "show" if cmd_window_var.get() else "hide"
         if theme["type"] == "按键(Hotkey)":
-            theme["on_type"] = hk_type_map.get(hk_on_type_var_add.get(), "keyboard")
-            theme["on_value"] = hk_on_val_var_add.get().strip()
-            theme["off_type"] = hk_type_map.get(hk_off_type_var_add.get(), "none")
-            theme["off_value"] = hk_off_val_var_add.get().strip()
+            _on_type = hk_type_map.get(hk_on_type_var_add.get(), "keyboard")
+            _on_value = hk_on_val_var_add.get().strip()
+            _off_type = hk_type_map.get(hk_off_type_var_add.get(), "none")
+            _off_value = hk_off_val_var_add.get().strip()
+            try:
+                _char_delay_ms = int(hk_char_delay_var_add.get() or 0)
+                if _char_delay_ms < 0:
+                    _char_delay_ms = 0
+            except Exception:
+                _char_delay_ms = 0
+
+            def _has_non_ascii(s: str) -> bool:
+                try:
+                    return any(ord(ch) > 127 for ch in s)
+                except Exception:
+                    return False
+
+            warn_fields = []
+            if _on_type == "keyboard" and _on_value and _has_non_ascii(_on_value):
+                warn_fields.append("- 打开(on)")
+            if _off_type == "keyboard" and _off_value and _has_non_ascii(_off_value):
+                warn_fields.append("- 关闭(off)")
+            if warn_fields:
+                msg = (
+                    "检测到以下热键包含中文或全角字符：\n" + "\n".join(warn_fields) +
+                    "\n\n这些字符可能无法被正确解析，导致按键不生效或行为异常。\n是否仍然要保存？"
+                )
+                if not messagebox.askyesno("确认包含中文字符", msg, parent=theme_window):
+                    theme_window.lift()
+                    return
+
+            theme["on_type"] = _on_type
+            theme["on_value"] = _on_value
+            theme["off_type"] = _off_type
+            theme["off_value"] = _off_value
+            theme["char_delay_ms"] = _char_delay_ms
             theme["value"] = ""
         custom_themes.append(theme)
         # 重新构建整个树视图以确保索引正确
@@ -1084,6 +1175,7 @@ def generate_config() -> None:
         "broker": website_entry.get(),
         "port": int(port_entry.get()),
         "test": test_var.get(),
+        "notify": notify_var.get(),
         "auth_mode": auth_mode_var.get(),
         "mqtt_username": mqtt_username_entry.get(),
         "mqtt_password": mqtt_password_entry.get(),
@@ -1135,6 +1227,7 @@ def generate_config() -> None:
             config[f"{prefix}_on_value"] = theme.get("on_value", "")
             config[f"{prefix}_off_type"] = theme.get("off_type", "none")
             config[f"{prefix}_off_value"] = theme.get("off_value", "")
+            config[f"{prefix}_char_delay_ms"] = int(theme.get("char_delay_ms", 0) or 0)
             hotkey_index += 1
 
     # 保存为 JSON 文件
@@ -1147,6 +1240,8 @@ def generate_config() -> None:
         config = json.load(f)
     # 刷新test模式
     test_var.set(config.get("test", 0))
+    # 刷新通知开关
+    notify_var.set(config.get("notify", 1))
     # 刷新内置主题
     for idx, theme in enumerate(builtin_themes):
         theme_key = theme["key"]
@@ -1179,6 +1274,11 @@ def refresh_custom_themes() -> None:
             
             # 刷新test模式
             test_var.set(config.get("test", 0))
+            # 刷新通知开关
+            try:
+                notify_var.set(config.get("notify", 1))
+            except Exception:
+                pass
             
             # 清空自定义主题列表
             custom_themes.clear()
@@ -1431,7 +1531,12 @@ update_auth_mode_display()
 
 test_var = tk.IntVar(value=config.get("test", 0))
 test_check = ttk.Checkbutton(system_frame, text="test模式", variable=test_var)
-test_check.grid(row=3, column=0, columnspan=2, sticky="n")
+test_check.grid(row=3, column=0, sticky="n")
+
+# 通知开关（控制主程序是否发送 toast 通知），位于 test 模式开关右侧
+notify_var = tk.IntVar(value=config.get("notify", 1))
+notify_check = ttk.Checkbutton(system_frame, text="通知提示", variable=notify_var)
+notify_check.grid(row=3, column=1, sticky="n")
 
 #添加打开任务计划按钮
 task_button = ttk.Button(system_frame, text="点击打开任务计划", command=lambda:os.startfile("taskschd.msc"))
