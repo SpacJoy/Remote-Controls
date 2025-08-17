@@ -17,6 +17,7 @@ import sys
 import shlex
 import subprocess
 import win32com.client
+import re
 from typing import Any, Dict, List, Union
 
 BANBEN = "V2.2.2"
@@ -1276,6 +1277,16 @@ def generate_config() -> None:
         value = theme["name_var"].get()
         config[key] = value
         config[f"{key}_checked"] = theme["checked"].get()
+
+    # 在写入自定义主题配置前，先清理旧的自定义主题键，避免重复累计
+    # 例如：application1/_name/_checked/_directory1，serveN/commandN/hotkeyN 及其派生键
+    # 多次保存时如果不清理旧键，load_custom_themes 会按 while True 读取，导致列表出现重复项
+    custom_key_pattern = re.compile(r"^(application\d+|serve\d+|command\d+|hotkey\d+)(?:$|_)")
+    for k in [key for key in list(config.keys()) if custom_key_pattern.match(key)]:
+        try:
+            del config[k]
+        except Exception:
+            pass
 
     # 自定义主题配置
     app_index = 1
