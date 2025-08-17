@@ -26,7 +26,10 @@ ArchitecturesInstallIn64BitMode=x64
 PrivilegesRequired=admin
 WizardStyle=modern
 LicenseFile=..\LICENSE
-SignTool=
+; 使用自签或正式证书签名安装包/卸载程序，注意本机需可调用 signtool.exe（建议将 Windows SDK 的 signtool 加入 PATH）
+; 如未在 PATH，可将 signtool.exe 的完整路径替换下行的 "signtool.exe"
+SignTool=ms; "signtool.exe" sign /fd sha256 /f "..\installer\rc_codesign.pfx" /p "123456" /tr http://timestamp.digicert.com /td sha256 $f
+SignedUninstaller=yes
 
 [Languages]
 Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
@@ -37,9 +40,9 @@ Name: "{app}\logs"; Flags: uninsalwaysuninstall
 
 [Files]
 ; 注意：以下源路径默认指向项目根的 dist 目录；请在构建 PyInstaller 后确认路径
-Source: "..\dist\RC-GUI.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\dist\RC-main.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\dist\RC-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\RC-GUI.exe"; DestDir: "{app}"; Flags: ignoreversion; SignTool=ms
+Source: "..\dist\RC-main.exe"; DestDir: "{app}"; Flags: ignoreversion; SignTool=ms
+Source: "..\dist\RC-tray.exe"; DestDir: "{app}"; Flags: ignoreversion; SignTool=ms
 ; 配置文件：如需自定义，替换项目根的 config.json 再编译安装包
 Source: "..\config.json"; DestDir: "{app}"; Flags: ignoreversion uninsneveruninstall
 ; logs 目录中已有的文件（可选）；若不存在将仅创建空目录
