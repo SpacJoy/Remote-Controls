@@ -43,7 +43,7 @@ Source: "..\dist\RC-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; 配置文件：如需自定义，替换项目根的 config.json 再编译安装包
 Source: "..\config.json"; DestDir: "{app}"; Flags: ignoreversion uninsneveruninstall
 ; logs 目录中已有的文件（可选）；若不存在将仅创建空目录
-Source: "..\logs\*"; DestDir: "{app}\logs"; Flags: ignoreversion recurses createallsubdirs; Excludes: "*.log" 
+; Source: "..\logs\*"; DestDir: "{app}\logs"; Flags: ignoreversion recurses createallsubdirs; Excludes: "*.log" 
 
 [Icons]
 ; 开始菜单
