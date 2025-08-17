@@ -22,3 +22,4 @@ RC-tray.exe
 *.pyc
 res/top.png
 # installer
+version_info.py
