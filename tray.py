@@ -819,20 +819,18 @@ def get_menu_items():
     # 检查托盘程序管理员权限状态
     global IS_TRAY_ADMIN
     admin_status = "【已获得管理员权限】" if IS_TRAY_ADMIN else "【未获得管理员权限】"
-      # 添加运行模式提示
-    mode_info = "【脚本模式】" if is_script_mode else "【EXE模式】"
     # 版本菜单文本（EXE模式：显示是否有更新）
-    version_text = f"{mode_info} 版本-{BANBEN}"
+    version_text = f"版本-{BANBEN}"
     if not is_script_mode:
         status, latest = _check_latest_release()
         if status == "ok" and latest:
             cmp = _compare_versions(BANBEN, latest)
             if cmp < 0:
-                version_text = f"{mode_info} 版本-{BANBEN}（发现新版本 {latest}）"
+                version_text = f"版本-{BANBEN}（发现新版本 {latest}）"
             else:
-                version_text = f"{mode_info} 版本-{BANBEN}（已是最新）"
+                version_text = f"版本-{BANBEN}（已是最新）"
         else:
-            version_text = f"{mode_info} 版本-{BANBEN}（检查失败）"
+            version_text = f"版本-{BANBEN}（检查失败）"
     return [
     # 版本点击 -> 打开项目主页（文本会提示是否有更新）
     pystray.MenuItem(version_text, lambda icon, item: _open_url("https://github.com/chen6019/Remote-Controls")),
