@@ -26,8 +26,15 @@ from PIL import Image
 import psutil
 import webbrowser
 import random
+import urllib.request
+import urllib.error
+import json
+import re
 
 BANBEN = "V2.2.2"
+REPO_OWNER = "chen6019"
+REPO_NAME = "Remote-Controls"
+GITHUB_RELEASES_LATEST_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
 # DPI 与字体渲染优化（高DPI下更清晰）
 def _enable_dpi_awareness() -> None:
@@ -161,24 +168,71 @@ def _open_url(url: str) -> None:
         logging.error(f"打开链接失败: {e}")
         notify(f"无法打开链接:\n{url}", level="error", show_error=True)
 
-def _open_image_window_or_viewer(title: str, prefer: list[str]) -> None:
+def _parse_version_tuple(v: str) -> tuple:
+    """将 'V2.2.2' / 'v2.3' / '2.3.1' 转为可比较的元组，例如 (2,3,1)。未匹配则返回空元组。"""
+    try:
+        nums = [int(x) for x in re.findall(r"\d+", v or "")]
+        return tuple(nums)
+    except Exception:
+        return tuple()
+
+def _compare_versions(a: str, b: str) -> int:
+    """比较两个版本字符串。a<b 返回 -1，a==b 返回 0，a>b 返回 1。"""
+    ta = list(_parse_version_tuple(a))
+    tb = list(_parse_version_tuple(b))
+    # 对齐长度
+    n = max(len(ta), len(tb))
+    ta += [0] * (n - len(ta))
+    tb += [0] * (n - len(tb))
+    if ta < tb:
+        return -1
+    if ta > tb:
+        return 1
+    return 0
+
+def _check_latest_release(timeout: float = 2.5) -> tuple[str, str | None]:
     """
-    打开一张图片：优先从程序目录的 res 目录查找，其次尝试打包资源路径；找不到则提示。
-    为避免与托盘 UI 冲突，直接调用系统默认查看器打开图片。
+    访问 GitHub Releases API 获取最新 tag_name。
+    返回 (status, latest_tag)；status 为 'ok'/'error'，latest_tag 可能为 None。
     """
-    # 程序目录 res/
-    side_by_side = [os.path.join(appdata_dir, "res", os.path.basename(p)) for p in prefer]
-    # 打包资源路径（_MEIPASS）或脚本路径
-    embedded = [resource_path(p) for p in prefer] + [resource_path(os.path.join("res", os.path.basename(p))) for p in prefer]
-    cand = side_by_side + embedded
-    img_path = _find_first_existing(cand)
-    if img_path:
-        try:
-            os.startfile(img_path)  # 使用系统默认图片查看器
-            return
-        except Exception as e:
-            logging.error(f"打开图片失败: {e}")
-    notify(f"未找到图片，已尝试位置:\n" + "\n".join(cand[:4]) + ("\n..." if len(cand) > 4 else ""), level="warning")
+    try:
+        req = urllib.request.Request(
+            GITHUB_RELEASES_LATEST_API,
+            headers={
+                "User-Agent": f"RC-tray/{BANBEN}",
+                "Accept": "application/vnd.github+json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status != 200:
+                return ("error", None)
+            data = json.loads(resp.read().decode("utf-8", errors="ignore") or "{}")
+            tag = data.get("tag_name") or data.get("name")
+            if isinstance(tag, str) and tag.strip():
+                return ("ok", tag.strip())
+            return ("error", None)
+    except Exception as e:
+        logging.warning(f"检查更新失败: {e}")
+        return ("error", None)
+
+# def _open_image_window_or_viewer(title: str, prefer: list[str]) -> None:
+#     """
+#     打开一张图片：优先从程序目录的 res 目录查找，其次尝试打包资源路径；找不到则提示。
+#     为避免与托盘 UI 冲突，直接调用系统默认查看器打开图片。
+#     """
+#     # 程序目录 res/
+#     side_by_side = [os.path.join(appdata_dir, "res", os.path.basename(p)) for p in prefer]
+#     # 打包资源路径（_MEIPASS）或脚本路径
+#     embedded = [resource_path(p) for p in prefer] + [resource_path(os.path.join("res", os.path.basename(p))) for p in prefer]
+#     cand = side_by_side + embedded
+#     img_path = _find_first_existing(cand)
+#     if img_path:
+#         try:
+#             os.startfile(img_path)  # 使用系统默认图片查看器
+#             return
+#         except Exception as e:
+#             logging.error(f"打开图片失败: {e}")
+#     notify(f"未找到图片，已尝试位置:\n" + "\n".join(cand[:4]) + ("\n..." if len(cand) > 4 else ""), level="warning")
 
 def _open_random_egg_image() -> None:
     """
@@ -767,9 +821,21 @@ def get_menu_items():
     admin_status = "【已获得管理员权限】" if IS_TRAY_ADMIN else "【未获得管理员权限】"
       # 添加运行模式提示
     mode_info = "【脚本模式】" if is_script_mode else "【EXE模式】"
+    # 版本菜单文本（EXE模式：显示是否有更新）
+    version_text = f"{mode_info} 版本-{BANBEN}"
+    if not is_script_mode:
+        status, latest = _check_latest_release()
+        if status == "ok" and latest:
+            cmp = _compare_versions(BANBEN, latest)
+            if cmp < 0:
+                version_text = f"{mode_info} 版本-{BANBEN}（发现新版本 {latest}）"
+            else:
+                version_text = f"{mode_info} 版本-{BANBEN}（已是最新）"
+        else:
+            version_text = f"{mode_info} 版本-{BANBEN}（检查失败）"
     return [
-    # 版本点击 -> 打开项目主页
-    pystray.MenuItem(f"{mode_info} 版本-{BANBEN}", lambda icon, item: _open_url("https://github.com/chen6019/Remote-Controls")),
+    # 版本点击 -> 打开项目主页（文本会提示是否有更新）
+    pystray.MenuItem(version_text, lambda icon, item: _open_url("https://github.com/chen6019/Remote-Controls")),
     # 托盘状态点击 -> 打开彩蛋随机图片（cd1~cd5.*）
     pystray.MenuItem(f"托盘状态: {admin_status}", lambda icon, item: _open_random_egg_image()),
         # 其他功能菜单项
