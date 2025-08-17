@@ -24,10 +24,10 @@ PrivilegesRequired=admin
 
 
 [Tasks]
-Name: "desktopicon"; Description: "Create desktop shortcut"; GroupDescription: "Additional options"; Flags: checkedonce
-Name: "autoruntray"; Description: "Start tray program after installation"; GroupDescription: "Additional options"; Flags: checkedonce
-Name: "autostart_main"; Description: "Run main program on system startup (as SYSTEM, highest privileges)"; GroupDescription: "Auto startup"; Flags: checkedonce
-Name: "autostart_tray"; Description: "Run tray on user login (current user, highest privileges)"; GroupDescription: "Auto startup"; Flags: checkedonce
+Name: "desktopicon"; Description: "Create desktop shortcut"; GroupDescription: "Additional options"; Flags: checked
+Name: "autoruntray"; Description: "Start tray program after installation"; GroupDescription: "Additional options"; Flags: checked
+Name: "autostart_main"; Description: "Run main program on system startup (as SYSTEM, highest privileges)"; GroupDescription: "Auto startup"; Flags: checked
+Name: "autostart_tray"; Description: "Run tray on user login (current user, highest privileges)"; GroupDescription: "Auto startup"; Flags: checked
 
 [Files]
 Source: "dist\RC-GUI.exe"; DestDir: "{app}"; Flags: ignoreversion
