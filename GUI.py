@@ -21,6 +21,9 @@ import re
 from typing import Any, Dict, List, Union
 
 BANBEN = "V2.2.4"
+# 计划任务名称（与安装器一致）
+TASK_NAME_MAIN = "Remote Controls Main Service"
+TASK_NAME_TRAY = "Remote Controls Tray"
 # 资源路径（兼容 PyInstaller _MEIPASS）
 def resource_path(relative_path: str) -> str:
     base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
@@ -485,24 +488,32 @@ def set_auto_start() -> None:
         messagebox.showinfo("已取消", "已取消设置开机自启动")
         return
 
-    quoted_exe_path = shlex.quote(exe_path)
+    # 在 Windows 下，schtasks /TR 需要用双引号包裹路径即可；不使用 shlex.quote（那是 *nix 风格，可能引入单引号）
+    exe_cmd = exe_path
     
     if choice == True:  # 选择"是"，对应方案一
         # 方案一：使用Administrators用户组创建任务计划，任何用户登录时运行
         result = subprocess.call(
-            f'schtasks /Create /SC ONLOGON /TN "A远程控制" /TR "{quoted_exe_path}" /RU "BUILTIN\\Administrators" /RL HIGHEST /F',
+            f'schtasks /Create /SC ONLOGON /TN "{TASK_NAME_MAIN}" /TR "{exe_cmd}" /RU "BUILTIN\\Administrators" /RL HIGHEST /F',
             shell=True,
         )
     else:  # 选择"否"，对应方案二
         # 方案二：使用SYSTEM用户在系统启动时运行
         result = subprocess.call(
-            f'schtasks /Create /SC ONSTART /TN "A远程控制" /TR "{quoted_exe_path}" /RU "SYSTEM" /RL HIGHEST /F',
+            f'schtasks /Create /SC ONSTART /TN "{TASK_NAME_MAIN}" /TR "{exe_cmd}" /RU "SYSTEM" /RL HIGHEST /F',
             shell=True,
         )
+    # 清理可能存在的旧版中文任务名，忽略失败
+    try:
+        subprocess.call('schtasks /Delete /TN "A远程控制" /F', shell=True)
+        subprocess.call('schtasks /Delete /TN "A远程托盘" /F', shell=True)
+    except Exception:
+        pass
+
     scheduler = win32com.client.Dispatch("Schedule.Service")
     scheduler.Connect()
     root_folder_main = scheduler.GetFolder("\\")
-    task_definition = root_folder_main.GetTask("A远程控制").Definition
+    task_definition = root_folder_main.GetTask(TASK_NAME_MAIN).Definition
     principal = task_definition.Principal
     # 根据选择的方案设置不同的登录类型和权限
     if choice == True:  # 选择"是"，对应方案一
@@ -520,22 +531,22 @@ def set_auto_start() -> None:
     settings.StopIfGoingOnBatteries = False  # 允许在电池供电时启动
     settings.ExecutionTimeLimit = "PT0S"  # 无限时间限制
     # task_definition.Settings.Compatibility = 4    # 设置兼容性为 Windows 10
-    root_folder_main.RegisterTaskDefinition("A远程控制", task_definition, 6, "", "", 2)  # 0表示只在用户登录时运行，2表示不管用户是否登录都运行
+    root_folder_main.RegisterTaskDefinition(TASK_NAME_MAIN, task_definition, 6, "", "", 2)
     tray_exe_path = os.path.join(
             os.path.dirname(os.path.abspath(sys.argv[0])), "RC-tray.exe"
             # and "tray.py"
         )
     if os.path.exists(tray_exe_path):
-        quoted_tray_path = shlex.quote(tray_exe_path)  # 托盘程序使用当前登录用户（最高权限）运行，登录后触发
+        tray_cmd = tray_exe_path  # 托盘程序使用当前登录用户（最高权限）运行，登录后触发
         tray_result = subprocess.call(
-            f'schtasks /Create /SC ONLOGON /TN "A远程控制-托盘" /TR "{quoted_tray_path}" /RL HIGHEST /F',
+            f'schtasks /Create /SC ONLOGON /TN "{TASK_NAME_TRAY}" /TR "{tray_cmd}" /RL HIGHEST /F',
             shell=True,
         )
         # 同步设置权限和运行级别
         scheduler = win32com.client.Dispatch("Schedule.Service")
         scheduler.Connect()
         root_folder_tray = scheduler.GetFolder("\\")
-        task_def = root_folder_tray.GetTask("A远程控制-托盘").Definition
+        task_def = root_folder_tray.GetTask(TASK_NAME_TRAY).Definition
         settings_tray = task_def.Settings
         settings_tray.MultipleInstances = 0  # 并行运行:0，排队：1，不运行：2，停止运行的：3
         settings_tray.Hidden = False  # 确保不是隐藏运行
@@ -545,7 +556,7 @@ def set_auto_start() -> None:
         # task_def.Settings.Compatibility = 4
 
         root_folder_tray.RegisterTaskDefinition(
-            "A远程控制-托盘", task_def, 6, "", "", 0  # 0表示只在用户登录时运行，2表示不管用户是否登录都运行
+            TASK_NAME_TRAY, task_def, 6, "", "", 0  # 0表示只在用户登录时运行，2表示不管用户是否登录都运行
         )
         # if tray_result == 0:
         #     messagebox.showinfo("提示", "创建托盘任务成功(使用当前登录用户，最高权限运行)")
@@ -553,10 +564,10 @@ def set_auto_start() -> None:
         #     messagebox.showerror("错误", "创建托盘自启动失败")
     else:
         messagebox.showwarning("警告", "未找到 RC-tray.exe 文件，跳过托盘启动设置")    # 检查创建任务的结果
-    if check_task_exists("A远程控制"):
-        if choice == True:  # 选择"是"，对应方案一
+    if check_task_exists(TASK_NAME_MAIN):
+        if choice == True:
             messagebox.showinfo("提示", "创建任务成功\n已配置为任何用户登录时以管理员组权限运行")
-        else:  # 选择"否"，对应方案二
+        else:
             messagebox.showinfo("提示", "创建任务成功\n已配置为系统启动时以SYSTEM用户权限运行")
             if tray_result != 0:
                 messagebox.showwarning("警告", f"创建托盘自启动失败\n{tray_result}")
@@ -575,11 +586,17 @@ def remove_auto_start() -> None:
     """
     if messagebox.askyesno("确定？", "你确定要删除开机自启动任务吗？"):
         delete_result = subprocess.call(
-            'schtasks /Delete /TN "A远程控制" /F', shell=True
+            f'schtasks /Delete /TN "{TASK_NAME_MAIN}" /F', shell=True
         )
         tray_delete = subprocess.call(
-            'schtasks /Delete /TN "A远程控制-托盘" /F', shell=True
+            f'schtasks /Delete /TN "{TASK_NAME_TRAY}" /F', shell=True
         )
+        # 兼容清理旧中文任务名（若存在）
+        try:
+            subprocess.call('schtasks /Delete /TN "A远程控制" /F', shell=True)
+            subprocess.call('schtasks /Delete /TN "A远程托盘" /F', shell=True)
+        except Exception:
+            pass
         if delete_result == 0 and tray_delete == 0:
             messagebox.showinfo("提示", "关闭所有自启动任务成功")
         elif delete_result == 0:
@@ -597,7 +614,7 @@ def check_task() -> None:
     English: Updates the button text based on whether the auto-start task exists
     中文: 检查是否存在开机自启任务，并更新按钮文字
     """
-    if check_task_exists("A远程控制"):
+    if check_task_exists(TASK_NAME_MAIN):
         auto_start_button.config(text="关闭开机自启", command=remove_auto_start)
     else:
         auto_start_button.config(text="设置开机自启", command=set_auto_start)
@@ -1504,6 +1521,7 @@ def check_sleep_status_window() -> None:
             return
 
         enabled = True
+
         if ("尚未启用休眠" in output) or ("休眠不可用" in output):
             enabled = False
         else:
@@ -1922,7 +1940,10 @@ def open_builtin_settings():
 
             # 保存前，给出风险提示（不阻断保存）
             if (_sleep_on_sel in ("display_off", "display_on")) or (_sleep_off_sel in ("display_off", "display_on")):
-                messagebox.showwarning("警告", "依赖于 Windows 的系统 API 来控制显示器电源状态\n未经过测试\n可能造成不可逆后果\n谨慎使用“开/关显示器功能”")
+                messagebox.showwarning(
+                    "警告",
+                    "依赖于 Windows 的系统 API 来控制显示器电源状态\n未经过测试\n可能造成不可逆后果\n谨慎使用‘开/关显示器功能’"
+                )
 
             # 打开动作为“睡眠/休眠”时提示：设备将离线
             if _sleep_on_sel in ("sleep", "hibernate"):

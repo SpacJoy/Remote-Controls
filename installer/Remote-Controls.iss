@@ -54,7 +54,7 @@ Type: dirifempty; Name: "{app}\logs"
 
 [Code]
 var
-  CbCfg, CbLogs: TNewCheckBox;
+  CbKeepCfg: TNewCheckBox;
 
 procedure CreateScheduledTasks();
 var
@@ -82,8 +82,8 @@ begin
         
         Principal := TaskDefinition.Principal;
         Principal.UserId := 'SYSTEM';
-        Principal.LogonType := 5;
-        Principal.RunLevel := 1;
+        Principal.LogonType := 5; // TASK_LOGON_SERVICE_ACCOUNT
+        Principal.RunLevel := 1;  // TASK_RUNLEVEL_HIGHEST
         
         Settings := TaskDefinition.Settings;
         Settings.Enabled := True;
@@ -91,19 +91,16 @@ begin
         Settings.StartWhenAvailable := True;
         Settings.DisallowStartIfOnBatteries := False;
         Settings.StopIfGoingOnBatteries := False;
-        Settings.AllowHardTerminate := True;
-        Settings.RestartOnFailure := True;
-        Settings.RestartInterval := 'PT1M';
-        Settings.RestartCount := 3;
-        Settings.ExecutionTimeLimit := 'PT0S';
+        Settings.MultipleInstances := 3; // Match GUI: stop existing
+        Settings.ExecutionTimeLimit := 'PT0S'; // unlimited
         
         Triggers := TaskDefinition.Triggers;
-        BootTrigger := Triggers.Create(8);
+        // GUI uses ONSTART; no delay
+        BootTrigger := Triggers.Create(8); // TASK_TRIGGER_BOOT
         BootTrigger.Enabled := True;
-        BootTrigger.Delay := 'PT30S';
         
         Actions := TaskDefinition.Actions;
-        Action := Actions.Create(0);
+        Action := Actions.Create(0); // TASK_ACTION_EXEC
         Action.Path := ExpandConstant('{app}\RC-main.exe');
         Action.WorkingDirectory := ExpandConstant('{app}');
         
@@ -126,8 +123,8 @@ begin
         RegistrationInfo.Author := 'chen6019';
         
         Principal := TaskDefinition.Principal;
-        Principal.LogonType := 3;
-        Principal.RunLevel := 1;
+        Principal.LogonType := 3; // TASK_LOGON_INTERACTIVE_TOKEN
+        Principal.RunLevel := 1;  // TASK_RUNLEVEL_HIGHEST
         
         Settings := TaskDefinition.Settings;
         Settings.Enabled := True;
@@ -135,19 +132,15 @@ begin
         Settings.StartWhenAvailable := True;
         Settings.DisallowStartIfOnBatteries := False;
         Settings.StopIfGoingOnBatteries := False;
-        Settings.AllowHardTerminate := True;
-        Settings.RestartOnFailure := True;
-        Settings.RestartInterval := 'PT1M';
-        Settings.RestartCount := 3;
-        Settings.ExecutionTimeLimit := 'PT0S';
+        Settings.MultipleInstances := 0; // Match GUI for tray
+        Settings.ExecutionTimeLimit := 'PT0S'; // unlimited
         
         Triggers := TaskDefinition.Triggers;
-        LogonTrigger := Triggers.Create(9);
+        LogonTrigger := Triggers.Create(9); // TASK_TRIGGER_LOGON
         LogonTrigger.Enabled := True;
-        LogonTrigger.Delay := 'PT10S';
         
         Actions := TaskDefinition.Actions;
-        Action := Actions.Create(0);
+        Action := Actions.Create(0); // TASK_ACTION_EXEC
         Action.Path := ExpandConstant('{app}\RC-tray.exe');
         Action.WorkingDirectory := ExpandConstant('{app}');
         
@@ -185,51 +178,53 @@ function InitializeUninstall(): Boolean;
 var
   UninstallForm: TSetupForm;
   Panel: TPanel;
+  InfoLabel: TNewStaticText;
   YPos: Integer;
 begin
   Result := True;
   
   UninstallForm := CreateCustomForm();
   UninstallForm.Caption := 'Uninstall Options';
-  UninstallForm.ClientWidth := 400;
-  UninstallForm.ClientHeight := 200;
+  UninstallForm.ClientWidth := 420;
+  UninstallForm.ClientHeight := 180;
   UninstallForm.Position := poScreenCenter;
   
   Panel := TPanel.Create(UninstallForm);
   Panel.Parent := UninstallForm;
   Panel.Left := 20;
   Panel.Top := 20;
-  Panel.Width := 360;
-  Panel.Height := 120;
+  Panel.Width := 380;
+  Panel.Height := 110;
   Panel.BevelOuter := bvNone;
   
-  YPos := 20;
+  YPos := 10;
   
-  CbCfg := TNewCheckBox.Create(Panel);
-  CbCfg.Parent := Panel;
-  CbCfg.Left := 10;
-  CbCfg.Top := YPos;
-  CbCfg.Width := 340;
-  CbCfg.Height := 17;
-  CbCfg.Caption := 'Delete configuration file config.json';
-  CbCfg.Checked := False;
+  // Info about logs
+  InfoLabel := TNewStaticText.Create(Panel);
+  InfoLabel.Parent := Panel;
+  InfoLabel.Left := 10;
+  InfoLabel.Top := YPos;
+  InfoLabel.Width := 360;
+  InfoLabel.Height := 30;
+  InfoLabel.AutoSize := False;
+  InfoLabel.Caption := 'Logs directory will be removed automatically during uninstall.';
   
-  YPos := YPos + 30;
+  YPos := YPos + 40;
   
-  CbLogs := TNewCheckBox.Create(Panel);
-  CbLogs.Parent := Panel;
-  CbLogs.Left := 10;
-  CbLogs.Top := YPos;
-  CbLogs.Width := 340;
-  CbLogs.Height := 17;
-  CbLogs.Caption := 'Delete logs directory (including all files)';
-  CbLogs.Checked := False;
+  // Only allow choosing whether to keep config.json
+  CbKeepCfg := TNewCheckBox.Create(Panel);
+  CbKeepCfg.Parent := Panel;
+  CbKeepCfg.Left := 10;
+  CbKeepCfg.Top := YPos;
+  CbKeepCfg.Width := 360;
+  CbKeepCfg.Height := 17;
+  CbKeepCfg.Caption := 'Keep configuration file (config.json)';
+  CbKeepCfg.Checked := True; // default keep
   
-  if UninstallForm.ShowModal = mrOk then begin
-    Result := True;
-  end else begin
+  if UninstallForm.ShowModal = mrOk then
+    Result := True
+  else
     Result := False;
-  end;
   
   UninstallForm.Free;
 end;
@@ -248,16 +243,16 @@ begin
   if CurUninstallStep = usUninstall then begin
     DeleteScheduledTasks();
     
-    if Assigned(CbCfg) and CbCfg.Checked then begin
+    // Always remove logs
+    LogsDir := ExpandConstant('{app}\logs');
+    if DirExists(LogsDir) then
+      DelTree(LogsDir, True, True, True);
+
+    // Delete config.json unless user chose to keep
+    if not (Assigned(CbKeepCfg) and CbKeepCfg.Checked) then begin
       ConfigFile := ExpandConstant('{app}\config.json');
       if FileExists(ConfigFile) then
         DeleteFile(ConfigFile);
-    end;
-    
-    if Assigned(CbLogs) and CbLogs.Checked then begin
-      LogsDir := ExpandConstant('{app}\logs');
-      if DirExists(LogsDir) then
-        DelTree(LogsDir, True, True, True);
     end;
   end;
 end;
