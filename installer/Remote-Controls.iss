@@ -28,7 +28,7 @@ WizardStyle=modern
 LicenseFile=..\LICENSE
 ; 使用自签或正式证书签名安装包/卸载程序，注意本机需可调用 signtool.exe（建议将 Windows SDK 的 signtool 加入 PATH）
 ; 如未在 PATH，可将 signtool.exe 的完整路径替换下行的 "signtool.exe"
-SignTool=ms; "signtool.exe" sign /fd sha256 /f "..\installer\rc_codesign.pfx" /p "123456" /tr http://timestamp.digicert.com /td sha256 $f  //#gitignore
+SignTool=ms; "signtool.exe" sign /fd sha256 /f "..\installer\rc_codesign.pfx" /p " " /tr http://timestamp.digicert.com /td sha256 $f  //#gitignore
 SignedUninstaller=yes
 
 [Languages]

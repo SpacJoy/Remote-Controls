@@ -21,4 +21,5 @@ RC-GUI.exe
 RC-tray.exe
 *.pyc
 res/top.png
-installer
+installer/rc_codesign.cer
+installer/rc_codesign.pfx
