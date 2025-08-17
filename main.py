@@ -34,7 +34,12 @@ from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 import pyautogui
 from pyautogui import press as pyautogui_press
 
-BANBEN = "V2.2.4"
+# 统一版本来源
+try:
+    from version_info import get_version_string
+    BANBEN = f"V{get_version_string()}"
+except Exception:
+    BANBEN = "V2.2.6"
 
 # DPI 与字体渲染优化（高DPI下更清晰）
 def _enable_dpi_awareness() -> None:

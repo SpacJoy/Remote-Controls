@@ -7,6 +7,7 @@
 
 import sys
 import os
+import re
 from datetime import datetime
 
 def update_version_info(version=None):
@@ -18,7 +19,7 @@ def update_version_info(version=None):
     try:
         parts = version.split('.')
         if len(parts) < 3:
-            parts.extend(['0'] * (3 - len(parts)))
+            parts.extend(['0'] * (3 - len(parts))) # type: ignore
         major, minor, patch = parts[0:3]
         build = parts[3] if len(parts) > 3 else '0'
         
@@ -122,6 +123,29 @@ if __name__ == "__main__":
         simple_version_content = f'VERSION={version}\n'
         with open('version.txt', 'w', encoding='utf-8') as f:
             f.write(simple_version_content)
+        
+        # 额外保障：同步更新 GUI.py / tray.py / main.py 中的 BANBEN 硬编码（如仍存在）
+        try:
+            targets = ['GUI.py', 'tray.py', 'main.py']
+            for p in targets:
+                if not os.path.exists(p):
+                    continue
+                with open(p, 'r', encoding='utf-8') as f:
+                    src = f.read()
+                new_src = src
+                # 将 BANBEN = "Vx.y.z" 替换为基于 version_info 的读取
+                # 但若项目已改为动态读取，则此替换不会生效（无 BANBEN 常量或已改造）。
+                new_src = re.sub(
+                    r'BANBEN\s*=\s*"V[\d\.]+"',
+                    f'BANBEN = "V{version}"',
+                    new_src
+                )
+                if new_src != src:
+                    with open(p, 'w', encoding='utf-8') as f:
+                        f.write(new_src)
+        except Exception:
+            # 忽略回退同步失败，不影响主流程
+            pass
             
         print(f"版本信息已更新: {version}")
         return True

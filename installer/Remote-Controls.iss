@@ -2,7 +2,7 @@
 ; Package includes: RC-GUI.exe, RC-main.exe, RC-tray.exe, config.json, logs directory
 ; Generate an offline installer, install to Program Files (requires admin privileges)
 
-#define MyAppVersion "2.2.4"
+#define MyAppVersion "2.2.5"
 
 [Setup]
 AppId={{A9F7F8E7-8A1F-4C4D-8CF1-6B9E0D0B7A23}}
@@ -258,6 +258,7 @@ begin
     end;
   end;
 end;
+
 
 
 

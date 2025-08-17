@@ -20,7 +20,13 @@ import win32com.client
 import re
 from typing import Any, Dict, List, Union
 
-BANBEN = "V2.2.4"
+# 统一版本来源
+try:
+    from version_info import get_version_string
+    BANBEN = f"V{get_version_string()}"
+except Exception:
+    # 回退：避免因缺少版本文件导致运行异常
+    BANBEN = "V2.2.6"
 # 计划任务名称（与安装器一致）
 TASK_NAME_MAIN = "Remote Controls Main Service"
 TASK_NAME_TRAY = "Remote Controls Tray"
