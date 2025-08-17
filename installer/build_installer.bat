@@ -89,14 +89,14 @@ if not "!BUILD_VERSION!"=="" (
 :: 清理旧的构建文件
 echo.
 echo [3/7] 清理旧的构建文件...
-if exist "dist" rmdir /s /q "dist"
-if exist "build" rmdir /s /q "build"
+if exist "installer\dist" rmdir /s /q "installer\dist"
+if exist "installer\build" rmdir /s /q "installer\build"
 echo 完成清理
 
 :: 打包主程序
 echo.
 echo [4/8] 打包主程序 RC-main.exe...
-%PYTHON_CMD% -m PyInstaller installer\RC-main.spec --noconfirm
+%PYTHON_CMD% -m PyInstaller installer\RC-main.spec --noconfirm --distpath installer\dist --workpath installer\build
 if errorlevel 1 (
     powershell -Command "Write-Host '错误：主程序打包失败' -ForegroundColor Red"
     pause
@@ -106,7 +106,7 @@ if errorlevel 1 (
 :: 打包GUI程序
 echo.
 echo [5/8] 打包GUI程序 RC-GUI.exe...
-%PYTHON_CMD% -m PyInstaller installer\RC-GUI.spec --noconfirm
+%PYTHON_CMD% -m PyInstaller installer\RC-GUI.spec --noconfirm --distpath installer\dist --workpath installer\build
 if errorlevel 1 (
     powershell -Command "Write-Host '错误：GUI程序打包失败' -ForegroundColor Red"
     pause
@@ -116,7 +116,7 @@ if errorlevel 1 (
 :: 打包托盘程序
 echo.
 echo [6/8] 打包托盘程序 RC-tray.exe...
-%PYTHON_CMD% -m PyInstaller installer\RC-tray.spec --noconfirm
+%PYTHON_CMD% -m PyInstaller installer\RC-tray.spec --noconfirm --distpath installer\dist --workpath installer\build
 if errorlevel 1 (
     powershell -Command "Write-Host '错误：托盘程序打包失败' -ForegroundColor Red"
     pause
@@ -158,8 +158,8 @@ echo.
 echo ========================================
 echo 打包完成！
 echo ========================================
-echo EXE 文件位置：dist\
-echo 安装包位置：dist\installer\
+echo EXE 文件位置：installer\dist\
+echo 安装包位置：installer\dist\installer\
 if not "!BUILD_VERSION!"=="" (
     echo 构建版本：!BUILD_VERSION!
 )

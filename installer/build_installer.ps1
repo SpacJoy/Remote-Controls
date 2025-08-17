@@ -97,14 +97,14 @@ if ($Version) {
 # 清理旧的构建文件
 Write-Host ""
 Write-Host "[3/7] 清理旧的构建文件..." -ForegroundColor Yellow
-if (Test-Path "dist") { Remove-Item -Path "dist" -Recurse -Force }
-if (Test-Path "build") { Remove-Item -Path "build" -Recurse -Force }
+if (Test-Path "installer\dist") { Remove-Item -Path "installer\dist" -Recurse -Force }
+if (Test-Path "installer\build") { Remove-Item -Path "installer\build" -Recurse -Force }
 Write-Host "完成清理" -ForegroundColor Green
 
 # 打包主程序
 Write-Host ""
 Write-Host "[4/8] 打包主程序 RC-main.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller installer\RC-main.spec --noconfirm
+& $PythonCmd -m PyInstaller installer\RC-main.spec --noconfirm --distpath installer\dist --workpath installer\build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：主程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
@@ -114,7 +114,7 @@ if ($LASTEXITCODE -ne 0) {
 # 打包GUI程序
 Write-Host ""
 Write-Host "[5/8] 打包GUI程序 RC-GUI.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller installer\RC-GUI.spec --noconfirm
+& $PythonCmd -m PyInstaller installer\RC-GUI.spec --noconfirm --distpath installer\dist --workpath installer\build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：GUI程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
@@ -124,7 +124,7 @@ if ($LASTEXITCODE -ne 0) {
 # 打包托盘程序
 Write-Host ""
 Write-Host "[6/8] 打包托盘程序 RC-tray.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller installer\RC-tray.spec --noconfirm
+& $PythonCmd -m PyInstaller installer\RC-tray.spec --noconfirm --distpath installer\dist --workpath installer\build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：托盘程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
@@ -169,8 +169,8 @@ Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "打包完成！" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "EXE 文件位置：dist\" -ForegroundColor Cyan
-Write-Host "安装包位置：dist\installer\" -ForegroundColor Cyan
+Write-Host "EXE 文件位置：installer\dist\" -ForegroundColor Cyan
+Write-Host "安装包位置：installer\dist\installer\" -ForegroundColor Cyan
 if ($Version) {
     Write-Host "构建版本：$Version" -ForegroundColor Green
 }

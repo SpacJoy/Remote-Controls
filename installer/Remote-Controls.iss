@@ -14,7 +14,7 @@ AppPublisherURL=https://github.com/chen6019/Remote-Controls
 DefaultDirName={commonpf}\Remote-Controls
 DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
-OutputDir=dist\installer
+OutputDir=installer\dist\installer
 OutputBaseFilename=Remote-Controls-Installer-{#MyAppVersion}
 SetupIconFile=..\res\icon.ico
 Compression=lzma
@@ -30,9 +30,9 @@ Name: "autostart_main"; Description: "Run main program on system startup (as SYS
 Name: "autostart_tray"; Description: "Run tray on user login (current user, highest privileges)"; GroupDescription: "Auto startup"; Flags: checkedonce
 
 [Files]
-Source: "dist\RC-GUI.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\RC-main.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\RC-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "installer\dist\RC-GUI.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "installer\dist\RC-main.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "installer\dist\RC-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Optional: ship default config, but do not overwrite user changes
 ; Source: "..\config.json"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
 
@@ -256,4 +256,6 @@ begin
     end;
   end;
 end;
+
+
 
