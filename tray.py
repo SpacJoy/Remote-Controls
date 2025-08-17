@@ -31,7 +31,7 @@ import urllib.error
 import json
 import re
 
-BANBEN = "V2.2.2"
+BANBEN = "V2.2.3"
 REPO_OWNER = "chen6019"
 REPO_NAME = "Remote-Controls"
 GITHUB_RELEASES_LATEST_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
