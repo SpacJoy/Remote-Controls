@@ -215,7 +215,7 @@ pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.
 # 可选：如需将托盘彩蛋图片一起打包，请按实际扩展名添加（示例：cd1、cd2 为 .jpg）
 # pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico \
 #   --add-data "res\\cd1.jpg;res" --add-data "res\\cd2.jpg;res" \
-#   --add-data "res\\cd3.png;res" --add-data "res\\cd4.png;res" --add-data "res\\cd5.png;res" \
+#   --add-data "res\\cd3.jpg;res" --add-data "res\\cd4.jpg;res" --add-data "res\\cd5.png;res" \
 #   --add-data "res\\icon.ico;." tray.py
 ```
 

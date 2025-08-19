@@ -14,7 +14,7 @@ import tkinter.font as tkfont
 import json
 import ctypes
 import sys
-import shlex
+# import shlex
 import subprocess
 import win32com.client
 import re

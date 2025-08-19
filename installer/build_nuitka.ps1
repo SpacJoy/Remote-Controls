@@ -151,8 +151,8 @@ $TrayArgs = $Common + @(
   '--include-data-files=res\\icon.ico=icon.ico',
   '--include-data-files=res\\cd1.jpg=res\\cd1.jpg',
   '--include-data-files=res\\cd2.jpg=res\\cd2.jpg',
-  '--include-data-files=res\\cd3.png=res\\cd3.png',
-  '--include-data-files=res\\cd4.png=res\\cd4.png',
+  '--include-data-files=res\\cd3.jpg=res\\cd3.jpg',
+  '--include-data-files=res\\cd4.jpg=res\\cd4.jpg',
   '--include-data-files=res\\cd5.png=res\\cd5.png',
   '--output-filename=RC-tray.exe'
 )

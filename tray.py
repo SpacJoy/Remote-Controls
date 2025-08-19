@@ -7,7 +7,7 @@
     pyinstaller RC-tray.spec --noconfirm
 
 2) 直接命令行（等价）：
-pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\cd1.jpg;res" --add-data "res\\cd2.jpg;res" --add-data "res\\cd3.png;res" --add-data "res\\cd4.png;res" --add-data "res\\cd5.png;res" --add-data "res\\icon.ico;." tray.py
+pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\cd1.jpg;res" --add-data "res\\cd2.jpg;res" --add-data "res\\cd3.jpg;res" --add-data "res\\cd4.jpg;res" --add-data "res\\cd5.png;res" --add-data "res\\icon.ico;." tray.py
 """
 
 import os
@@ -27,7 +27,7 @@ import psutil
 import webbrowser
 import random
 import urllib.request
-import urllib.error
+# import urllib.error
 import json
 import re
 

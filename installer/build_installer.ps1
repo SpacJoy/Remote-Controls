@@ -55,8 +55,8 @@ $IconGUI  = Join-Path $ResDir 'icon_GUI.ico'
 $TopIco   = Join-Path $ResDir 'top.ico'
 $Cd1      = Join-Path $ResDir 'cd1.jpg'
 $Cd2      = Join-Path $ResDir 'cd2.jpg'
-$Cd3      = Join-Path $ResDir 'cd3.png'
-$Cd4      = Join-Path $ResDir 'cd4.png'
+$Cd3      = Join-Path $ResDir 'cd3.jpg'
+$Cd4      = Join-Path $ResDir 'cd4.jpg'
 $Cd5      = Join-Path $ResDir 'cd5.png'
 
 # 检查Python环境
