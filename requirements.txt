@@ -1,6 +1,6 @@
 # 远程控制工具(RC-remote-controls)依赖项
-# 更新日期: 2025-07-11
-# 版本: v2.1.1
+# 更新日期: 2025-08-19
+# 版本: v2.2.7
 
 """
 注意:
@@ -17,12 +17,12 @@
 5. 对于Python脚本支持，确保python.exe在系统PATH中
 """
 
-# 基础依赖（基于实际测试环境）
+# 基础依赖（基于实际测试环境 v2.2.7）
 paho-mqtt>=2.1.0     # MQTT通信库（当前：2.1.0）
 wmi>=1.5.1           # Windows管理工具接口（当前：1.5.1）
-pillow>=11.2.0       # 图像处理库（当前：11.2.1）
+pillow>=11.2.1       # 图像处理库（当前：11.2.1）
 pystray>=0.19.5      # 系统托盘图标（当前：0.19.5）
-setuptools>=80.0.0   # Python包安装工具（当前：80.1.0）
+setuptools>=80.1.0   # Python包安装工具（当前：80.1.0）
 
 # 系统交互
 pywin32>=310         # Windows API访问（当前：310）
@@ -39,8 +39,10 @@ pyautogui>=0.9.54    # GUI自动化和媒体键控制（当前：0.9.54）
 # PowerShell - 系统内置，用于.ps1脚本执行
 # CMD - 系统内置，用于.cmd/.bat脚本执行
 
-# 开发和打包工具（可选）
-# pyinstaller>=6.13.0  # 打包为exe文件（当前测试环境：6.13.0）
+# 打包工具（v2.2.7双打包系统支持）
+# pyinstaller>=6.13.0  # 主要打包工具（推荐，当前：6.13.0）
+# nuitka>=2.7.12       # 备用打包工具（实验性，当前：2.7.12）
+# zstandard>=0.24.0    # Nuitka依赖的压缩库（当前：0.24.0）
 
 # 虚拟环境创建和管理:
 # python -m venv .venv
@@ -51,9 +53,10 @@ pyautogui>=0.9.54    # GUI自动化和媒体键控制（当前：0.9.54）
 # pip install -r requirements.txt
 # pip install --upgrade setuptools
 
-# 当前测试环境信息:
+# 当前测试环境信息（v2.2.7）:
 # Python 3.12.10 (Virtual Environment)
 # 所有依赖包均为实际测试验证版本
+# 新增Nuitka打包支持（实验性）
 
 # 功能特性说明:
 # - 支持PowerShell (.ps1)、Python (.py/.pyw)、批处理 (.cmd/.bat) 脚本
@@ -62,3 +65,6 @@ pyautogui>=0.9.54    # GUI自动化和媒体键控制（当前：0.9.54）
 # - 自动管理员权限检测和提权
 # - 多种终止方法：wmic、psutil、taskkill
 # - 系统托盘管理和MQTT远程控制
+# - 双打包系统：PyInstaller（推荐）+ Nuitka（备用）
+# - 检查更新功能：实时版本状态显示
+# - 交互式卸载器：配置文件保留选项
