@@ -48,6 +48,17 @@ if (-not (Test-Path (Join-Path $Root 'main.py'))) {
 # 切换到项目根目录
 Set-Location $Root
 
+# 资源绝对路径（避免 --specpath 导致的相对路径解析到 installer/）
+$ResDir   = Join-Path $Root 'res'
+$IconIco  = Join-Path $ResDir 'icon.ico'
+$IconGUI  = Join-Path $ResDir 'icon_GUI.ico'
+$TopIco   = Join-Path $ResDir 'top.ico'
+$Cd1      = Join-Path $ResDir 'cd1.jpg'
+$Cd2      = Join-Path $ResDir 'cd2.jpg'
+$Cd3      = Join-Path $ResDir 'cd3.png'
+$Cd4      = Join-Path $ResDir 'cd4.png'
+$Cd5      = Join-Path $ResDir 'cd5.png'
+
 # 检查Python环境
 Write-Host "[1/7] 检查Python环境..." -ForegroundColor Yellow
 
@@ -113,7 +124,14 @@ Write-Host "完成清理" -ForegroundColor Green
 # 打包主程序
 Write-Host ""
 Write-Host "[4/8] 打包主程序 RC-main.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller -F -n RC-main --windowed --noconfirm --icon=res\icon.ico --add-data "res\icon.ico;." --distpath (Join-Path $InstallerDir 'dist') --workpath (Join-Path $InstallerDir 'build') main.py
+& $PythonCmd -m PyInstaller `
+    -F -n RC-main --windowed --noconfirm `
+    --specpath $InstallerDir `
+    --icon=$IconIco `
+    --add-data "$IconIco;." `
+    --distpath (Join-Path $InstallerDir 'dist') `
+    --workpath (Join-Path $InstallerDir 'build') `
+    main.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：主程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
@@ -123,7 +141,15 @@ if ($LASTEXITCODE -ne 0) {
 # 打包GUI程序
 Write-Host ""
 Write-Host "[5/8] 打包GUI程序 RC-GUI.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller -F -n RC-GUI --noconsole --noconfirm --icon=res\icon_GUI.ico --add-data "res\icon_GUI.ico;res" --add-data "res\top.ico;res" --distpath (Join-Path $InstallerDir 'dist') --workpath (Join-Path $InstallerDir 'build') GUI.py
+& $PythonCmd -m PyInstaller `
+    -F -n RC-GUI --noconsole --noconfirm `
+    --specpath $InstallerDir `
+    --icon=$IconGUI `
+    --add-data "$IconGUI;res" `
+    --add-data "$TopIco;res" `
+    --distpath (Join-Path $InstallerDir 'dist') `
+    --workpath (Join-Path $InstallerDir 'build') `
+    GUI.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：GUI程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
@@ -133,7 +159,19 @@ if ($LASTEXITCODE -ne 0) {
 # 打包托盘程序
 Write-Host ""
 Write-Host "[6/8] 打包托盘程序 RC-tray.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller -F -n RC-tray --windowed --noconfirm --icon=res\icon.ico --add-data "res\icon.ico;." --add-data "res\cd1.jpg;res" --add-data "res\cd2.jpg;res" --add-data "res\cd3.png;res" --add-data "res\cd4.png;res" --add-data "res\cd5.png;res" --distpath (Join-Path $InstallerDir 'dist') --workpath (Join-Path $InstallerDir 'build') tray.py
+& $PythonCmd -m PyInstaller `
+    -F -n RC-tray --windowed --noconfirm `
+    --specpath $InstallerDir `
+    --icon=$IconIco `
+    --add-data "$IconIco;." `
+    --add-data "$Cd1;res" `
+    --add-data "$Cd2;res" `
+    --add-data "$Cd3;res" `
+    --add-data "$Cd4;res" `
+    --add-data "$Cd5;res" `
+    --distpath (Join-Path $InstallerDir 'dist') `
+    --workpath (Join-Path $InstallerDir 'build') `
+    tray.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：托盘程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
