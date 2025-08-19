@@ -1,6 +1,8 @@
 installer/build
+installer/build-nuitka
 /.vscode
 installer/dist
+installer/dist-nuitka
 /build
 /.vscode
 /dist
