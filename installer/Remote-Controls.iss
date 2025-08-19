@@ -24,10 +24,10 @@ PrivilegesRequired=admin
 
 
 [Tasks]
-Name: "desktopicon"; Description: "Create desktop shortcut"; GroupDescription: "Additional options"; Flags: unchecked
-Name: "autoruntray"; Description: "Start tray program after installation"; GroupDescription: "Additional options"; Flags: unchecked
-Name: "autostart_main"; Description: "Run main program on system startup (as SYSTEM, highest privileges)"; GroupDescription: "Auto startup"; Flags: unchecked
-Name: "autostart_tray"; Description: "Run tray on user login (current user, highest privileges)"; GroupDescription: "Auto startup"; Flags: unchecked
+Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加选项"; Flags: unchecked
+Name: "autoruntray"; Description: "安装完成后启动托盘程序"; GroupDescription: "附加选项"; Flags: unchecked
+Name: "autostart_main"; Description: "系统启动时运行主程序（以 SYSTEM 最高权限）"; GroupDescription: "自启动"; Flags: unchecked
+Name: "autostart_tray"; Description: "用户登录时运行托盘（当前用户，最高权限）"; GroupDescription: "自启动"; Flags: unchecked
 
 [Files]
 Source: "dist\RC-GUI.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -47,7 +47,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags
 Root: HKCU; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: string; ValueName: "{app}\RC-GUI.exe"; ValueData: "RUNASADMIN"; Flags: uninsdeletevalue
 
 [Run]
-Filename: "{app}\RC-tray.exe"; Description: "Start tray program"; Flags: nowait postinstall skipifsilent shellexec; Tasks: autoruntray
+Filename: "{app}\RC-tray.exe"; Description: "启动托盘程序"; Flags: nowait postinstall skipifsilent shellexec; Tasks: autoruntray
 
 [UninstallDelete]
 Type: dirifempty; Name: "{app}\logs"
@@ -55,6 +55,7 @@ Type: dirifempty; Name: "{app}\logs"
 [Code]
 var
   CbKeepCfg: TNewCheckBox;
+  KeepConfig: Boolean; // 是否保留配置文件，默认保留
 
 procedure CreateScheduledTasks();
 var
@@ -77,8 +78,8 @@ begin
         TaskDefinition := TaskService.NewTask(0);
         
         RegistrationInfo := TaskDefinition.RegistrationInfo;
-        RegistrationInfo.Description := 'Remote Controls Main Service - Auto startup';
-        RegistrationInfo.Author := 'chen6019';
+  RegistrationInfo.Description := '远程控制主程序 - 开机自启';
+  RegistrationInfo.Author := 'chen6019';
         
         Principal := TaskDefinition.Principal;
         Principal.UserId := 'SYSTEM';
@@ -119,8 +120,8 @@ begin
         TaskDefinition := TaskService.NewTask(0);
         
         RegistrationInfo := TaskDefinition.RegistrationInfo;
-        RegistrationInfo.Description := 'Remote Controls Tray Program - Start on user login';
-        RegistrationInfo.Author := 'chen6019';
+  RegistrationInfo.Description := '远程控制托盘程序 - 用户登录时启动';
+  RegistrationInfo.Author := 'chen6019';
         
         Principal := TaskDefinition.Principal;
         Principal.LogonType := 3; // TASK_LOGON_INTERACTIVE_TOKEN
@@ -181,51 +182,61 @@ var
   InfoLabel: TNewStaticText;
   YPos: Integer;
 begin
+  // 默认保留配置文件（静默卸载也保留）
+  KeepConfig := True;
   Result := True;
-  
+
+  // 静默卸载：不显示界面，直接按默认策略保留配置
+  if UninstallSilent then
+    exit;
+
+  // 交互卸载：提供选项
   UninstallForm := CreateCustomForm();
-  UninstallForm.Caption := 'Uninstall Options';
-  UninstallForm.ClientWidth := 420;
-  UninstallForm.ClientHeight := 180;
+  UninstallForm.Caption := '卸载选项';
+  UninstallForm.ClientWidth := 460;
+  UninstallForm.ClientHeight := 200;
   UninstallForm.Position := poScreenCenter;
-  
+
   Panel := TPanel.Create(UninstallForm);
   Panel.Parent := UninstallForm;
   Panel.Left := 20;
   Panel.Top := 20;
-  Panel.Width := 380;
-  Panel.Height := 110;
+  Panel.Width := 420;
+  Panel.Height := 130;
   Panel.BevelOuter := bvNone;
-  
+
   YPos := 10;
-  
-  // Info about logs
+
+  // 提示：日志将自动删除；配置文件由程序运行时生成
   InfoLabel := TNewStaticText.Create(Panel);
   InfoLabel.Parent := Panel;
   InfoLabel.Left := 10;
   InfoLabel.Top := YPos;
-  InfoLabel.Width := 360;
-  InfoLabel.Height := 30;
+  InfoLabel.Width := 400;
+  InfoLabel.Height := 40;
   InfoLabel.AutoSize := False;
-  InfoLabel.Caption := 'Logs directory will be removed automatically during uninstall.';
-  
-  YPos := YPos + 40;
-  
-  // Only allow choosing whether to keep config.json
+  InfoLabel.Caption := '提示：卸载将自动删除日志目录（logs）。配置文件由程序运行时生成，可选择是否保留。';
+
+  YPos := YPos + 50;
+
+  // 是否保留配置文件 config.json（默认勾选=保留）
   CbKeepCfg := TNewCheckBox.Create(Panel);
   CbKeepCfg.Parent := Panel;
   CbKeepCfg.Left := 10;
   CbKeepCfg.Top := YPos;
-  CbKeepCfg.Width := 360;
-  CbKeepCfg.Height := 17;
-  CbKeepCfg.Caption := 'Keep configuration file (config.json)';
-  CbKeepCfg.Checked := True; // default keep
-  
-  if UninstallForm.ShowModal = mrOk then
-    Result := True
-  else
+  CbKeepCfg.Width := 400;
+  CbKeepCfg.Height := 19;
+  CbKeepCfg.Caption := '保留配置文件（config.json）';
+  CbKeepCfg.Checked := True;
+
+  if UninstallForm.ShowModal = mrOk then begin
+    KeepConfig := CbKeepCfg.Checked;
+    Result := True;
+  end else begin
+    // 用户取消卸载
     Result := False;
-  
+  end;
+
   UninstallForm.Free;
 end;
 
@@ -250,8 +261,8 @@ begin
     if DirExists(LogsDir) then
       DelTree(LogsDir, True, True, True);
 
-    // Delete config.json unless user chose to keep
-    if not (Assigned(CbKeepCfg) and CbKeepCfg.Checked) then begin
+  // 根据用户选择删除或保留配置文件（默认保留；静默卸载也保留）
+  if not KeepConfig then begin
       ConfigFile := ExpandConstant('{app}\config.json');
       if FileExists(ConfigFile) then
         DeleteFile(ConfigFile);
