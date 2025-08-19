@@ -57,6 +57,66 @@ var
   CbKeepCfg: TNewCheckBox;
   KeepConfig: Boolean; // 是否保留配置文件，默认保留
 
+function InitializeSetup(): Boolean;
+var
+  ResultCode: Integer;
+  ProcessesRunning: Boolean;
+begin
+  Result := True;
+  ProcessesRunning := False;
+  
+  // 检查是否有程序正在运行
+  if Exec('tasklist', '/FI "IMAGENAME eq RC-main.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+    ProcessesRunning := True;
+  if Exec('tasklist', '/FI "IMAGENAME eq RC-GUI.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+    ProcessesRunning := True;
+  if Exec('tasklist', '/FI "IMAGENAME eq RC-tray.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+    ProcessesRunning := True;
+  
+  // 如果有程序运行且不是静默安装，提示用户
+  if ProcessesRunning and not WizardSilent then begin
+    if MsgBox('检测到 Remote Controls 程序正在运行。安装程序将自动关闭这些程序以确保安装成功。是否继续？', mbConfirmation, MB_YESNO) = IDNO then begin
+      Result := False;
+      Exit;
+    end;
+  end;
+  
+  // 强制关闭可能运行的程序进程
+  try
+    Exec('taskkill', '/F /IM RC-main.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+  
+  try
+    Exec('taskkill', '/F /IM RC-GUI.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+  
+  try
+    Exec('taskkill', '/F /IM RC-tray.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+  
+  // 等待进程完全终止
+  Sleep(1000);
+  
+  // 使用过滤条件再次确保进程终止
+  try
+    Exec('taskkill', '/F /FI "IMAGENAME eq RC-main.exe" /FI "CPUTIME gt 00:00:00"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+  
+  try
+    Exec('taskkill', '/F /FI "IMAGENAME eq RC-GUI.exe" /FI "CPUTIME gt 00:00:00"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+  
+  try
+    Exec('taskkill', '/F /FI "IMAGENAME eq RC-tray.exe" /FI "CPUTIME gt 00:00:00"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+end;
+
 procedure CreateScheduledTasks();
 var
   TaskService, RootFolder, TaskDefinition, RegistrationInfo, Settings, Triggers, Actions: Variant;
@@ -175,6 +235,53 @@ begin
   end;
 end;
 
+procedure ForceCloseRunningProcesses();
+var
+  ResultCode: Integer;
+  AppPath: String;
+begin
+  AppPath := ExpandConstant('{app}');
+  
+  // 强制终止可能运行的程序进程
+  // 使用taskkill命令强制终止，忽略错误（程序可能没有运行）
+  try
+    // 终止主程序
+    Exec('taskkill', '/F /IM RC-main.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+  
+  try
+    // 终止GUI程序
+    Exec('taskkill', '/F /IM RC-GUI.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+  
+  try
+    // 终止托盘程序
+    Exec('taskkill', '/F /IM RC-tray.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+  
+  // 等待进程完全终止
+  Sleep(1000);
+  
+  // 使用完整路径终止进程（防止同名进程干扰）
+  try
+    Exec('taskkill', Format('/F /FI "IMAGENAME eq RC-main.exe" /FI "CPUTIME gt 00:00:00"', []), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+  
+  try
+    Exec('taskkill', Format('/F /FI "IMAGENAME eq RC-GUI.exe" /FI "CPUTIME gt 00:00:00"', []), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+  
+  try
+    Exec('taskkill', Format('/F /FI "IMAGENAME eq RC-tray.exe" /FI "CPUTIME gt 00:00:00"', []), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+end;
+
 function InitializeUninstall(): Boolean;
 var
   UninstallForm: TSetupForm;
@@ -183,6 +290,9 @@ var
   OkBtn, CancelBtn: TNewButton;
   YPos: Integer;
 begin
+  // 首先强制关闭可能运行的程序
+  ForceCloseRunningProcesses();
+  
   // 默认保留配置文件（静默卸载也保留）
   KeepConfig := True;
   Result := True;
@@ -263,7 +373,30 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
 begin
+  if CurStep = ssInstall then begin
+    // 在文件复制前再次确保程序已完全关闭
+    try
+      Exec('taskkill', '/F /IM RC-main.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    except
+    end;
+    
+    try
+      Exec('taskkill', '/F /IM RC-GUI.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    except
+    end;
+    
+    try
+      Exec('taskkill', '/F /IM RC-tray.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    except
+    end;
+    
+    // 短暂等待进程终止
+    Sleep(500);
+  end;
+  
   if CurStep = ssPostInstall then begin
     CreateScheduledTasks();
   end;
@@ -276,6 +409,10 @@ var
   ConfigFile, LogsDir: String;
 begin
   if CurUninstallStep = usUninstall then begin
+    // 再次确保程序已完全关闭
+    ForceCloseRunningProcesses();
+    
+    // 删除计划任务
     DeleteScheduledTasks();
     
     // Always remove logs
