@@ -39,7 +39,7 @@ try:
     from version_info import get_version_string
     BANBEN = f"V{get_version_string()}"
 except Exception:
-    BANBEN = "V2.2.6"
+    BANBEN = "V2.2.7"
 
 # DPI 与字体渲染优化（高DPI下更清晰）
 def _enable_dpi_awareness() -> None:

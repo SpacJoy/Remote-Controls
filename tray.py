@@ -36,7 +36,7 @@ try:
     from version_info import get_version_string
     BANBEN = f"V{get_version_string()}"
 except Exception:
-    BANBEN = "V2.2.6"
+    BANBEN = "V2.2.7"
 REPO_OWNER = "chen6019"
 REPO_NAME = "Remote-Controls"
 GITHUB_RELEASES_LATEST_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"

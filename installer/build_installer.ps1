@@ -1,7 +1,11 @@
-#!/bin/bash
-
-# Remote Controls 项目打包脚本 (PowerShell版本)
-# 使用方法：在项目根目录运行 .\build_installer_new.ps1 [版本号]
+<#
+Remote Controls 项目打包脚本 (PowerShell)
+用法：
+    - 双击运行（推荐）
+    - 或在任意目录执行：pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_installer.ps1 [版本号]
+说明：
+    - 脚本使用自身路径解析，不依赖当前工作目录。
+#>
 
 param(
     [string]$Version = ""
@@ -28,16 +32,21 @@ if ($Version) {
     }
 }
 
-# 检查是否在正确的目录
-if (-not (Test-Path "..\main.py")) {
-    Write-Host "错误：请在项目根目录的installer文件夹中运行此脚本" -ForegroundColor Red
-    Write-Host "或者运行: cd installer && .\build_installer.ps1" -ForegroundColor Yellow
+# 计算脚本与项目根路径（与当前目录无关）
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$InstallerDir = $ScriptDir
+$Root = (Resolve-Path (Join-Path $ScriptDir '..')).Path
+
+# 检查项目根目录
+if (-not (Test-Path (Join-Path $Root 'main.py'))) {
+    Write-Host "错误：未找到项目根目录或 main.py" -ForegroundColor Red
+    Write-Host "请从任意位置运行：pwsh -File installer/build_installer.ps1 [版本号]" -ForegroundColor Yellow
     Read-Host "按Enter键退出"
     exit 1
 }
 
-# 设置工作目录为项目根目录
-Set-Location ".."
+# 切换到项目根目录
+Set-Location $Root
 
 # 检查Python环境
 Write-Host "[1/7] 检查Python环境..." -ForegroundColor Yellow
@@ -83,7 +92,7 @@ Write-Host "Python环境检查完成" -ForegroundColor Green
 Write-Host ""
 Write-Host "[2/8] 更新版本信息..." -ForegroundColor Yellow
 if ($Version) {
-    & $PythonCmd installer\update_version.py $Version
+    & $PythonCmd (Join-Path $InstallerDir 'update_version.py') $Version
     if ($LASTEXITCODE -ne 0) {
         Write-Host "错误：版本信息更新失败" -ForegroundColor Red
         Read-Host "按Enter键退出"
@@ -97,14 +106,14 @@ if ($Version) {
 # 清理旧的构建文件
 Write-Host ""
 Write-Host "[3/7] 清理旧的构建文件..." -ForegroundColor Yellow
-if (Test-Path "installer\dist") { Remove-Item -Path "installer\dist" -Recurse -Force }
-if (Test-Path "installer\build") { Remove-Item -Path "installer\build" -Recurse -Force }
+if (Test-Path (Join-Path $InstallerDir 'dist')) { Remove-Item -Path (Join-Path $InstallerDir 'dist') -Recurse -Force }
+if (Test-Path (Join-Path $InstallerDir 'build')) { Remove-Item -Path (Join-Path $InstallerDir 'build') -Recurse -Force }
 Write-Host "完成清理" -ForegroundColor Green
 
 # 打包主程序
 Write-Host ""
 Write-Host "[4/8] 打包主程序 RC-main.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller installer\RC-main.spec --noconfirm --distpath installer\dist --workpath installer\build
+& $PythonCmd -m PyInstaller (Join-Path $InstallerDir 'RC-main.spec') --noconfirm --distpath (Join-Path $InstallerDir 'dist') --workpath (Join-Path $InstallerDir 'build')
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：主程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
@@ -114,7 +123,7 @@ if ($LASTEXITCODE -ne 0) {
 # 打包GUI程序
 Write-Host ""
 Write-Host "[5/8] 打包GUI程序 RC-GUI.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller installer\RC-GUI.spec --noconfirm --distpath installer\dist --workpath installer\build
+& $PythonCmd -m PyInstaller (Join-Path $InstallerDir 'RC-GUI.spec') --noconfirm --distpath (Join-Path $InstallerDir 'dist') --workpath (Join-Path $InstallerDir 'build')
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：GUI程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
@@ -124,7 +133,7 @@ if ($LASTEXITCODE -ne 0) {
 # 打包托盘程序
 Write-Host ""
 Write-Host "[6/8] 打包托盘程序 RC-tray.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller installer\RC-tray.spec --noconfirm --distpath installer\dist --workpath installer\build
+& $PythonCmd -m PyInstaller (Join-Path $InstallerDir 'RC-tray.spec') --noconfirm --distpath (Join-Path $InstallerDir 'dist') --workpath (Join-Path $InstallerDir 'build')
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：托盘程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
@@ -138,11 +147,12 @@ Write-Host "[7/8] 生成安装包..." -ForegroundColor Yellow
 # 首先更新 Inno Setup 脚本中的版本号
 if ($Version) {
     Write-Host "  更新安装脚本版本号：$Version" -ForegroundColor Cyan
-    $IssFile = "installer\Remote-Controls.iss"
+    $IssFile = (Join-Path $InstallerDir 'Remote-Controls.iss')
     if (Test-Path $IssFile) {
-        $IssContent = Get-Content $IssFile -Raw
+        $IssContent = Get-Content -Path $IssFile -Raw
         $IssContent = $IssContent -replace '#define MyAppVersion "[\d\.]+"', "#define MyAppVersion `"$Version`""
-        Set-Content $IssFile $IssContent -Encoding UTF8
+        # 使用 UTF-8 BOM 保存以保证中文在 ISCC 下显示正常
+        Set-Content -Path $IssFile -Value $IssContent -Encoding UTF8BOM
         Write-Host "  版本号已更新到安装脚本" -ForegroundColor Green
     } else {
         Write-Host "  警告：未找到安装脚本文件" -ForegroundColor Yellow
@@ -158,7 +168,8 @@ if (-not (Test-Path $InnoPath)) {
 }
 
 # 生成安装包
-& $InnoPath "installer\Remote-Controls.iss"
+$IssPath = (Join-Path $InstallerDir 'Remote-Controls.iss')
+& $InnoPath $IssPath
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：安装包生成失败" -ForegroundColor Red
     Read-Host "按Enter键退出"

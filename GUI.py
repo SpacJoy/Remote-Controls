@@ -26,7 +26,7 @@ try:
     BANBEN = f"V{get_version_string()}"
 except Exception:
     # 回退：避免因缺少版本文件导致运行异常
-    BANBEN = "V2.2.6"
+    BANBEN = "V2.2.7"
 # 计划任务名称（与安装器一致）
 TASK_NAME_MAIN = "Remote Controls Main Service"
 TASK_NAME_TRAY = "Remote Controls Tray"
