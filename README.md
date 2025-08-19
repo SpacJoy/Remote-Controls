@@ -3,7 +3,7 @@
 
 声明：仅供学习交流，本人不对使用本程序产生的任何后果负责，请勿用于非法用途。
 
-— 当前版本：2.2.1（Windows）
+— 当前版本：2.2.7（Windows）
 
 ## 目录
 
@@ -22,7 +22,7 @@
 
 可接入：小爱同学、天猫精灵等，或通过 MQTT 接入 Home Assistant等自定义服务器。
 
-核心特性（2.2.1）：
+核心特性（2.2.7）：
 
 - 开关：重启/锁屏、执行命令、程序/脚本启停、服务启停（服务需管理员）
 - 灯：调节亮度（0-100）
@@ -163,7 +163,10 @@
 - Q: 依赖安装失败？
   A: 建议使用虚拟环境安装，确保Python版本为3.12.10及以上，使用requirements.txt安装全部依赖。
 - Q: 打包后程序无法运行？
-  A: 确保使用PyInstaller 6.13.0及以上版本，检查是否正确添加资源文件。
+  A: 优先使用PyInstaller打包方式（build.ps1），确保使用PyInstaller 6.13.0及以上版本。如遇问题可尝试Nuitka备用方式（build-nuitka.ps1）。
+
+- Q: Nuitka打包的托盘程序图标不显示？
+  A: 已知问题，推荐使用PyInstaller打包。Nuitka作为备用选项主要用于生成体积更小的EXE文件。
 
 ## 安装与打包
 
@@ -195,29 +198,92 @@ pip install --upgrade setuptools
 - 如遇 tkinter 相关报错（如 init.tcl 找不到），请将 `tcl/tk` 文件夹复制到 Python 的 `Lib` 目录下
 - 确保 PowerShell 执行策略允许脚本运行：`Set-ExecutionPolicy RemoteSigned`
 
-### 3. 打包说明（PyInstaller ≥ 6.13.0）
+### 3. 打包说明
 
-如需打包为 exe：
+项目提供了完整的自动化打包流程，支持两种打包方式：
 
+**推荐方式：PyInstaller（主要）**
+```bash
+# 一键打包（推荐）
+.\build.ps1
+
+# 或手动运行完整打包脚本
+pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_installer.ps1
+```
+
+**备用方式：Nuitka（实验性）**
+```bash
+# 实验性打包（体积更小，但可能存在兼容性问题）
+.\build-nuitka.ps1
+
+# 或手动运行
+pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_nuitka.ps1
+```
+
+**手动打包（PyInstaller ≥ 6.13.0）**
 ```bash
 # 安装打包工具
 pip install pyinstaller>=6.13.0
+
+# 打包主程序
+pyinstaller -F -n RC-main --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." main.py
 
 # 打包GUI程序
 pyinstaller -F -n RC-GUI --noconsole --icon=res\\icon_GUI.ico \
   --add-data "res\\icon_GUI.ico;res" --add-data "res\\top.ico;res" GUI.py
 
-# 打包主程序
-pyinstaller -F -n RC-main --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." main.py
-
-# 打包托盘程序
+# 打包托盘程序（基础版）
 pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." tray.py
-# 可选：如需将托盘彩蛋图片一起打包，请按实际扩展名添加（示例：cd1、cd2 为 .jpg）
-# pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico \
-#   --add-data "res\\cd1.jpg;res" --add-data "res\\cd2.jpg;res" \
-#   --add-data "res\\cd3.jpg;res" --add-data "res\\cd4.jpg;res" --add-data "res\\cd5.png;res" \
-#   --add-data "res\\icon.ico;." tray.py
+
+# 打包托盘程序（完整版，包含彩蛋图片）
+pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico \
+  --add-data "res\\icon.ico;." \
+  --add-data "res\\cd1.jpg;res" --add-data "res\\cd2.jpg;res" \
+  --add-data "res\\cd3.jpg;res" --add-data "res\\cd4.jpg;res" --add-data "res\\cd5.png;res" \
+  tray.py
 ```
+
+**手动打包（Nuitka - 实验性）**
+```bash
+# 安装打包工具
+pip install nuitka zstandard
+
+# 打包主程序
+python -m nuitka --onefile --assume-yes-for-downloads \
+  --windows-console-mode=disable --windows-icon-from-ico=res\\icon.ico \
+  --include-data-files=res\\icon.ico=icon.ico \
+  --output-filename=RC-main.exe --output-dir=build-nuitka main.py
+
+# 打包GUI程序
+python -m nuitka --onefile --assume-yes-for-downloads \
+  --enable-plugin=tk-inter --windows-console-mode=disable \
+  --windows-icon-from-ico=res\\icon_GUI.ico \
+  --include-data-files=res\\icon_GUI.ico=res\\icon_GUI.ico \
+  --include-data-files=res\\top.ico=res\\top.ico \
+  --output-filename=RC-GUI.exe --output-dir=build-nuitka GUI.py
+
+# 打包托盘程序（完整版，包含彩蛋图片）
+python -m nuitka --onefile --assume-yes-for-downloads --follow-imports \
+  --windows-console-mode=disable --windows-icon-from-ico=res\\icon.ico \
+  --include-data-files=res\\icon.ico=icon.ico \
+  --include-data-files=res\\cd1.jpg=res\\cd1.jpg \
+  --include-data-files=res\\cd2.jpg=res\\cd2.jpg \
+  --include-data-files=res\\cd3.jpg=res\\cd3.jpg \
+  --include-data-files=res\\cd4.jpg=res\\cd4.jpg \
+  --include-data-files=res\\cd5.png=res\\cd5.png \
+  --output-filename=RC-tray.exe --output-dir=build-nuitka tray.py
+```
+
+**打包输出说明：**
+- EXE文件：`installer/dist/RC-*.exe`
+- 安装包：`installer/dist/installer/Remote-Controls-Installer-<version>.exe`
+- 中间文件：`installer/build/`（PyInstaller）或 `installer/build-nuitka/`（Nuitka）
+
+**打包方式对比：**
+| 方式 | 优点 | 缺点 | 适用场景 |
+|------|------|------|----------|
+| PyInstaller | 兼容性好，托盘图标正常显示 | 文件体积较大 | 推荐日常使用 |
+| Nuitka | 编译速度快，文件体积小 | 托盘图标可能不显示 | 追求小体积时的备用选择 |
 
 提示：打包后首次运行 GUI 以生成/更新 `config.json`；如设置了计划任务自启，移动文件位置后需重新设置任务。
 
