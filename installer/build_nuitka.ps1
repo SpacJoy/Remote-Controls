@@ -146,6 +146,7 @@ Invoke-Nuitka -Entry 'GUI.py' -Opts $GuiArgs
 # [6/7] RC-tray
 Write-Host "[6/7] 打包 RC-tray.exe..." -ForegroundColor Yellow
 $TrayArgs = $Common + @(
+  '--follow-imports',
   '--windows-console-mode=disable',
   '--windows-icon-from-ico=res\\icon.ico',
   '--include-data-files=res\\icon.ico=icon.ico',
