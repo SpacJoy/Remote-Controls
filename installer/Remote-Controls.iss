@@ -1,6 +1,6 @@
-﻿; Inno Setup Script for Remote-Controls
-; Package includes: RC-GUI.exe, RC-main.exe, RC-tray.exe, config.json, logs directory
-; Generate an offline installer, install to Program Files (requires admin privileges)
+﻿;用于遥控器的 Inno 设置脚本
+;包包括：RC-GUI.exe、RC-main.exe、RC-tray.exe、config.json、日志目录
+;生成脱机安装程序，安装到 Program Files（需要管理员权限）
 
 #define MyAppVersion "2.2.6"
 
@@ -180,6 +180,7 @@ var
   UninstallForm: TSetupForm;
   Panel: TPanel;
   InfoLabel: TNewStaticText;
+  OkBtn, CancelBtn: TNewButton;
   YPos: Integer;
 begin
   // 默认保留配置文件（静默卸载也保留）
@@ -228,6 +229,27 @@ begin
   CbKeepCfg.Height := 19;
   CbKeepCfg.Caption := '保留配置文件（config.json）';
   CbKeepCfg.Checked := True;
+
+  // 确认/取消按钮
+  OkBtn := TNewButton.Create(UninstallForm);
+  OkBtn.Parent := UninstallForm;
+  OkBtn.Width := ScaleX(80);
+  OkBtn.Height := ScaleY(25);
+  OkBtn.Left := UninstallForm.ClientWidth - ScaleX(180);
+  OkBtn.Top := UninstallForm.ClientHeight - ScaleY(45);
+  OkBtn.Caption := '确认';
+  OkBtn.ModalResult := mrOk;
+
+  CancelBtn := TNewButton.Create(UninstallForm);
+  CancelBtn.Parent := UninstallForm;
+  CancelBtn.Width := ScaleX(80);
+  CancelBtn.Height := ScaleY(25);
+  CancelBtn.Left := UninstallForm.ClientWidth - ScaleX(90);
+  CancelBtn.Top := UninstallForm.ClientHeight - ScaleY(45);
+  CancelBtn.Caption := '取消';
+  CancelBtn.ModalResult := mrCancel;
+
+  UninstallForm.ActiveControl := OkBtn;
 
   if UninstallForm.ShowModal = mrOk then begin
     KeepConfig := CbKeepCfg.Checked;
