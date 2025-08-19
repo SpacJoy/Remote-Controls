@@ -220,6 +220,25 @@ def _check_latest_release(timeout: float = 2.5) -> tuple[str, str | None]:
         logging.warning(f"检查更新失败: {e}")
         return ("error", None)
 
+# 版本菜单点击：打开项目主页，同时在后台检查更新并提示结果
+def on_version_click(icon=None, item=None):
+    try:
+        _open_url("https://github.com/chen6019/Remote-Controls")
+    finally:
+        def _bg_check():
+            status, latest = _check_latest_release()
+            if status == "ok" and latest:
+                cmp = _compare_versions(BANBEN, latest)
+                if cmp < 0:
+                    notify(f"发现新版本 {latest}，当前 {BANBEN}。", level="info")
+                elif cmp == 0:
+                    notify(f"已是最新版本 {BANBEN}")
+                else:
+                    notify(f"当前版本 {BANBEN} 新于远端 {latest}")
+            else:
+                notify("检查更新失败", level="warning")
+        threading.Thread(target=_bg_check, daemon=True).start()
+
 # def _open_image_window_or_viewer(title: str, prefer: list[str]) -> None:
 #     """
 #     打开一张图片：优先从程序目录的 res 目录查找，其次尝试打包资源路径；找不到则提示。
@@ -837,8 +856,8 @@ def get_menu_items():
         else:
             version_text = f"版本-{BANBEN}（检查失败）"
     return [
-    # 版本点击 -> 打开项目主页（文本会提示是否有更新）
-    pystray.MenuItem(version_text, lambda icon, item: _open_url("https://github.com/chen6019/Remote-Controls")),
+    # 版本点击 -> 打开项目主页并后台检查更新
+    pystray.MenuItem(version_text, on_version_click),
     # 托盘状态点击 -> 打开彩蛋随机图片（cd1~cd5.*）
     pystray.MenuItem(f"托盘状态: {admin_status}", lambda icon, item: _open_random_egg_image()),
         # 其他功能菜单项

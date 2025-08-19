@@ -6,7 +6,7 @@
 """
 
 try:
-    from version_info import get_version_string, get_version_info, get_program_info
+    from version_info import get_version_string, get_version_info, get_program_info # type: ignore
 except ImportError:
     # 如果没有版本文件，使用默认值
     def get_version_string():
