@@ -1799,12 +1799,33 @@ def exit_program() -> None:
         threading.Timer(0.5, lambda: os._exit(0)).start()
         sys.exit(0)
 
-# 获取资源文件的路径
-def resource_path(relative_path):
-    """获取资源文件的绝对路径"""
-    # PyInstaller 创建临时文件夹
-    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
-    return os.path.join(base_path, relative_path)
+# 获取资源文件的路径（统一实现，兼容 PyInstaller/Nuitka）
+def resource_path(relative_path: str) -> str:
+    """返回资源文件路径，兼容 PyInstaller 与 Nuitka。"""
+    bases: list[str] = []
+    if hasattr(sys, "_MEIPASS"):
+        try:
+            bases.append(getattr(sys, "_MEIPASS"))  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    try:
+        bases.append(os.path.abspath(os.path.dirname(__file__)))
+    except Exception:
+        pass
+    try:
+        bases.append(os.path.abspath(os.path.dirname(sys.executable)))
+    except Exception:
+        pass
+    bases.append(os.path.abspath("."))
+    seen = set()
+    for base in bases:
+        if not base or base in seen:
+            continue
+        seen.add(base)
+        p = os.path.join(base, relative_path)
+        if os.path.exists(p):
+            return p
+    return relative_path
 
 # 获取应用程序的路径
 if getattr(sys, "frozen", False):

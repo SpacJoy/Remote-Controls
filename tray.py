@@ -152,9 +152,39 @@ MAIN_EXE = os.path.join(appdata_dir, MAIN_EXE_NAME)
 GUI_EXE = os.path.join(appdata_dir, GUI_EXE_)
 GUI_PY = os.path.join(appdata_dir, GUI_PY_)
 
-def resource_path(relative_path):
-    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
-    return os.path.join(base_path, relative_path)
+def resource_path(relative_path: str) -> str:
+    """返回资源文件的实际路径。
+    兼容 PyInstaller(_MEIPASS) 与 Nuitka(onefile 临时解包目录/可执行目录)。
+    """
+    bases: list[str] = []
+    # PyInstaller 提取目录
+    if hasattr(sys, "_MEIPASS"):
+        try:
+            bases.append(getattr(sys, "_MEIPASS"))  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    # Nuitka/通用：当前文件所在目录（onefile 场景下通常为临时解包目录）
+    try:
+        bases.append(os.path.abspath(os.path.dirname(__file__)))
+    except Exception:
+        pass
+    # 可执行文件所在目录（作为兜底）
+    try:
+        bases.append(os.path.abspath(os.path.dirname(sys.executable)))
+    except Exception:
+        pass
+    # 当前工作目录（最后兜底）
+    bases.append(os.path.abspath("."))
+
+    seen = set()
+    for base in bases:
+        if not base or base in seen:
+            continue
+        seen.add(base)
+        p = os.path.join(base, relative_path)
+        if os.path.exists(p):
+            return p
+    return relative_path
 
 def _find_first_existing(paths:list[str]) -> str | None:
     """在候选路径中返回第一个存在的文件路径。"""

@@ -32,8 +32,31 @@ TASK_NAME_MAIN = "Remote Controls Main Service"
 TASK_NAME_TRAY = "Remote Controls Tray"
 # 资源路径（兼容 PyInstaller _MEIPASS）
 def resource_path(relative_path: str) -> str:
-    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
-    return os.path.join(base_path, relative_path)
+    """返回资源文件的实际路径（兼容 PyInstaller 与 Nuitka）。"""
+    bases: list[str] = []
+    if hasattr(sys, "_MEIPASS"):
+        try:
+            bases.append(getattr(sys, "_MEIPASS"))  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    try:
+        bases.append(os.path.abspath(os.path.dirname(__file__)))
+    except Exception:
+        pass
+    try:
+        bases.append(os.path.abspath(os.path.dirname(sys.executable)))
+    except Exception:
+        pass
+    bases.append(os.path.abspath("."))
+    seen = set()
+    for base in bases:
+        if not base or base in seen:
+            continue
+        seen.add(base)
+        p = os.path.join(base, relative_path)
+        if os.path.exists(p):
+            return p
+    return relative_path
 
 # 创建一个命名的互斥体
 # mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "RC-main-GUI")

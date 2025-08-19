@@ -113,7 +113,7 @@ Write-Host "完成清理" -ForegroundColor Green
 # 打包主程序
 Write-Host ""
 Write-Host "[4/8] 打包主程序 RC-main.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller (Join-Path $InstallerDir 'RC-main.spec') --noconfirm --distpath (Join-Path $InstallerDir 'dist') --workpath (Join-Path $InstallerDir 'build')
+& $PythonCmd -m PyInstaller -F -n RC-main --windowed --noconfirm --icon=res\icon.ico --add-data "res\icon.ico;." --distpath (Join-Path $InstallerDir 'dist') --workpath (Join-Path $InstallerDir 'build') main.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：主程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
@@ -123,7 +123,7 @@ if ($LASTEXITCODE -ne 0) {
 # 打包GUI程序
 Write-Host ""
 Write-Host "[5/8] 打包GUI程序 RC-GUI.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller (Join-Path $InstallerDir 'RC-GUI.spec') --noconfirm --distpath (Join-Path $InstallerDir 'dist') --workpath (Join-Path $InstallerDir 'build')
+& $PythonCmd -m PyInstaller -F -n RC-GUI --noconsole --noconfirm --icon=res\icon_GUI.ico --add-data "res\icon_GUI.ico;res" --add-data "res\top.ico;res" --distpath (Join-Path $InstallerDir 'dist') --workpath (Join-Path $InstallerDir 'build') GUI.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：GUI程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
@@ -133,7 +133,7 @@ if ($LASTEXITCODE -ne 0) {
 # 打包托盘程序
 Write-Host ""
 Write-Host "[6/8] 打包托盘程序 RC-tray.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller (Join-Path $InstallerDir 'RC-tray.spec') --noconfirm --distpath (Join-Path $InstallerDir 'dist') --workpath (Join-Path $InstallerDir 'build')
+& $PythonCmd -m PyInstaller -F -n RC-tray --windowed --noconfirm --icon=res\icon.ico --add-data "res\icon.ico;." --add-data "res\cd1.jpg;res" --add-data "res\cd2.jpg;res" --add-data "res\cd3.png;res" --add-data "res\cd4.png;res" --add-data "res\cd5.png;res" --distpath (Join-Path $InstallerDir 'dist') --workpath (Join-Path $InstallerDir 'build') tray.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：托盘程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
