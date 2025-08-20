@@ -100,7 +100,7 @@ jobs:
                   .\.venv\Scripts\Activate.ps1
                   pip install -r requirements.txt
                   pip install pyinstaller>=6.13.0
-                  pip install nuitka>=2.7.12 zstandard>=0.24.0
+                  # pip install nuitka>=2.7.12 zstandard>=0.24.0  # 已禁用Nuitka构建
 
             - name: Update version files
               if: ${{ github.event.inputs.update_version_files == 'true' || github.event_name == 'push' }}
@@ -156,6 +156,7 @@ jobs:
                   }
 
             - name: Build with Nuitka (backup)
+              if: false # 禁用Nuitka构建，仅使用PyInstaller
               shell: pwsh
               env:
                   PYTHONIOENCODING: utf-8
