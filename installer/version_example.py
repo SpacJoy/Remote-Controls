@@ -10,11 +10,11 @@ try:
 except ImportError:
     # 如果没有版本文件，使用默认值
     def get_version_string():
-        return "2.2.3"
+        return "未知版本"
     
     def get_version_info():
         return {
-            "version": "2.2.3",
+            "version": "未知版本",
             "app_name": "Remote Controls",
             "company": "chen6019",
             "description": "Windows 远程控制工具套件"

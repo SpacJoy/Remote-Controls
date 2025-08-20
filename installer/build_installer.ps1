@@ -21,7 +21,7 @@ if ($Version) {
     Write-Host "指定版本: $Version" -ForegroundColor Green
 } else {
     Write-Host ""
-    Write-Host "请输入版本号 (格式: X.Y.Z，如 2.3.0)" -ForegroundColor Yellow
+    Write-Host "请输入版本号 (格式: X.Y.Z，如 1.0.0)" -ForegroundColor Yellow
     Write-Host "留空使用当前版本信息" -ForegroundColor Cyan
     $InputVersion = Read-Host "版本号"
     if ($InputVersion.Trim()) {

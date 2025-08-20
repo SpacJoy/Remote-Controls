@@ -44,7 +44,7 @@ force_utf8_encoding()
 def update_version_info(version=None):
     """更新版本信息文件"""
     if version is None:
-        version = "2.2.3"  # 默认版本
+        version = "0.0.0"  # 默认版本（GitHub Actions会动态更新）
     
     # 解析版本号
     try:
@@ -199,11 +199,11 @@ if __name__ == "__main__":
         version = sys.argv[1]
     else:
         try:
-            version = input("请输入版本号 (默认 2.2.3): ").strip()
+            version = input("请输入版本号 (默认 0.0.0): ").strip()
         except UnicodeEncodeError:
-            version = input("Enter version number (default 2.2.3): ").strip()
+            version = input("Enter version number (default 0.0.0): ").strip()
         if not version:
-            version = "2.2.3"
+            version = "0.0.0"
     
     if update_version_info(version):
         try:

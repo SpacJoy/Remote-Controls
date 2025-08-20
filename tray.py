@@ -36,7 +36,7 @@ try:
     from version_info import get_version_string
     BANBEN = f"V{get_version_string()}"
 except Exception:
-    BANBEN = "V2.2.8"
+    BANBEN = "V未知版本"
 REPO_OWNER = "chen6019"
 REPO_NAME = "Remote-Controls"
 GITHUB_RELEASES_LATEST_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
@@ -212,7 +212,12 @@ def _parse_version_tuple(v: str) -> tuple:
         return tuple()
 
 def _compare_versions(a: str, b: str) -> int:
-    """比较两个版本字符串。a<b 返回 -1，a==b 返回 0，a>b 返回 1。"""
+    """比较两个版本字符串。a<b 返回 -1，a==b 返回 0，a>b 返回 1。
+    特殊处理：当a包含'未知版本'时，始终返回-1表示需要更新。"""
+    # 特殊处理：未知版本始终认为需要更新
+    if "未知版本" in a:
+        return -1
+    
     ta = list(_parse_version_tuple(a))
     tb = list(_parse_version_tuple(b))
     # 对齐长度
@@ -260,7 +265,10 @@ def on_version_click(icon=None, item=None):
             if status == "ok" and latest:
                 cmp = _compare_versions(BANBEN, latest)
                 if cmp < 0:
-                    notify(f"发现新版本 {latest}，当前 {BANBEN}。", level="info")
+                    if "未知版本" in BANBEN:
+                        notify(f"发现最新版本 {latest}，当前版本未知，建议更新。", level="info")
+                    else:
+                        notify(f"发现新版本 {latest}，当前 {BANBEN}。", level="info")
                 elif cmp == 0:
                     notify(f"已是最新版本 {BANBEN}")
                 else:
@@ -880,7 +888,10 @@ def get_menu_items():
         if status == "ok" and latest:
             cmp = _compare_versions(BANBEN, latest)
             if cmp < 0:
-                version_text = f"版本-{BANBEN}（发现新版本 {latest}）"
+                if "未知版本" in BANBEN:
+                    version_text = f"版本-{BANBEN}（发现版本 {latest}）"
+                else:
+                    version_text = f"版本-{BANBEN}（发现新版本 {latest}）"
             else:
                 version_text = f"版本-{BANBEN}（已是最新）"
         else:

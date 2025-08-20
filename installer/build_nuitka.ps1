@@ -12,7 +12,7 @@ Remote Controls 项目 Nuitka 打包脚本 (PowerShell)
   - zstandard（建议，提升一体化压缩性能）
 使用：
   - 双击根目录 build-nuitka.ps1，或执行：
-    pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_nuitka.ps1 2.2.7
+    pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_nuitka.ps1 1.0.0
 #>
 param(
   [string]$Version = ""

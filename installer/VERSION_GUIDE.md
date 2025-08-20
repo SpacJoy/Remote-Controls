@@ -27,10 +27,10 @@ Remote-Controls/
 
 ```cmd
 # 批处理版本 - 命令行指定版本
-.\build_installer_new.bat 2.3.0
+.\build_installer_new.bat 1.0.0
 
 # PowerShell版本 - 命令行指定版本
-.\build_installer_new.ps1 -Version "2.3.0"
+.\build_installer_new.ps1 -Version "1.0.0"
 ```
 
 #### 方式二：交互式输入（推荐）
@@ -38,8 +38,8 @@ Remote-Controls/
 ```cmd
 # 运行脚本，然后输入版本号
 .\build_installer_new.bat
-# 脚本会提示：请输入版本号 (格式: X.Y.Z，如 2.3.0)
-# 版本号: 2.3.0
+# 脚本会提示：请输入版本号 (格式: X.Y.Z，如 1.0.0)
+# 版本号: 1.0.0
 
 # PowerShell版本
 .\build_installer_new.ps1
@@ -57,8 +57,8 @@ Remote-Controls/
 ### 2. 手动更新版本
 
 ```cmd
-# 更新版本到 2.3.0
-python update_version.py 2.3.0
+# 更新版本到 1.0.0
+python update_version.py 1.0.0
 
 # 交互式输入版本
 python update_version.py
@@ -73,7 +73,7 @@ try:
     from version_info import get_version_string, get_version_info, get_program_info
 
     # 获取版本字符串
-    version = get_version_string()  # "2.3.0"
+    version = get_version_string()  # "1.0.0"
 
     # 获取完整版本信息
     info = get_version_info()
@@ -86,7 +86,7 @@ try:
 except ImportError:
     # 处理版本文件不存在的情况
     def get_version_string():
-        return "2.2.3"
+        return "未知版本"
 ```
 
 #### 托盘程序中使用
@@ -127,13 +127,13 @@ GitHub: {program_info['github_url']}
 
 支持的版本号格式：
 
--   `X.Y.Z` (如 2.3.0)
--   `X.Y.Z.B` (如 2.3.0.1，包含构建号)
+-   `X.Y.Z` (如 1.0.0)
+-   `X.Y.Z.B` (如 1.0.0.1，包含构建号)
 
 示例：
 
--   `2.3.0` → VERSION_MAJOR=2, VERSION_MINOR=3, VERSION_PATCH=0, VERSION_BUILD=0
--   `2.3.0.5` → VERSION_MAJOR=2, VERSION_MINOR=3, VERSION_PATCH=0, VERSION_BUILD=5
+-   `1.0.0` → VERSION_MAJOR=1, VERSION_MINOR=0, VERSION_PATCH=0, VERSION_BUILD=0
+-   `1.0.0.5` → VERSION_MAJOR=1, VERSION_MINOR=0, VERSION_PATCH=0, VERSION_BUILD=5
 
 ## 打包流程
 
@@ -182,7 +182,7 @@ GitHub: {program_info['github_url']}
         from version_info import get_version_string
         VERSION = get_version_string()
     except ImportError:
-        VERSION = "2.2.3"  # 默认版本
+        VERSION = "未知版本"  # 默认版本
     ```
 
 3. 更新程序中硬编码的版本号为动态获取
