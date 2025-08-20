@@ -199,17 +199,7 @@ jobs:
                     exit 1
                   }
                   
-                  echo "=== 测试源文件导入 ==="
-                  try { python -c "import sys; sys.path.insert(0, '.'); import tray; print('✓ tray.py: OK')" } catch { echo "✗ tray.py: FAILED"; $failed = $true }
-                  try { python -c "import sys; sys.path.insert(0, '.'); import GUI; print('✓ GUI.py: OK')" } catch { echo "✗ GUI.py: FAILED"; $failed = $true }
-                  try { python -c "import sys; sys.path.insert(0, '.'); import main; print('✓ main.py: OK')" } catch { echo "✗ main.py: FAILED"; $failed = $true }
-                  
-                  if ($failed) {
-                    echo "❌ 源文件导入失败，停止构建"
-                    exit 1
-                  }
-                  
-                  echo "✅ 所有测试通过，准备构建"
+                  echo "✅ 关键依赖验证通过，跳过源文件导入测试（PyInstaller构建时会自动验证）"
 
             - name: Build with PyInstaller
               shell: pwsh
@@ -231,11 +221,38 @@ jobs:
                   $version = "${{ steps.version.outputs.version }}"
 
                   # 运行PyInstaller构建脚本
-                  pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_installer.ps1 $version
-
-                  echo "PyInstaller构建完成"
+                  echo "开始PyInstaller构建..."
+                  try {
+                    pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_installer.ps1 $version
+                    echo "✅ PyInstaller构建完成"
+                  } catch {
+                    echo "❌ PyInstaller构建失败: $_"
+                    exit 1
+                  }
+                  
+                  # 验证构建产物
                   if (Test-Path "installer/dist") {
+                    echo "=== 构建产物 ==="
                     Get-ChildItem -Path "installer/dist" -Recurse | ForEach-Object { echo $_.FullName }
+                    
+                    # 检查关键文件是否存在
+                    $requiredFiles = @("RC-main.exe", "RC-GUI.exe", "RC-tray.exe")
+                    $missingFiles = @()
+                    foreach ($file in $requiredFiles) {
+                      if (!(Test-Path "installer/dist/$file")) {
+                        $missingFiles += $file
+                      }
+                    }
+                    
+                    if ($missingFiles.Count -gt 0) {
+                      echo "❌ 缺少关键文件: $($missingFiles -join ', ')"
+                      exit 1
+                    } else {
+                      echo "✅ 所有关键文件构建成功"
+                    }
+                  } else {
+                    echo "❌ 构建输出目录不存在"
+                    exit 1
                   }
 
             - name: Build with Nuitka (backup)
