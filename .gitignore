@@ -14,7 +14,7 @@ installer/dist-nuitka
 *.log
 config.json
 *.back
-up.md
+# up.md
 test.*
 /__pycache__
 .gitignore

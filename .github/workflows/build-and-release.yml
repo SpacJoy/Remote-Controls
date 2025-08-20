@@ -1,0 +1,334 @@
+# @format
+
+name: Build and Release Remote Controls
+
+on:
+    # 当推送标签时触发（如 V2.2.8）
+    push:
+        tags:
+            - "V*"
+
+    # 允许手动触发工作流（用于测试）
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "版本号（如：2.2.8）"
+                required: true
+                default: "2.2.8"
+                type: string
+            update_version_files:
+                description: "是否更新版本文件"
+                required: false
+                default: true
+                type: boolean
+
+env:
+    PYTHON_VERSION: "3.12.10"
+
+jobs:
+    build-and-release:
+        runs-on: windows-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Extract version from tag or input
+              id: version
+              shell: pwsh
+              run: |
+                  if ("${{ github.event_name }}" -eq "push") {
+                    # 从标签提取版本号（去掉 V 前缀）
+                    $tagName = "${{ github.ref_name }}"
+                    $version = $tagName -replace '^V', ''
+                    echo "version=$version" >> $env:GITHUB_OUTPUT
+                    echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
+                    echo "is_tag_push=true" >> $env:GITHUB_OUTPUT
+                  } else {
+                    # 手动触发使用输入的版本号
+                    $version = "${{ github.event.inputs.version }}"
+                    $tagName = "V$version"
+                    echo "version=$version" >> $env:GITHUB_OUTPUT
+                    echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
+                    echo "is_tag_push=false" >> $env:GITHUB_OUTPUT
+                  }
+                  echo "构建版本: $version"
+                  echo "标签名称: $tagName"
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: ${{ env.PYTHON_VERSION }}
+                  cache: "pip"
+
+            - name: Create virtual environment
+              shell: pwsh
+              run: |
+                  python -m venv .venv
+                  .\.venv\Scripts\Activate.ps1
+                  python -m pip install --upgrade pip setuptools wheel
+
+            - name: Install dependencies
+              shell: pwsh
+              run: |
+                  .\.venv\Scripts\Activate.ps1
+                  pip install -r requirements.txt
+                  pip install pyinstaller>=6.13.0
+                  pip install nuitka>=2.7.12 zstandard>=0.24.0
+
+            - name: Update version files
+              if: ${{ github.event.inputs.update_version_files == 'true' || github.event_name == 'push' }}
+              shell: pwsh
+              run: |
+                  .\.venv\Scripts\Activate.ps1
+                  $version = "${{ steps.version.outputs.version }}"
+                  python installer/update_version.py $version
+                  echo "版本文件已更新到: $version"
+
+            - name: Build with PyInstaller
+              shell: pwsh
+              run: |
+                  .\.venv\Scripts\Activate.ps1
+                  $version = "${{ steps.version.outputs.version }}"
+
+                  # 运行PyInstaller构建脚本
+                  pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_installer.ps1 $version
+
+                  echo "PyInstaller构建完成"
+                  if (Test-Path "installer/dist") {
+                    Get-ChildItem -Path "installer/dist" -Recurse | ForEach-Object { echo $_.FullName }
+                  }
+
+            - name: Build with Nuitka (backup)
+              shell: pwsh
+              run: |
+                  .\.venv\Scripts\Activate.ps1
+                  $version = "${{ steps.version.outputs.version }}"
+
+                  # 运行Nuitka构建脚本（作为备用）
+                  try {
+                    pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_nuitka.ps1 $version
+                    echo "Nuitka构建完成"
+                  } catch {
+                    echo "Nuitka构建失败，继续使用PyInstaller版本: $_"
+                  }
+
+            - name: List build artifacts
+              shell: pwsh
+              run: |
+                  echo "=== 构建产物列表 ==="
+                  if (Test-Path "installer/dist") {
+                    echo "EXE文件:"
+                    Get-ChildItem -Path "installer/dist" -Filter "*.exe" | ForEach-Object { 
+                      echo "  $($_.Name) ($([math]::Round($_.Length/1MB, 2)) MB)"
+                    }
+                    
+                    echo "安装包:"
+                    Get-ChildItem -Path "installer/dist/installer" -Filter "*.exe" -ErrorAction SilentlyContinue | ForEach-Object {
+                      echo "  $($_.Name) ($([math]::Round($_.Length/1MB, 2)) MB)"
+                    }
+                  }
+
+            - name: Upload build artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: remote-controls-v${{ steps.version.outputs.version }}
+                  path: |
+                      installer/dist/*.exe
+                      installer/dist/installer/*.exe
+                  retention-days: 90
+
+            - name: Generate changelog
+              id: changelog
+              shell: pwsh
+              run: |
+                  $version = "${{ steps.version.outputs.version }}"
+                  $tagName = "${{ steps.version.outputs.tag_name }}"
+
+                  # 获取上一个标签
+                  $previousTag = ""
+                  try {
+                    $tags = git tag --sort=-version:refname | Select-Object -First 2
+                    if ($tags.Count -gt 1) {
+                      $previousTag = $tags[1]
+                    } else {
+                      $previousTag = git rev-list --max-parents=0 HEAD
+                    }
+                  } catch {
+                    $previousTag = "HEAD~10"
+                  }
+
+                  echo "当前标签: $tagName"
+                  echo "上一个标签: $previousTag"
+
+                  # 生成commit日志
+                  $commitLog = ""
+                  if ($previousTag -ne "") {
+                    $commits = git log --pretty=format:"- %s (%h)" "$previousTag..HEAD" | Where-Object { $_ -ne "" }
+                    if ($commits) {
+                      $commitLog = $commits -join "`n"
+                    }
+                  }
+
+                  # 如果没有commit变更，添加默认说明
+                  if (-not $commitLog) {
+                    $commitLog = "- 版本发布和构建优化"
+                  }
+
+                  # 生成更新日志内容
+                  $changelog = @"
+                  ## Remote Controls $tagName
+
+                  **自动构建发布** - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC
+
+                  ### 📦 构建信息
+                  - **Python版本**: ${{ env.PYTHON_VERSION }}
+                  - **构建环境**: Windows (GitHub Actions)
+                  - **构建ID**: [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+                  - **提交SHA**: [\`${{ github.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+
+                  ### 🎯 包含文件
+                  - \`RC-main.exe\` - 主程序
+                  - \`RC-GUI.exe\` - 图形界面程序  
+                  - \`RC-tray.exe\` - 系统托盘程序
+                  - \`Remote-Controls-Installer-$version.exe\` - 完整安装包
+
+                  ### 📋 安装说明
+                  1. **推荐方式**: 下载并运行安装包 \`Remote-Controls-Installer-$version.exe\`
+                  2. **手动方式**: 下载单独的EXE文件放到任意目录使用
+                  3. **系统要求**: Windows 10/11，建议使用管理员权限运行
+
+                  ### 🔄 更新内容
+                  $commitLog
+
+                  ### 📚 相关链接
+                  - [📖 README.md](https://github.com/${{ github.repository }}/blob/main/README.md) - 详细使用说明
+                  - [📝 更新日志](https://github.com/${{ github.repository }}/blob/main/up.md) - 完整版本历史
+                  - [🐛 问题反馈](https://github.com/${{ github.repository }}/issues) - Bug报告和功能建议
+                  - [💬 讨论区](https://github.com/${{ github.repository }}/discussions) - 社区讨论
+
+                  ### ⚠️ 注意事项
+                  - 首次使用请运行GUI程序生成配置文件
+                  - 托盘程序需要管理员权限才能正常控制系统
+                  - 如需开机自启，建议使用安装包自带的计划任务功能
+
+                  ---
+
+                  **完整的技术文档和使用教程请查看项目主页。**
+                  "@
+
+                  # 将内容写入GitHub输出（处理多行内容）
+                  $delimiter = "EOF$(Get-Random)"
+                  echo "changelog<<$delimiter" >> $env:GITHUB_OUTPUT
+                  echo $changelog >> $env:GITHUB_OUTPUT
+                  echo $delimiter >> $env:GITHUB_OUTPUT
+
+                  echo "更新日志生成完成"
+
+            # 可选：使用第三方Action生成更专业的更新日志
+            - name: Generate Release Notes with GitHub API
+              if: false # 设置为 true 启用此功能
+              id: release_notes
+              uses: mikepenz/release-changelog-builder-action@v4
+              with:
+                  configuration: |
+                      {
+                        "categories": [
+                          {
+                            "title": "## 🚀 新功能",
+                            "labels": ["feature", "enhancement"]
+                          },
+                          {
+                            "title": "## 🐛 Bug修复", 
+                            "labels": ["bug", "fix"]
+                          },
+                          {
+                            "title": "## 📖 文档更新",
+                            "labels": ["documentation", "docs"]
+                          },
+                          {
+                            "title": "## 🔧 其他更新",
+                            "labels": []
+                          }
+                        ],
+                        "ignore_labels": ["ignore"],
+                        "sort": "ASC",
+                        "template": "#{{CHANGELOG}}\n\n**完整更新**: #{{UNCATEGORIZED}}"
+                      }
+                  fromTag: ${{ github.event.before }}
+                  toTag: ${{ github.sha }}
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Create Release
+              if: ${{ steps.version.outputs.is_tag_push == 'true' || github.event_name == 'workflow_dispatch' }}
+              id: create_release
+              uses: actions/create-release@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  tag_name: ${{ steps.version.outputs.tag_name }}
+                  release_name: Remote Controls ${{ steps.version.outputs.tag_name }}
+                  body: ${{ steps.changelog.outputs.changelog }}
+                  draft: false
+                  prerelease: false
+
+            - name: Upload PyInstaller EXE files
+              if: ${{ steps.create_release.outcome == 'success' }}
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: installer/dist/RC-main.exe
+                  asset_name: RC-main.exe
+                  asset_content_type: application/octet-stream
+
+            - name: Upload GUI EXE
+              if: ${{ steps.create_release.outcome == 'success' }}
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: installer/dist/RC-GUI.exe
+                  asset_name: RC-GUI.exe
+                  asset_content_type: application/octet-stream
+
+            - name: Upload Tray EXE
+              if: ${{ steps.create_release.outcome == 'success' }}
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: installer/dist/RC-tray.exe
+                  asset_name: RC-tray.exe
+                  asset_content_type: application/octet-stream
+
+            - name: Upload Installer
+              if: ${{ steps.create_release.outcome == 'success' }}
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: installer/dist/installer/Remote-Controls-Installer-${{ steps.version.outputs.version }}.exe
+                  asset_name: Remote-Controls-Installer-${{ steps.version.outputs.version }}.exe
+                  asset_content_type: application/octet-stream
+
+            - name: Build Summary
+              shell: pwsh
+              run: |
+                  echo "=== 构建总结 ==="
+                  echo "版本: ${{ steps.version.outputs.version }}"
+                  echo "标签: ${{ steps.version.outputs.tag_name }}"
+                  echo "Python: ${{ env.PYTHON_VERSION }}"
+                  echo "触发方式: ${{ github.event_name }}"
+                  if ("${{ github.event_name }}" -eq "push") {
+                    echo "标签推送: ${{ github.ref_name }}"
+                  } else {
+                    echo "手动触发: ${{ github.event.inputs.version }}"
+                  }
+                  echo "构建完成 ✅"
