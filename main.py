@@ -1905,13 +1905,16 @@ if is_script_mode:
         print(f"已清空日志文件: {log_path}")
         
         # 记录程序启动信息
-        logging.info("=" * 50)
-        logging.info("程序启动")
-        logging.info(f"当前工作目录: {os.getcwd()}")
-        logging.info(f"日志文件路径: {log_path}")
-        logging.info(f"配置文件路径: {config_path}")
+        logging.info("="*50)
+        logging.info("远程控制主程序启动")
+        logging.info(f"程序路径: {os.path.abspath(__file__)}")
+        logging.info(f"工作目录: {os.getcwd()}")
+        logging.info(f"运行模式: {'脚本模式' if is_script_mode else 'EXE模式'}")
         logging.info(f"Python版本: {sys.version}")
-        logging.info("=" * 50)
+        logging.info(f"系统信息: {sys.platform}")
+        logging.info(f"配置文件: {config_path}")
+        logging.info(f"日志文件: {log_path}")
+        logging.info("="*50)
     except Exception as e:
         logging.error(f"清空日志文件失败: {e}")
         print(f"清空日志文件失败: {e}")
@@ -1926,13 +1929,16 @@ try:
         logging.info(f"测试模式启用，已清空日志文件: {log_path}")
         print(f"测试模式启用，已清空日志文件: {log_path}")
         # 记录程序启动信息
-        logging.info("=" * 50)
-        logging.info("程序启动")
-        logging.info(f"当前工作目录: {os.getcwd()}")
-        logging.info(f"日志文件路径: {log_path}")
-        logging.info(f"配置文件路径: {config_path}")
+        logging.info("="*50)
+        logging.info("远程控制主程序启动（测试模式）")
+        logging.info(f"程序路径: {os.path.abspath(__file__)}")
+        logging.info(f"工作目录: {os.getcwd()}")
+        logging.info(f"运行模式: {'脚本模式' if is_script_mode else 'EXE模式'}")
         logging.info(f"Python版本: {sys.version}")
-        logging.info("=" * 50)
+        logging.info(f"系统信息: {sys.platform}")
+        logging.info(f"配置文件: {config_path}")
+        logging.info(f"日志文件: {log_path}")
+        logging.info("="*50)
 except Exception as e:
     logging.error(f"测试模式清空日志失败: {e}")
 
@@ -1945,6 +1951,19 @@ try:
 except Exception as e:
     logging.error(f"检查管理员权限时出错: {e}")
     IS_ADMIN = False
+
+# 记录程序正常启动信息（如果之前没有记录的话）
+if not is_script_mode and config.get("test") != 1:
+    logging.info("="*50)
+    logging.info("远程控制主程序启动")
+    logging.info(f"程序路径: {os.path.abspath(__file__)}")
+    logging.info(f"工作目录: {os.getcwd()}")
+    logging.info(f"运行模式: {'脚本模式' if is_script_mode else 'EXE模式'}")
+    logging.info(f"Python版本: {sys.version}")
+    logging.info(f"系统信息: {sys.platform}")
+    logging.info(f"配置文件: {config_path}")
+    logging.info(f"日志文件: {log_path}")
+    logging.info("="*50)
     
 
 if config.get("test") == 1:
