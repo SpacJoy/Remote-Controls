@@ -387,7 +387,7 @@ jobs:
 
                   ### 📚 相关链接
                   - [📖 README.md](https://github.com/${{ github.repository }}/blob/main/README.md) - 详细使用说明
-                  - [📝 更新日志](https://github.com/${{ github.repository }}/blob/main/up.md) - 完整版本历史
+                  - [📝 更新日志](https://github.com/${{ github.repository }}/blob/main/md/up.md) - 完整版本历史
                   - [🐛 问题反馈](https://github.com/${{ github.repository }}/issues) - Bug报告和功能建议
                   - [💬 讨论区](https://github.com/${{ github.repository }}/discussions) - 社区讨论
 
