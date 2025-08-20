@@ -345,10 +345,33 @@ jobs:
                   echo "当前标签: $tagName"
                   echo "上一个标签: $previousTag"
 
+                  # 检查是否为同版本重复构建
+                  $isRepeatVersion = $false
+                  $existingRelease = ""
+                  try {
+                    # 检查是否已存在相同标签的Release
+                    $releaseInfo = gh release view $tagName --json body,createdAt 2>$null
+                    if ($releaseInfo) {
+                      $isRepeatVersion = $true
+                      $existingRelease = ($releaseInfo | ConvertFrom-Json).body
+                      echo "检测到重复版本: $tagName，将合并更新日志"
+                    }
+                  } catch {
+                    echo "未找到现有Release，创建新的更新日志"
+                  }
+
                   # 生成commit日志
                   $commitLog = ""
                   if ($previousTag -ne "") {
-                    $commits = git log --pretty=format:"- %s (%h)" "$previousTag..HEAD" | Where-Object { $_ -ne "" }
+                    if ($isRepeatVersion) {
+                      # 重复版本：获取更广泛的commit历史
+                      echo "重复版本：获取扩展的commit历史"
+                      $commits = git log --pretty=format:"- %s (%h)" "HEAD~20..HEAD" | Where-Object { $_ -ne "" }
+                    } else {
+                      # 新版本：获取与上一个标签的差异
+                      $commits = git log --pretty=format:"- %s (%h)" "$previousTag..HEAD" | Where-Object { $_ -ne "" }
+                    }
+                    
                     if ($commits) {
                       $commitLog = $commits -join "`n"
                     }
@@ -356,14 +379,37 @@ jobs:
 
                   # 如果没有commit变更，添加默认说明
                   if (-not $commitLog) {
-                    $commitLog = "- 版本发布和构建优化"
+                    if ($isRepeatVersion) {
+                      $commitLog = "- 重新构建和发布优化`n- 修复构建流程和依赖问题"
+                    } else {
+                      $commitLog = "- 版本发布和构建优化"
+                    }
+                  }
+
+                  # 处理重复版本的更新日志合并
+                  $versionNote = ""
+                  if ($isRepeatVersion) {
+                    $versionNote = "**重新构建发布** - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC`n`n*此版本包含了之前发布的所有内容，并修复了构建流程问题。*`n"
+                    
+                    # 尝试从现有Release中提取之前的更新内容
+                    if ($existingRelease -and $existingRelease.Contains("### 🔄 更新内容")) {
+                      $previousContent = $existingRelease -split "### 🔄 更新内容"
+                      if ($previousContent.Length -gt 1) {
+                        $previousUpdates = ($previousContent[1] -split "### 📚 相关链接")[0].Trim()
+                        if ($previousUpdates) {
+                          $commitLog = "**本次重新构建的更新：**`n$commitLog`n`n**之前版本的更新内容：**`n$previousUpdates"
+                        }
+                      }
+                    }
+                  } else {
+                    $versionNote = "**自动构建发布** - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC"
                   }
 
                   # 生成更新日志内容
                   $changelog = @"
                   ## Remote Controls $tagName
 
-                  **自动构建发布** - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC
+                  $versionNote
 
                   ### 📦 构建信息
                   - **Python版本**: ${{ env.PYTHON_VERSION }}
