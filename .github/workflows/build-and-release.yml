@@ -24,6 +24,9 @@ on:
 
 env:
     PYTHON_VERSION: "3.12.10"
+    # 设置UTF-8编码以正确处理中文字符
+    PYTHONIOENCODING: "utf-8"
+    PYTHONUTF8: "1"
 
 jobs:
     build-and-release:
@@ -38,7 +41,14 @@ jobs:
             - name: Extract version from tag or input
               id: version
               shell: pwsh
+              env:
+                  PYTHONIOENCODING: utf-8
+                  PYTHONUTF8: 1
               run: |
+                  # 设置PowerShell输出编码为UTF-8
+                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+                  
                   if ("${{ github.event_name }}" -eq "push") {
                     # 从标签提取版本号（去掉 V 前缀）
                     $tagName = "${{ github.ref_name }}"
@@ -65,14 +75,28 @@ jobs:
 
             - name: Create virtual environment
               shell: pwsh
+              env:
+                  PYTHONIOENCODING: utf-8
+                  PYTHONUTF8: 1
               run: |
+                  # 设置PowerShell输出编码为UTF-8
+                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+                  
                   python -m venv .venv
                   .\.venv\Scripts\Activate.ps1
                   python -m pip install --upgrade pip setuptools wheel
 
             - name: Install dependencies
               shell: pwsh
+              env:
+                  PYTHONIOENCODING: utf-8
+                  PYTHONUTF8: 1
               run: |
+                  # 设置PowerShell输出编码为UTF-8
+                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+                  
                   .\.venv\Scripts\Activate.ps1
                   pip install -r requirements.txt
                   pip install pyinstaller>=6.13.0
@@ -81,7 +105,14 @@ jobs:
             - name: Update version files
               if: ${{ github.event.inputs.update_version_files == 'true' || github.event_name == 'push' }}
               shell: pwsh
+              env:
+                  PYTHONIOENCODING: utf-8
+                  PYTHONUTF8: 1
               run: |
+                  # 设置PowerShell输出编码为UTF-8
+                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+                  
                   .\.venv\Scripts\Activate.ps1
                   $version = "${{ steps.version.outputs.version }}"
                   python installer/update_version.py $version
@@ -89,7 +120,14 @@ jobs:
 
             - name: Build with PyInstaller
               shell: pwsh
+              env:
+                  PYTHONIOENCODING: utf-8
+                  PYTHONUTF8: 1
               run: |
+                  # 设置PowerShell输出编码为UTF-8
+                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+                  
                   .\.venv\Scripts\Activate.ps1
                   $version = "${{ steps.version.outputs.version }}"
 
@@ -103,7 +141,14 @@ jobs:
 
             - name: Build with Nuitka (backup)
               shell: pwsh
+              env:
+                  PYTHONIOENCODING: utf-8
+                  PYTHONUTF8: 1
               run: |
+                  # 设置PowerShell输出编码为UTF-8
+                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+                  
                   .\.venv\Scripts\Activate.ps1
                   $version = "${{ steps.version.outputs.version }}"
 
@@ -117,7 +162,14 @@ jobs:
 
             - name: List build artifacts
               shell: pwsh
+              env:
+                  PYTHONIOENCODING: utf-8
+                  PYTHONUTF8: 1
               run: |
+                  # 设置PowerShell输出编码为UTF-8
+                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+                  
                   echo "=== 构建产物列表 ==="
                   if (Test-Path "installer/dist") {
                     echo "EXE文件:"
@@ -143,7 +195,14 @@ jobs:
             - name: Generate changelog
               id: changelog
               shell: pwsh
+              env:
+                  PYTHONIOENCODING: utf-8
+                  PYTHONUTF8: 1
               run: |
+                  # 设置PowerShell输出编码为UTF-8
+                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+                  
                   $version = "${{ steps.version.outputs.version }}"
                   $tagName = "${{ steps.version.outputs.tag_name }}"
 
@@ -320,7 +379,14 @@ jobs:
 
             - name: Build Summary
               shell: pwsh
+              env:
+                  PYTHONIOENCODING: utf-8
+                  PYTHONUTF8: 1
               run: |
+                  # 设置PowerShell输出编码为UTF-8
+                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+                  
                   echo "=== 构建总结 ==="
                   echo "版本: ${{ steps.version.outputs.version }}"
                   echo "标签: ${{ steps.version.outputs.tag_name }}"
