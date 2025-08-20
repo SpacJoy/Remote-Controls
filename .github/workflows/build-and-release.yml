@@ -106,6 +106,14 @@ jobs:
                   pip install -r requirements.txt
                   pip install pyinstaller>=6.13.0
                   # pip install nuitka>=2.7.12 zstandard>=0.24.0  # 已禁用Nuitka构建
+                  
+                  # 验证关键依赖是否正确安装
+                  echo "=== 验证依赖安装 ==="
+                  python -c "import pystray; print('pystray version:', pystray.__version__)"
+                  python -c "import tkinter; print('tkinter: OK')"
+                  python -c "import requests; print('requests: OK')"
+                  python -c "import psutil; print('psutil: OK')"
+                  pip list | Select-String -Pattern "pystray|tkinter|requests|psutil|Pillow"
 
             - name: Update version files
               if: ${{ github.event.inputs.update_version_files == 'true' || github.event_name == 'push' }}
@@ -132,6 +140,28 @@ jobs:
                   
                   python installer/update_version.py $version
                   echo "版本文件已更新到: $version"
+
+            - name: Test source files
+              shell: pwsh
+              env:
+                  PYTHONIOENCODING: utf-8
+                  PYTHONUTF8: 1
+              run: |
+                  # 设置PowerShell输出编码为UTF-8
+                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+                  
+                  # 显式设置Python环境变量
+                  $env:PYTHONIOENCODING = "utf-8"
+                  $env:PYTHONUTF8 = "1"
+                  
+                  .\.venv\Scripts\Activate.ps1
+                  
+                  echo "=== 测试源文件导入 ==="
+                  # 测试主要模块能否正常导入
+                  python -c "import sys; sys.path.insert(0, '.'); import tray; print('tray.py: OK')" || echo "tray.py: FAILED"
+                  python -c "import sys; sys.path.insert(0, '.'); import GUI; print('GUI.py: OK')" || echo "GUI.py: FAILED"  
+                  python -c "import sys; sys.path.insert(0, '.'); import main; print('main.py: OK')" || echo "main.py: FAILED"
 
             - name: Build with PyInstaller
               shell: pwsh
