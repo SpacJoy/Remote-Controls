@@ -10,11 +10,36 @@ import os
 import re
 from datetime import datetime
 
-# 设置标准输出编码为UTF-8，避免在Windows环境下中文输出错误
-if sys.platform == "win32":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+# 强制设置UTF-8编码，避免在Windows环境下中文输出错误
+def force_utf8_encoding():
+    """强制设置UTF-8编码"""
+    import locale
+    
+    # 设置环境变量
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    os.environ['PYTHONUTF8'] = '1'
+    
+    # 设置标准输出编码
+    if sys.platform == "win32":
+        try:
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+        except (AttributeError, OSError):
+            # 如果无法设置，使用错误替换模式
+            pass
+    
+    # 尝试设置控制台编码
+    try:
+        # Python 3.7+ 支持 reconfigure 方法
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # type: ignore
+            sys.stderr.reconfigure(encoding='utf-8', errors='replace')  # type: ignore
+    except (AttributeError, OSError):
+        pass
+
+# 在导入后立即执行编码设置
+force_utf8_encoding()
 
 def update_version_info(version=None):
     """更新版本信息文件"""
@@ -31,8 +56,12 @@ def update_version_info(version=None):
         
         major, minor, patch, build = int(major), int(minor), int(patch), int(build)
     except (ValueError, IndexError):
-        print(f"错误：版本号格式不正确: {version}")
-        print("正确格式: X.Y.Z 或 X.Y.Z.B")
+        try:
+            print(f"错误：版本号格式不正确: {version}")
+            print("正确格式: X.Y.Z 或 X.Y.Z.B")
+        except UnicodeEncodeError:
+            print(f"Error: Invalid version format: {version}")
+            print("Correct format: X.Y.Z or X.Y.Z.B")
         return False
     
     # 生成版本文件内容
@@ -153,21 +182,33 @@ if __name__ == "__main__":
             # 忽略回退同步失败，不影响主流程
             pass
             
-        print(f"版本信息已更新: {version}")
+        try:
+            print(f"版本信息已更新: {version}")
+        except UnicodeEncodeError:
+            print(f"Version info updated: {version}")
         return True
     except Exception as e:
-        print(f"写入版本文件失败: {e}")
+        try:
+            print(f"写入版本文件失败: {e}")
+        except UnicodeEncodeError:
+            print(f"Failed to write version file: {e}")
         return False
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         version = sys.argv[1]
     else:
-        version = input("请输入版本号 (默认 2.2.3): ").strip()
+        try:
+            version = input("请输入版本号 (默认 2.2.3): ").strip()
+        except UnicodeEncodeError:
+            version = input("Enter version number (default 2.2.3): ").strip()
         if not version:
             version = "2.2.3"
     
     if update_version_info(version):
-        print("版本信息生成完成！")
+        try:
+            print("版本信息生成完成！")
+        except UnicodeEncodeError:
+            print("Version info generation completed!")
     else:
         sys.exit(1)
