@@ -31,6 +31,11 @@ env:
 jobs:
     build-and-release:
         runs-on: windows-latest
+        permissions:
+            contents: write
+            actions: read
+            issues: read
+            pull-requests: read
 
         steps:
             - name: Checkout code
@@ -346,59 +351,20 @@ jobs:
             - name: Create Release
               if: ${{ steps.version.outputs.is_tag_push == 'true' || github.event_name == 'workflow_dispatch' }}
               id: create_release
-              uses: actions/create-release@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ steps.version.outputs.tag_name }}
-                  release_name: Remote Controls ${{ steps.version.outputs.tag_name }}
+                  name: Remote Controls ${{ steps.version.outputs.tag_name }}
                   body: ${{ steps.changelog.outputs.changelog }}
                   draft: false
                   prerelease: false
-
-            - name: Upload PyInstaller EXE files
-              if: ${{ steps.create_release.outcome == 'success' }}
-              uses: actions/upload-release-asset@v1
+                  files: |
+                      installer/dist/RC-main.exe
+                      installer/dist/RC-GUI.exe
+                      installer/dist/RC-tray.exe
+                      installer/dist/installer/Remote-Controls-Installer-${{ steps.version.outputs.version }}.exe
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ steps.create_release.outputs.upload_url }}
-                  asset_path: installer/dist/RC-main.exe
-                  asset_name: RC-main.exe
-                  asset_content_type: application/octet-stream
-
-            - name: Upload GUI EXE
-              if: ${{ steps.create_release.outcome == 'success' }}
-              uses: actions/upload-release-asset@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ steps.create_release.outputs.upload_url }}
-                  asset_path: installer/dist/RC-GUI.exe
-                  asset_name: RC-GUI.exe
-                  asset_content_type: application/octet-stream
-
-            - name: Upload Tray EXE
-              if: ${{ steps.create_release.outcome == 'success' }}
-              uses: actions/upload-release-asset@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ steps.create_release.outputs.upload_url }}
-                  asset_path: installer/dist/RC-tray.exe
-                  asset_name: RC-tray.exe
-                  asset_content_type: application/octet-stream
-
-            - name: Upload Installer
-              if: ${{ steps.create_release.outcome == 'success' }}
-              uses: actions/upload-release-asset@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ steps.create_release.outputs.upload_url }}
-                  asset_path: installer/dist/installer/Remote-Controls-Installer-${{ steps.version.outputs.version }}.exe
-                  asset_name: Remote-Controls-Installer-${{ steps.version.outputs.version }}.exe
-                  asset_content_type: application/octet-stream
 
             - name: Build Summary
               shell: pwsh
