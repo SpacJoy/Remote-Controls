@@ -55,7 +55,7 @@ jobs:
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-                  
+
                   if ("${{ github.event_name }}" -eq "push") {
                     # 从标签提取版本号（去掉 V 前缀）
                     $tagName = "${{ github.ref_name }}"
@@ -89,7 +89,7 @@ jobs:
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-                  
+
                   python -m venv .venv
                   .\.venv\Scripts\Activate.ps1
                   python -m pip install --upgrade pip setuptools wheel
@@ -103,16 +103,16 @@ jobs:
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-                  
+
                   .\.venv\Scripts\Activate.ps1
-                  
+
                   # 强制重新安装所有依赖
                   pip install --upgrade pip setuptools wheel
-                  
+
                   echo "=== 安装主要依赖 ==="
                   # 首先尝试从requirements.txt安装
                   pip install -r requirements.txt --force-reinstall
-                  
+
                   # 如果requirements.txt安装失败，手动安装关键依赖
                   echo "=== 确保关键依赖已安装 ==="
                   pip install paho-mqtt>=2.1.0 --upgrade
@@ -125,10 +125,10 @@ jobs:
                   pip install wmi>=1.5.1 --upgrade
                   pip install comtypes>=1.4.10 --upgrade
                   pip install pycaw>=20240210 --upgrade
-                  
+
                   pip install pyinstaller>=6.13.0
                   # pip install nuitka>=2.7.12 zstandard>=0.24.0  # 已禁用Nuitka构建
-                  
+
                   # 验证关键依赖是否正确安装
                   echo "=== 验证依赖安装 ==="
                   python -c "import pystray; print('pystray version:', pystray.__version__)"
@@ -137,7 +137,7 @@ jobs:
                   python -c "import tkinter; print('tkinter: OK')"
                   python -c "import psutil; print('psutil: OK')"
                   python -c "import PIL; print('Pillow: OK')"
-                  
+
                   echo "=== 已安装的包 ==="
                   pip list | Select-String -Pattern "pystray|paho|pywin32|pillow|psutil|win11toast"
 
@@ -153,17 +153,17 @@ jobs:
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-                  
+
                   # 显式设置Python环境变量
                   $env:PYTHONIOENCODING = "utf-8"
                   $env:PYTHONUTF8 = "1"
-                  
+
                   .\.venv\Scripts\Activate.ps1
                   $version = "${{ steps.version.outputs.version }}"
-                  
+
                   # 执行前再次确认编码设置
                   python -c "import sys; print('Python encoding:', sys.stdout.encoding)"
-                  
+
                   python installer/update_version.py $version
                   echo "版本文件已更新到: $version"
 
@@ -176,31 +176,31 @@ jobs:
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-                  
+
                   # 显式设置Python环境变量
                   $env:PYTHONIOENCODING = "utf-8"
                   $env:PYTHONUTF8 = "1"
-                  
+
                   .\.venv\Scripts\Activate.ps1
-                  
+
                   echo "=== 验证Python环境 ==="
                   python --version
                   python -c "import sys; print('Python path:', sys.executable)"
-                  
+
                   echo "=== 验证关键依赖 ==="
                   $failed = $false
-                  
+
                   try { python -c "import pystray; print('✓ pystray: OK')" } catch { echo "✗ pystray: MISSING"; $failed = $true }
                   try { python -c "import paho.mqtt.client as mqtt; print('✓ paho-mqtt: OK')" } catch { echo "✗ paho-mqtt: MISSING"; $failed = $true }
                   try { python -c "import win32com.client; print('✓ pywin32: OK')" } catch { echo "✗ pywin32: MISSING"; $failed = $true }
                   try { python -c "import psutil; print('✓ psutil: OK')" } catch { echo "✗ psutil: MISSING"; $failed = $true }
                   try { python -c "import PIL; print('✓ Pillow: OK')" } catch { echo "✗ Pillow: MISSING"; $failed = $true }
-                  
+
                   if ($failed) {
                     echo "❌ 关键依赖缺失，停止构建"
                     exit 1
                   }
-                  
+
                   echo "✅ 关键依赖验证通过，跳过源文件导入测试（PyInstaller构建时会自动验证）"
 
             - name: Build with PyInstaller
@@ -214,11 +214,11 @@ jobs:
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-                  
+
                   # 显式设置Python环境变量
                   $env:PYTHONIOENCODING = "utf-8"
                   $env:PYTHONUTF8 = "1"
-                  
+
                   .\.venv\Scripts\Activate.ps1
                   $version = "${{ steps.version.outputs.version }}"
 
@@ -231,7 +231,7 @@ jobs:
                     echo "❌ PyInstaller构建失败: $_"
                     exit 1
                   }
-                  
+
                   # 验证构建产物
                   if (Test-Path "installer/dist") {
                     echo "=== 构建产物 ==="
@@ -269,11 +269,11 @@ jobs:
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-                  
+
                   # 显式设置Python环境变量
                   $env:PYTHONIOENCODING = "utf-8"
                   $env:PYTHONUTF8 = "1"
-                  
+
                   .\.venv\Scripts\Activate.ps1
                   $version = "${{ steps.version.outputs.version }}"
 
@@ -294,7 +294,7 @@ jobs:
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-                  
+
                   echo "=== 构建产物列表 ==="
                   if (Test-Path "installer/dist") {
                     echo "EXE文件:"
@@ -327,7 +327,7 @@ jobs:
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-                  
+
                   $version = "${{ steps.version.outputs.version }}"
                   $tagName = "${{ steps.version.outputs.tag_name }}"
 
@@ -421,7 +421,7 @@ jobs:
                   # 处理重复版本的更新日志合并
                   $versionNote = ""
                   if ($isRepeatVersion) {
-                    $versionNote = "**重新构建发布** - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC`n`n*此版本包含了之前发布的所有内容，并修复了构建流程问题。*`n"
+                    $versionNote = "重新构建发布 - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC`n`n此版本包含之前发布的所有内容，并修复了构建流程问题。`n"
                     
                     # 尝试从现有Release中提取之前的更新内容
                     if ($existingRelease -and $existingRelease.Contains("### 🔄 更新内容")) {
@@ -434,16 +434,14 @@ jobs:
                       }
                     }
                   } else {
-                    $versionNote = "**自动构建发布** - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC"
+                    $versionNote = "自动构建发布 - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC"
                   }
 
                   # 生成更新日志内容（精简版）
                   $changelog = @"
-                  ## Remote Controls $tagName
-
                   $versionNote
 
-                  ###  更新内容
+                  更新内容
                   $commitLog
 
                   ---
@@ -521,7 +519,7 @@ jobs:
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-                  
+
                   echo "=== 构建总结 ==="
                   echo "版本: ${{ steps.version.outputs.version }}"
                   echo "标签: ${{ steps.version.outputs.tag_name }}"
