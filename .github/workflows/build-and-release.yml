@@ -388,6 +388,36 @@ jobs:
                     }
                   }
 
+                  # ========= 从 md/up.md 中提取对应版本的更新日志段落 =========
+                  try {
+                    if (Test-Path 'md/up.md') {
+                      $upContent = Get-Content 'md/up.md' -Raw
+                      # 匹配以 "# V<version>" 开头直到下一个版本标题或文件结尾
+                      $escapedVersion = [regex]::Escape($version)
+                      $pattern = "(?ms)^#\s*V$escapedVersion\b[\s\S]*?(?=^#\s*V\d+\.\d+\.\d+\b|\Z)"
+                      $m = [regex]::Match($upContent, $pattern)
+                      if ($m.Success) {
+                        $section = $m.Value.Trim()
+                        # 去掉第一行标题（# Vx.y.z ...）
+                        $lines = $section -split "`n"
+                        if ($lines.Length -gt 1) {
+                          $body = ($lines | Select-Object -Skip 1) -join "`n"
+                        } else { $body = $section }
+                        $body = $body.Trim()
+                        if ($body) {
+                          echo "已从 md/up.md 提取版本段落并覆盖 commitLog"
+                          $commitLog = $body
+                        }
+                      } else {
+                        echo "未在 md/up.md 中找到版本 $version 的标题段落，使用自动生成内容" 
+                      }
+                    } else {
+                      echo "md/up.md 不存在，跳过版本段落提取"
+                    }
+                  } catch {
+                    echo "提取 up.md 版本段落时出现异常，使用原 commitLog: $_"
+                  }
+
                   # 处理重复版本的更新日志合并
                   $versionNote = ""
                   if ($isRepeatVersion) {
