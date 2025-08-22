@@ -14,7 +14,8 @@ import tkinter.font as tkfont
 import json
 import ctypes
 import sys
-# import shlex
+import time
+import psutil
 import subprocess
 import win32com.client
 import re
@@ -65,6 +66,23 @@ def resource_path(relative_path: str) -> str:
 # if ctypes.windll.kernel32.GetLastError() == 183:
 #     messagebox.showerror("错误", "应用程序已在运行。")
 #     sys.exit()
+
+# 运行模式 & 隐藏控制台
+is_script_mode = not getattr(sys, "frozen", False)
+
+def hide_console():
+    """隐藏当前控制台窗口（脚本模式启动时使用，可用 RC_NO_HIDE=1 禁用）。"""
+    try:
+        if os.environ.get("RC_NO_HIDE") == "1":
+            return
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+    except Exception:
+        pass
+
+if is_script_mode:
+    hide_console()
 
 # 获取管理员权限
 def get_administrator_privileges() -> None:
@@ -134,34 +152,23 @@ def run_as_admin(executable_path, parameters=None, working_dir=None, show_cmd=0)
     
     return result
 
-def run_py_in_venv_as_admin_hidden(python_exe_path, script_path, script_args=None):
-    """
-    使用指定的 Python 解释器（如虚拟环境中的 python.exe）以管理员权限静默运行脚本
-    
-    参数：
-    python_exe_path (str): Python 解释器路径
-    script_path (str): 要运行的 Python 脚本路径
-    script_args (list): 传递给脚本的参数（可选）
-    """
+def run_py_in_venv_as_admin(python_exe_path:str, script_path:str, script_args=None, show_window:bool=True):
+    """使用指定 Python 解释器提权运行脚本（直接调用，不经 cmd）。返回 ShellExecute 结果 (>32 成功)。"""
     if not os.path.exists(python_exe_path):
         raise FileNotFoundError(f"Python 解释器未找到: {python_exe_path}")
-
     if script_args is None:
         script_args = []
+    params = ' '.join([f'"{script_path}"'] + [str(a) for a in script_args])
+    workdir = os.path.dirname(script_path) or None
+    show_cmd = 1 if show_window else 0
+    try:
+        return ctypes.windll.shell32.ShellExecuteW(None,'runas',python_exe_path,params,workdir,show_cmd)
+    except Exception:
+        return 0
 
-    # 构造命令（确保路径带引号，防止空格问题）
-    command = f'"{python_exe_path}" "{script_path}" {" ".join(script_args)}'
-
-    # 使用 ShellExecuteW 以管理员权限静默运行
-    result = ctypes.windll.shell32.ShellExecuteW(
-        None,               # 父窗口句柄
-        'runas',            # 请求管理员权限
-        'cmd.exe',          # 通过 cmd 执行（但隐藏窗口）
-        f'/c {command}',    # /c 执行后关闭窗口
-        None,               # 工作目录
-        0                   # 窗口模式：0=隐藏
-    )
-    return result
+def run_py_in_venv_as_admin_hidden(python_exe_path, script_path, script_args=None):
+    # 兼容旧调用，默认隐藏窗口
+    return run_py_in_venv_as_admin(python_exe_path, script_path, script_args, show_window=False)
 
 def restart_self_as_admin():
     """以管理员权限重新启动当前程序"""
@@ -177,13 +184,32 @@ def restart_self_as_admin():
         
         # 构建重启命令
         if getattr(sys, "frozen", False):
-            # EXE模式：直接以管理员权限运行exe
             result = run_as_admin(current_exe)
         else:
-            # 脚本模式：以管理员权限运行Python脚本
-            result = run_py_in_venv_as_admin_hidden(current_exe, os.path.abspath(__file__))
-        
-        if result > 32:  # ShellExecuteW 返回值大于32表示成功
+            # 脚本模式优先 pythonw.exe
+            base_dir = os.path.dirname(current_exe)
+            pythonw = os.path.join(base_dir, 'pythonw.exe')
+            interpreter = pythonw if os.path.exists(pythonw) else current_exe
+            script_path = os.path.abspath(__file__)
+            result = run_py_in_venv_as_admin(interpreter, script_path, show_window=False)
+
+        if result > 32:
+            # 等待新进程出现再退出（最多5s）
+            if not getattr(sys, 'frozen', False):
+                target = os.path.abspath(__file__)
+                for _ in range(50):
+                    new_found = False
+                    try:
+                        for proc in psutil.process_iter(['name','cmdline','pid']):
+                            cl = proc.info.get('cmdline') or []
+                            if proc.pid != os.getpid() and cl and target in ' '.join(cl) and 'python' in (proc.info.get('name') or '').lower():
+                                new_found = True
+                                break
+                    except Exception:
+                        pass
+                    if new_found:
+                        break
+                    time.sleep(0.1)
             os._exit(0)
         else:
             messagebox.showwarning("UAC提权", f"获取管理员权限失败，错误码: {result}")

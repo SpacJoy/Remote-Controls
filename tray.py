@@ -27,7 +27,6 @@ import psutil
 import webbrowser
 import random
 import urllib.request
-# import urllib.error
 import json
 import re
 
@@ -109,6 +108,20 @@ if is_script_mode:
     except Exception as e:
         logging.error(f"清空日志文件失败: {e}")
         print(f"清空日志文件失败: {e}")
+
+def hide_console():
+    """隐藏当前控制台窗口（脚本模式启动时使用）。"""
+    try:
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 0)  # 0 = SW_HIDE
+            logging.info("已隐藏控制台窗口")
+    except Exception as e:
+        logging.warning(f"隐藏控制台窗口失败: {e}")
+
+# 在脚本模式下自动隐藏控制台（可通过设置环境变量 RC_NO_HIDE=1 禁用）
+if is_script_mode and os.environ.get("RC_NO_HIDE") != "1":
+    hide_console()
 
 # 若开启测试模式，在非脚本模式下同样清空旧日志，保持与脚本一致
 try:
@@ -318,24 +331,6 @@ def on_version_click(icon=None, item=None):
                 notify("检查更新失败", level="warning")
         threading.Thread(target=_bg_check, daemon=True).start()
 
-# def _open_image_window_or_viewer(title: str, prefer: list[str]) -> None:
-#     """
-#     打开一张图片：优先从程序目录的 res 目录查找，其次尝试打包资源路径；找不到则提示。
-#     为避免与托盘 UI 冲突，直接调用系统默认查看器打开图片。
-#     """
-#     # 程序目录 res/
-#     side_by_side = [os.path.join(appdata_dir, "res", os.path.basename(p)) for p in prefer]
-#     # 打包资源路径（_MEIPASS）或脚本路径
-#     embedded = [resource_path(p) for p in prefer] + [resource_path(os.path.join("res", os.path.basename(p))) for p in prefer]
-#     cand = side_by_side + embedded
-#     img_path = _find_first_existing(cand)
-#     if img_path:
-#         try:
-#             os.startfile(img_path)  # 使用系统默认图片查看器
-#             return
-#         except Exception as e:
-#             logging.error(f"打开图片失败: {e}")
-#     notify(f"未找到图片，已尝试位置:\n" + "\n".join(cand[:4]) + ("\n..." if len(cand) > 4 else ""), level="warning")
 
 def _open_random_egg_image() -> None:
     """
@@ -446,36 +441,37 @@ def run_as_admin(executable_path, parameters=None, working_dir=None, show_cmd=0)
     
     return result
 
-def run_py_in_venv_as_admin_hidden(python_exe_path, script_path, script_args=None):
-    """
-    使用指定的 Python 解释器（如虚拟环境中的 python.exe）以管理员权限静默运行脚本
-    
-    参数：
-    python_exe_path (str): Python 解释器路径（如 "D:/Code/Python/Remote-Controls/.venv/Scripts/python.exe"）
-    script_path (str): 要运行的 Python 脚本路径
-    script_args (list): 传递给脚本的参数（可选）
-    """
-    logging.info(f"执行函数: run_py_in_venv_as_admin_hidden；参数: {python_exe_path}, {script_path}")
+def run_py_in_venv_as_admin(python_exe_path:str, script_path:str, script_args=None, show_window:bool=True):
+    """使用指定 Python 解释器提权运行脚本（直接调用，不经 cmd /c）。
+    返回 ShellExecuteW 结果码 (>32 视为成功)。"""
+    logging.info(f"执行函数: run_py_in_venv_as_admin；参数: {python_exe_path}, {script_path}")
     if not os.path.exists(python_exe_path):
         raise FileNotFoundError(f"Python 解释器未找到: {python_exe_path}")
-
     if script_args is None:
         script_args = []
+    # 组装参数："script" arg1 arg2 ...
+    params = ' '.join([f'"{script_path}"'] + [str(a) for a in script_args])
+    workdir = os.path.dirname(script_path) or None
+    show_cmd = 1 if show_window else 0
+    try:
+        result = ctypes.windll.shell32.ShellExecuteW(
+            None,
+            'runas',
+            python_exe_path,
+            params,
+            workdir,
+            show_cmd
+        )
+        logging.info(f"ShellExecuteW 提权启动结果: {result}")
+        return result
+    except Exception as e:
+        logging.error(f"提权启动脚本失败: {e}")
+        return 0
 
-    # 构造命令（确保路径带引号，防止空格问题）
-    command = f'"{python_exe_path}" "{script_path}" {" ".join(script_args)}'
-    logging.info(f"构造的命令: {command}")
-
-    # 使用 ShellExecuteW 以管理员权限静默运行
-    result = ctypes.windll.shell32.ShellExecuteW(
-        None,               # 父窗口句柄
-        'runas',            # 请求管理员权限
-        'cmd.exe',          # 通过 cmd 执行（但隐藏窗口）
-        f'/c {command}',    # /c 执行后关闭窗口
-        None,               # 工作目录
-        0                   # 窗口模式：0=隐藏
-    )
-    return result
+# 兼容旧函数名（保留调用方，如仍有引用）
+def run_py_in_venv_as_admin_hidden(python_exe_path, script_path, script_args=None):
+    # 兼容旧调用：默认隐藏窗口
+    return run_py_in_venv_as_admin(python_exe_path, script_path, script_args, show_window=False)
 
 
 def restart_self_as_admin():
@@ -499,13 +495,35 @@ def restart_self_as_admin():
             # EXE模式：直接以管理员权限运行exe
             result = run_as_admin(current_exe)
         else:
-            # 脚本模式：以管理员权限运行Python脚本
-            result = run_py_in_venv_as_admin_hidden(current_exe, os.path.abspath(__file__))
-        
+            # 脚本模式：优先使用 pythonw.exe（若存在）以隐藏窗口提权启动
+            base_dir = os.path.dirname(current_exe)
+            pythonw = os.path.join(base_dir, 'pythonw.exe')
+            interpreter = pythonw if os.path.exists(pythonw) else current_exe
+            script_path = os.path.abspath(__file__)
+            result = run_py_in_venv_as_admin(interpreter, script_path, show_window=False)
+
         if result > 32:
-            logging.info(f"成功以管理员权限重启程序，返回值: {result}")
-            # 重启成功，退出当前进程
-            logging.info("正在退出当前进程...")
+            logging.info(f"成功以管理员权限重启程序，ShellExecute 返回值: {result}")
+            # 等待新进程出现（最多 5s）再退出当前进程，避免用户感知“直接退出”
+            if not getattr(sys, "frozen", False):
+                target = os.path.abspath(__file__)
+                found = False
+                for _ in range(50):  # 50 * 0.1s = 5s
+                    try:
+                        for proc in psutil.process_iter(['name','cmdline']):
+                            if not proc.info.get('cmdline'):
+                                continue
+                            cmdline_join = ' '.join(proc.info['cmdline'])
+                            if 'python' in proc.info['name'].lower() and target in cmdline_join and proc.pid != os.getpid():
+                                found = True
+                                break
+                        if found:
+                            break
+                    except Exception:
+                        pass
+                    time.sleep(0.1)
+                logging.info(f"提权后新脚本进程检测结果: {'已发现' if found else '未发现'}")
+            logging.info("退出当前非管理员进程，交由新进程继续运行")
             os._exit(0)
         else:
             logging.error(f"以管理员权限重启程序失败，错误码: {result}")

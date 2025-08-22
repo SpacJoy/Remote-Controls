@@ -60,12 +60,129 @@ def _enable_dpi_awareness() -> None:
 # 禁用 PyAutoGUI 安全模式，确保即使鼠标在屏幕角落也能执行命令
 pyautogui.FAILSAFE = False
 
-# 创建一个命名的互斥体
-mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "RC-main")
-# 检查互斥体是否已经存在
-if ctypes.windll.kernel32.GetLastError() == 183:
-    messagebox.showerror("错误", "应用程序已在运行。")
-    sys.exit()
+# 运行模式 & 隐藏控制台
+is_script_mode = not getattr(sys, 'frozen', False)
+
+def hide_console():
+    """隐藏当前控制台窗口（脚本模式启动时使用，可用 RC_NO_HIDE=1 禁用）。"""
+    try:
+        if os.environ.get('RC_NO_HIDE') == '1':
+            return
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 0)
+    except Exception:
+        pass
+
+if is_script_mode:
+    hide_console()
+
+# 创建互斥体并进行更严格的二次确认，避免脚本模式下误报
+MUTEX_NAME = "RC-main"
+mutex = ctypes.windll.kernel32.CreateMutexW(None, False, MUTEX_NAME)
+last_err = ctypes.windll.kernel32.GetLastError()
+
+def _other_instance_exists() -> bool:
+    """通过进程列表确认是否有其他实例运行。"""
+    try:
+        current_pid = os.getpid()
+        target_script = os.path.abspath(__file__)
+        exe_name = "RC-main.exe"
+        found_other = False
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            if proc.info.get("pid") == current_pid:
+                continue
+            name = (proc.info.get("name") or "").lower()
+            if name == exe_name.lower():
+                found_other = True
+                break
+            # 脚本模式判定：python 进程且 cmdline 包含 main.py 绝对路径
+            if name in ("python.exe", "pythonw.exe"):
+                cmd = " ".join(proc.info.get("cmdline") or [])
+                # 用 endswith 防止路径差异带来的子串误匹配
+                if cmd and os.path.basename(target_script) in cmd and target_script in cmd:
+                    found_other = True
+                    break
+        return found_other
+    except Exception:
+        # 容错：若进程枚举失败，保持保守（返回 True 避免多开）
+        return True
+
+if last_err == 183:  # ERROR_ALREADY_EXISTS
+    def _list_other_instances():
+        items = []
+        try:
+            current_pid = os.getpid()
+            target_script = os.path.abspath(__file__)
+            exe_name = "RC-main.exe"
+            for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+                pid = proc.info.get("pid")
+                if pid == current_pid:
+                    continue
+                name = (proc.info.get("name") or "").lower()
+                cl_list = proc.info.get("cmdline") or []
+                cmdline = " ".join(cl_list)
+                match = False
+                if name == exe_name.lower():
+                    match = True
+                elif name in ("python.exe", "pythonw.exe") and target_script in cmdline:
+                    match = True
+                if match:
+                    items.append((pid, proc.info.get("name"), cmdline))
+        except Exception:
+            pass
+        return items
+
+    others = _list_other_instances()
+    if others:
+        if is_script_mode:
+            # 使用原生 MessageBox (YES=结束其它实例并继续, NO=忽略互斥体直接继续, CANCEL=退出)
+            try:
+                details = "\n".join([f"PID {pid} - {name}" for pid, name, _ in others][:10])
+                if len(others) > 10:
+                    details += f"\n... 共 {len(others)} 个实例"
+                text = (
+                    "检测到程序已在运行:\n\n" + details +
+                    "\n\n是: 结束其它实例后继续\n否: 忽略互斥体直接继续(可能导致多开)\n取消: 退出程序"
+                )
+                MB_ICONQUESTION = 0x20
+                MB_YESNOCANCEL = 0x03
+                res = ctypes.windll.user32.MessageBoxW(None, text, "程序已在运行", MB_ICONQUESTION | MB_YESNOCANCEL)
+                IDYES, IDNO, IDCANCEL = 6, 7, 2
+                if res == IDYES:
+                    # 结束其它实例
+                    for pid, _name, _ in others:
+                        try:
+                            psutil.Process(pid).terminate()
+                        except Exception:
+                            pass
+                    deadline = time.time() + 3
+                    while time.time() < deadline:
+                        if all(not psutil.pid_exists(pid) for pid, _, _ in others):
+                            break
+                        time.sleep(0.2)
+                    still = [pid for pid, _, _ in others if psutil.pid_exists(pid)]
+                    if still:
+                        ctypes.windll.user32.MessageBoxW(None, f"以下进程仍存在, 无法继续:\n{still}", "仍在运行", 0x10)
+                        sys.exit(1)
+                    logging.warning("已结束其它实例, 继续启动")
+                elif res == IDNO:
+                    logging.warning("用户选择忽略互斥体并继续运行 (可能多开)")
+                else:  # IDCANCEL or any other
+                    sys.exit(0)
+            except Exception:
+                # 回退处理
+                try:
+                    messagebox.showerror("错误", "应用程序已在运行。")
+                finally:
+                    sys.exit(1)
+        else:
+            try:
+                messagebox.showerror("错误", "应用程序已在运行。")
+            finally:
+                sys.exit(0)
+    else:
+        logging.warning("检测到残留互斥体但未发现其他实例，忽略并继续运行")
 
 """
 执行系统命令，并在超时后终止命令。
@@ -1632,36 +1749,25 @@ def run_as_admin(executable_path, parameters=None, working_dir=None, show_cmd=0)
     
     return result
 
-def run_py_in_venv_as_admin_hidden(python_exe_path, script_path, script_args=None):
-    """
-    使用指定的 Python 解释器（如虚拟环境中的 python.exe）以管理员权限静默运行脚本
-    
-    参数：
-    python_exe_path (str): Python 解释器路径
-    script_path (str): 要运行的 Python 脚本路径
-    script_args (list): 传递给脚本的参数（可选）
-    """
-    logging.info(f"执行函数: run_py_in_venv_as_admin_hidden；参数: {python_exe_path}, {script_path}")
+def run_py_in_venv_as_admin(python_exe_path:str, script_path:str, script_args=None, show_window:bool=True):
+    """使用指定 Python 解释器提权运行脚本（直接 ShellExecute，不经 cmd）。返回值>32成功。"""
+    logging.info(f"执行函数: run_py_in_venv_as_admin；参数: {python_exe_path}, {script_path}")
     if not os.path.exists(python_exe_path):
         raise FileNotFoundError(f"Python 解释器未找到: {python_exe_path}")
-
     if script_args is None:
         script_args = []
+    params = ' '.join([f'"{script_path}"'] + [str(a) for a in script_args])
+    workdir = os.path.dirname(script_path) or None
+    show_cmd = 1 if show_window else 0
+    try:
+        res = ctypes.windll.shell32.ShellExecuteW(None,'runas',python_exe_path,params,workdir,show_cmd)
+    except Exception as e:
+        logging.error(f"ShellExecuteW 失败: {e}")
+        res = 0
+    return res
 
-    # 构造命令（确保路径带引号，防止空格问题）
-    command = f'"{python_exe_path}" "{script_path}" {" ".join(script_args)}'
-    logging.info(f"构造的命令: {command}")
-
-    # 使用 ShellExecuteW 以管理员权限静默运行
-    result = ctypes.windll.shell32.ShellExecuteW(
-        None,               # 父窗口句柄
-        'runas',            # 请求管理员权限
-        'cmd.exe',          # 通过 cmd 执行（但隐藏窗口）
-        f'/c {command}',    # /c 执行后关闭窗口
-        None,               # 工作目录
-        0                   # 窗口模式：0=隐藏
-    )
-    return result
+def run_py_in_venv_as_admin_hidden(python_exe_path, script_path, script_args=None):
+    return run_py_in_venv_as_admin(python_exe_path, script_path, script_args, show_window=False)
 
 def restart_self_as_admin():
     """以管理员权限重新启动当前程序"""
@@ -1681,16 +1787,33 @@ def restart_self_as_admin():
         
         # 构建重启命令
         if getattr(sys, "frozen", False):
-            # EXE模式：直接以管理员权限运行exe
             result = run_as_admin(current_exe)
         else:
-            # 脚本模式：以管理员权限运行Python脚本
-            result = run_py_in_venv_as_admin_hidden(current_exe, os.path.abspath(__file__))
-        
+            # 脚本模式优先使用 pythonw.exe 隐藏窗口
+            base_dir = os.path.dirname(current_exe)
+            pythonw = os.path.join(base_dir, 'pythonw.exe')
+            interpreter = pythonw if os.path.exists(pythonw) else current_exe
+            script_path = os.path.abspath(__file__)
+            result = run_py_in_venv_as_admin(interpreter, script_path, show_window=False)
+
         if result > 32:
             logging.info(f"成功以管理员权限重启程序，返回值: {result}")
-            # 重启成功，退出当前进程
-            logging.info("正在退出当前进程...")
+            # 等待新进程出现再退出，避免用户看到直接退出
+            if not getattr(sys, 'frozen', False):
+                target = os.path.abspath(__file__)
+                for _ in range(50):  # 最多 5 秒
+                    new_found = False
+                    try:
+                        for proc in psutil.process_iter(['name','cmdline','pid']):
+                            cl = proc.info.get('cmdline') or []
+                            if proc.pid != os.getpid() and cl and target in ' '.join(cl) and 'python' in (proc.info.get('name') or '').lower():
+                                new_found = True
+                                break
+                    except Exception:
+                        pass
+                    if new_found:
+                        break
+                    time.sleep(0.1)
             os._exit(0)
         else:
             logging.error(f"以管理员权限重启程序失败，错误码: {result}")
