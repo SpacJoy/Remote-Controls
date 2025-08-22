@@ -437,46 +437,19 @@ jobs:
                     $versionNote = "**自动构建发布** - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC"
                   }
 
-                  # 生成更新日志内容
+                  # 生成更新日志内容（精简版）
                   $changelog = @"
                   ## Remote Controls $tagName
 
                   $versionNote
 
-                  ### 📦 构建信息
-                  - **Python版本**: ${{ env.PYTHON_VERSION }}
-                  - **构建环境**: Windows (GitHub Actions)
-                  - **构建ID**: [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-                  - **提交SHA**: [\`${{ github.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
-
-                  ### 🎯 包含文件
-                  - \`RC-main.exe\` - 主程序
-                  - \`RC-GUI.exe\` - 图形界面程序  
-                  - \`RC-tray.exe\` - 系统托盘程序
-                  - \`Remote-Controls-Installer-$version.exe\` - 完整安装包
-
-                  ### 📋 安装说明
-                  1. **推荐方式**: 下载并运行安装包 \`Remote-Controls-Installer-$version.exe\`
-                  2. **手动方式**: 下载单独的EXE文件放到任意目录使用
-                  3. **系统要求**: Windows 10/11，建议使用管理员权限运行
-
-                  ### 🔄 更新内容
+                  ###  更新内容
                   $commitLog
 
-                  ### 📚 相关链接
-                  - [📖 README.md](https://github.com/${{ github.repository }}/blob/main/README.md) - 详细使用说明
-                  - [📝 更新日志](https://github.com/${{ github.repository }}/blob/main/md/up.md) - 完整版本历史
-                  - [🐛 问题反馈](https://github.com/${{ github.repository }}/issues) - Bug报告和功能建议
-                  - [💬 讨论区](https://github.com/${{ github.repository }}/discussions) - 社区讨论
-
-                  ### ⚠️ 注意事项
-                  - 首次使用请运行GUI程序生成配置文件
-                  - 托盘程序需要管理员权限才能正常控制系统
-                  - 如需开机自启，建议使用安装包自带的计划任务功能
-
                   ---
-
-                  **完整的技术文档和使用教程请查看项目主页。**
+                  相关文档：
+                  - [README](https://github.com/${{ github.repository }}/blob/main/README.md)
+                  - [历史版本 (更新日志)](https://github.com/${{ github.repository }}/blob/main/md/up.md)
                   "@
 
                   # 将内容写入GitHub输出（处理多行内容）
