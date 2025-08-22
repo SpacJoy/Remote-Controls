@@ -2,7 +2,16 @@
 ;包包括：RC-GUI.exe、RC-main.exe、RC-tray.exe、config.json、日志目录
 ;生成脱机安装程序，安装到 Program Files（需要管理员权限）
 
-#define MyAppVersion "2.2.11"
+; 动态读取版本信息，如果版本文件不存在则使用默认版本
+#ifdef DYNAMIC_VERSION
+  #define MyAppVersion DYNAMIC_VERSION
+#else
+  #ifexist "version.tmp"
+    #define MyAppVersion FileRead("version.tmp")
+  #else
+    #define MyAppVersion "0.0.0"
+  #endif
+#endif
 
 [Setup]
 AppId={{A9F7F8E7-8A1F-4C4D-8CF1-6B9E0D0B7A23}}

@@ -26,3 +26,6 @@ res/top.png
 # installer
 version_info.py
 installer/EXE
+# 临时版本文件
+installer/version.tmp
+installer/test_dynamic_version.ps1

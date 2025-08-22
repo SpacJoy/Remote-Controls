@@ -182,18 +182,26 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host ""
 Write-Host "[7/8] 生成安装包..." -ForegroundColor Yellow
 
-# 首先更新 Inno Setup 脚本中的版本号
+# 创建临时版本文件供 Inno Setup 读取，而不是修改源文件
 if ($Version) {
-    Write-Host "  更新安装脚本版本号：$Version" -ForegroundColor Cyan
-    $IssFile = (Join-Path $InstallerDir 'Remote-Controls.iss')
-    if (Test-Path $IssFile) {
-        $IssContent = Get-Content -Path $IssFile -Raw
-        $IssContent = $IssContent -replace '#define MyAppVersion "[\d\.]+"', "#define MyAppVersion `"$Version`""
-        # 使用 UTF-8 BOM 保存以保证中文在 ISCC 下显示正常
-        Set-Content -Path $IssFile -Value $IssContent -Encoding UTF8BOM
-        Write-Host "  版本号已更新到安装脚本" -ForegroundColor Green
-    } else {
-        Write-Host "  警告：未找到安装脚本文件" -ForegroundColor Yellow
+    Write-Host "  准备版本信息：$Version" -ForegroundColor Cyan
+    $VersionTmpFile = (Join-Path $InstallerDir 'version.tmp')
+    Set-Content -Path $VersionTmpFile -Value $Version -Encoding UTF8 -NoNewline
+    Write-Host "  版本信息已写入临时文件" -ForegroundColor Green
+} else {
+    # 如果没有指定版本，尝试从 version_info.py 读取
+    $VersionInfoFile = (Join-Path $Root 'version_info.py')
+    if (Test-Path $VersionInfoFile) {
+        $VersionInfoContent = Get-Content -Path $VersionInfoFile -Raw
+        if ($VersionInfoContent -match 'VERSION\s*=\s*["'']([^"'']+)["'']') {
+            $DetectedVersion = $matches[1]
+            Write-Host "  从 version_info.py 检测到版本：$DetectedVersion" -ForegroundColor Cyan
+            $VersionTmpFile = (Join-Path $InstallerDir 'version.tmp')
+            Set-Content -Path $VersionTmpFile -Value $DetectedVersion -Encoding UTF8 -NoNewline
+            Write-Host "  版本信息已写入临时文件" -ForegroundColor Green
+        } else {
+            Write-Host "  警告：无法从 version_info.py 解析版本号，将使用默认版本" -ForegroundColor Yellow
+        }
     }
 }
 
@@ -210,8 +218,20 @@ $IssPath = (Join-Path $InstallerDir 'Remote-Controls.iss')
 & $InnoPath $IssPath
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：安装包生成失败" -ForegroundColor Red
+    # 清理临时文件
+    $VersionTmpFile = (Join-Path $InstallerDir 'version.tmp')
+    if (Test-Path $VersionTmpFile) {
+        Remove-Item $VersionTmpFile -Force
+    }
     Read-Host "按Enter键退出"
     exit 1
+}
+
+# 清理临时版本文件
+$VersionTmpFile = (Join-Path $InstallerDir 'version.tmp')
+if (Test-Path $VersionTmpFile) {
+    Remove-Item $VersionTmpFile -Force
+    Write-Host "  已清理临时版本文件" -ForegroundColor Cyan
 }
 
 Write-Host ""
