@@ -64,6 +64,15 @@ var
   CbKeepCfg: TNewCheckBox;
   KeepConfig: Boolean; // 是否保留配置文件，默认保留
 
+function IsProcessRunning(ProcessName: String): Boolean;
+var
+  ResultCode: Integer;
+begin
+  // 使用tasklist检查特定进程，如果进程存在会在输出中包含进程名
+  Result := Exec('cmd', '/C tasklist /FI "IMAGENAME eq ' + ProcessName + '" | findstr /I "' + ProcessName + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := Result and (ResultCode = 0);
+end;
+
 function InitializeSetup(): Boolean;
 var
   ResultCode: Integer;
@@ -73,11 +82,11 @@ begin
   ProcessesRunning := False;
   
   // 检查是否有程序正在运行
-  if Exec('tasklist', '/FI "IMAGENAME eq RC-main.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+  if IsProcessRunning('RC-main.exe') then
     ProcessesRunning := True;
-  if Exec('tasklist', '/FI "IMAGENAME eq RC-GUI.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+  if IsProcessRunning('RC-GUI.exe') then
     ProcessesRunning := True;
-  if Exec('tasklist', '/FI "IMAGENAME eq RC-tray.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+  if IsProcessRunning('RC-tray.exe') then
     ProcessesRunning := True;
   
   // 如果有程序运行且不是静默安装，提示用户
