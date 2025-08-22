@@ -2,7 +2,7 @@
 ;包包括：RC-GUI.exe、RC-main.exe、RC-tray.exe、config.json、日志目录
 ;生成脱机安装程序，安装到 Program Files（需要管理员权限）
 
-#define MyAppVersion "2.2.7"
+#define MyAppVersion "2.2.11"
 
 [Setup]
 AppId={{A9F7F8E7-8A1F-4C4D-8CF1-6B9E0D0B7A23}}
@@ -428,4 +428,5 @@ begin
     end;
   end;
 end;
+
 
