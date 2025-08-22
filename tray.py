@@ -41,6 +41,13 @@ REPO_OWNER = "chen6019"
 REPO_NAME = "Remote-Controls"
 GITHUB_RELEASES_LATEST_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
+# 全局变量：版本检查缓存
+_version_check_cache = {
+    "status": "pending",  # "pending", "checking", "ok", "error"
+    "latest": None,       # 最新版本号或None
+    "checked_time": 0.0   # 检查时间戳
+}
+
 # DPI 与字体渲染优化（高DPI下更清晰）
 def _enable_dpi_awareness() -> None:
     """
@@ -255,13 +262,47 @@ def _check_latest_release(timeout: float = 2.5) -> tuple[str, str | None]:
         logging.warning(f"检查更新失败: {e}")
         return ("error", None)
 
+def _update_menu_after_version_check():
+    """版本检查完成后更新托盘菜单"""
+    global icon
+    if 'icon' in globals() and icon:
+        try:
+            # 重新生成菜单项
+            new_menu_items = get_menu_items()
+            new_menu = pystray.Menu(*new_menu_items)
+            # 更新托盘图标的菜单
+            icon.menu = new_menu
+            logging.info("已更新托盘菜单显示最新版本检查结果")
+        except Exception as e:
+            logging.error(f"更新托盘菜单失败: {e}")
+
 # 版本菜单点击：打开项目主页，同时在后台检查更新并提示结果
 def on_version_click(icon=None, item=None):
     try:
         _open_url("https://github.com/chen6019/Remote-Controls")
     finally:
         def _bg_check():
+            global _version_check_cache
+            # 标记正在检查
+            _version_check_cache["status"] = "checking"
+            _version_check_cache["latest"] = None
+            _version_check_cache["checked_time"] = time.time()
+            
+            # 更新菜单显示"检查中"状态
+            _update_menu_after_version_check()
+            
+            # 执行实际检查
             status, latest = _check_latest_release()
+            
+            # 更新缓存
+            _version_check_cache["status"] = status
+            _version_check_cache["latest"] = latest
+            _version_check_cache["checked_time"] = time.time()
+            
+            # 更新菜单显示检查结果
+            _update_menu_after_version_check()
+            
+            # 显示通知
             if status == "ok" and latest:
                 cmp = _compare_versions(BANBEN, latest)
                 if cmp < 0:
@@ -879,23 +920,30 @@ def get_menu_items():
     """生成动态菜单项列表"""
     logging.info("执行函数: get_menu_items")
     # 检查托盘程序管理员权限状态
-    global IS_TRAY_ADMIN
+    global IS_TRAY_ADMIN, _version_check_cache
     admin_status = "【已获得管理员权限】" if IS_TRAY_ADMIN else "【未获得管理员权限】"
-    # 版本菜单文本（EXE模式：显示是否有更新）
+    
+    # 版本菜单文本（使用缓存的检查结果）
     version_text = f"版本-{BANBEN}"
     if not is_script_mode:
-        status, latest = _check_latest_release()
-        if status == "ok" and latest:
-            cmp = _compare_versions(BANBEN, latest)
+        cache_status = _version_check_cache.get("status", "pending")
+        cached_latest = _version_check_cache.get("latest")
+        
+        if cache_status == "checking":
+            version_text = f"版本-{BANBEN}（检查中...）"
+        elif cache_status == "ok" and cached_latest:
+            cmp = _compare_versions(BANBEN, cached_latest)
             if cmp < 0:
                 if "未知版本" in BANBEN:
-                    version_text = f"版本-{BANBEN}（发现版本 {latest}）"
+                    version_text = f"版本-{BANBEN}（发现版本 {cached_latest}）"
                 else:
-                    version_text = f"版本-{BANBEN}（发现新版本 {latest}）"
+                    version_text = f"版本-{BANBEN}（发现新版本 {cached_latest}）"
             else:
                 version_text = f"版本-{BANBEN}（已是最新）"
-        else:
+        elif cache_status == "error":
             version_text = f"版本-{BANBEN}（检查失败）"
+        # 如果是"pending"状态，保持默认显示
+    
     return [
     # 版本点击 -> 打开项目主页并后台检查更新
     pystray.MenuItem(version_text, on_version_click),
