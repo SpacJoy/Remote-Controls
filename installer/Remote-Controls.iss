@@ -2,12 +2,10 @@
 ;包包括：RC-GUI.exe、RC-main.exe、RC-tray.exe、config.json、日志目录
 ;生成脱机安装程序，安装到 Program Files（需要管理员权限）
 
-; 动态读取版本信息，如果版本文件不存在则使用默认版本
-#ifdef DYNAMIC_VERSION
-  #define MyAppVersion DYNAMIC_VERSION
-#else
-  #ifexist "version.tmp"
-    #define MyAppVersion FileRead("version.tmp")
+; 通过命令行参数或临时文件动态读取版本信息
+#ifndef MyAppVersion
+  #if FileExists("version.tmp")
+    #define MyAppVersion Trim(FileRead("version.tmp"))
   #else
     #define MyAppVersion "0.0.0"
   #endif

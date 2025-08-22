@@ -182,28 +182,33 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host ""
 Write-Host "[7/8] 生成安装包..." -ForegroundColor Yellow
 
-# 创建临时版本文件供 Inno Setup 读取，而不是修改源文件
+# 确定最终使用的版本号
+$FinalVersion = ""
 if ($Version) {
-    Write-Host "  准备版本信息：$Version" -ForegroundColor Cyan
-    $VersionTmpFile = (Join-Path $InstallerDir 'version.tmp')
-    Set-Content -Path $VersionTmpFile -Value $Version -Encoding UTF8 -NoNewline
-    Write-Host "  版本信息已写入临时文件" -ForegroundColor Green
+    $FinalVersion = $Version
+    Write-Host "  使用指定版本：$FinalVersion" -ForegroundColor Cyan
 } else {
     # 如果没有指定版本，尝试从 version_info.py 读取
     $VersionInfoFile = (Join-Path $Root 'version_info.py')
     if (Test-Path $VersionInfoFile) {
         $VersionInfoContent = Get-Content -Path $VersionInfoFile -Raw
         if ($VersionInfoContent -match 'VERSION\s*=\s*["'']([^"'']+)["'']') {
-            $DetectedVersion = $matches[1]
-            Write-Host "  从 version_info.py 检测到版本：$DetectedVersion" -ForegroundColor Cyan
-            $VersionTmpFile = (Join-Path $InstallerDir 'version.tmp')
-            Set-Content -Path $VersionTmpFile -Value $DetectedVersion -Encoding UTF8 -NoNewline
-            Write-Host "  版本信息已写入临时文件" -ForegroundColor Green
+            $FinalVersion = $matches[1]
+            Write-Host "  从 version_info.py 检测到版本：$FinalVersion" -ForegroundColor Cyan
         } else {
-            Write-Host "  警告：无法从 version_info.py 解析版本号，将使用默认版本" -ForegroundColor Yellow
+            $FinalVersion = "0.0.0"
+            Write-Host "  警告：无法从 version_info.py 解析版本号，使用默认版本：$FinalVersion" -ForegroundColor Yellow
         }
+    } else {
+        $FinalVersion = "0.0.0"
+        Write-Host "  警告：未找到 version_info.py，使用默认版本：$FinalVersion" -ForegroundColor Yellow
     }
 }
+
+# 创建临时版本文件供 Inno Setup 读取
+$VersionTmpFile = (Join-Path $InstallerDir 'version.tmp')
+Set-Content -Path $VersionTmpFile -Value $FinalVersion -Encoding ASCII -NoNewline
+Write-Host "  版本信息已写入临时文件：$FinalVersion" -ForegroundColor Green
 
 $InnoPath = "C:\Program Files (x86)\Inno Setup 6\iscc.exe"
 if (-not (Test-Path $InnoPath)) {
@@ -215,14 +220,28 @@ if (-not (Test-Path $InnoPath)) {
 
 # 生成安装包
 $IssPath = (Join-Path $InstallerDir 'Remote-Controls.iss')
-& $InnoPath $IssPath
-if ($LASTEXITCODE -ne 0) {
+
+# 创建临时的Inno Setup脚本，包含版本信息
+$TempIssPath = (Join-Path $InstallerDir 'Remote-Controls-temp.iss')
+$IssContent = Get-Content -Path $IssPath -Raw
+$IssContentWithVersion = "#define MyAppVersion `"$FinalVersion`"`r`n" + $IssContent
+Set-Content -Path $TempIssPath -Value $IssContentWithVersion -Encoding UTF8
+
+Write-Host "  生成临时Inno Setup脚本，版本：$FinalVersion" -ForegroundColor Cyan
+
+& $InnoPath $TempIssPath
+$ExitCode = $LASTEXITCODE
+
+# 清理临时文件
+if (Test-Path $TempIssPath) {
+    Remove-Item $TempIssPath -Force
+}
+if (Test-Path $VersionTmpFile) {
+    Remove-Item $VersionTmpFile -Force
+}
+
+if ($ExitCode -ne 0) {
     Write-Host "错误：安装包生成失败" -ForegroundColor Red
-    # 清理临时文件
-    $VersionTmpFile = (Join-Path $InstallerDir 'version.tmp')
-    if (Test-Path $VersionTmpFile) {
-        Remove-Item $VersionTmpFile -Force
-    }
     Read-Host "按Enter键退出"
     exit 1
 }
@@ -240,8 +259,6 @@ Write-Host "打包完成！" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "EXE 文件位置：installer\dist\" -ForegroundColor Cyan
 Write-Host "安装包位置：installer\dist\installer\" -ForegroundColor Cyan
-if ($Version) {
-    Write-Host "构建版本：$Version" -ForegroundColor Green
-}
+Write-Host "构建版本：$FinalVersion" -ForegroundColor Green
 Write-Host ""
 Read-Host "按Enter键退出"
