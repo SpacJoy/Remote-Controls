@@ -6,6 +6,21 @@
 — 当前版本：2.2.13（Windows）  
 （版本号统一由 `version_info.py` 管理，CI/本地打包均自动注入；请勿手动修改此处。完整更新历史见 `md/up.md`）
 
+## 开发者快速入门
+
+- 安装依赖：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+- 常用命令：
+  - 清理构建与虚拟环境： `python scripts/cleanup.py`
+  - 提交变更前请更新 `md/up.md` 并参阅 `CONTRIBUTING.md`
+
+
 ## 目录
 
 - 概览与特性

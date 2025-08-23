@@ -1,32 +1,44 @@
-installer/build
-installer/build-nuitka
-/.vscode
-installer/dist
-installer/dist-nuitka
-/build
-/.vscode
-/dist
-*.spec
-*.gitignore
-*.txt
-*.gitignore
-*.txt
-*.log
-config.json
-*.back
-# up.md
-test.*
-/__pycache__
-.gitignore
-RC-main.exe
-RC-GUI.exe
-RC-tray.exe
+# Virtual environments
+.venv/
+
+# VSCode
+.vscode/
+
+# Build artifacts
+build/
+dist/
+installer/build/
+installer/dist/
+installer/dist-nuitka/
+installer/build-nuitka/
+
+# Python cache
+__pycache__/
 *.pyc
-res/top.png
-# installer
-version_info.py
-installer/EXE
-# 临时版本文件
+
+# Executables
+*.exe
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# Project-specific temporary files
 installer/version.tmp
 installer/Remote-Controls-temp.iss
-installer/test_dynamic_version.ps1
+
+# Ignore local config (do NOT commit secrets)
+config.json
+passwords.txt
+
+# Generated version (kept out of VCS)
+version_info.py
+installer/RC-GUI.spec
+installer/RC-Status.spec
+installer/RC-main.spec
+installer/RC-tray.spec
+installer/EXE/close_RC.bat
+installer/EXE/close_RC_tray.bat
+logs/admin_status.txt
+test.py
