@@ -21,7 +21,7 @@ from logging.handlers import RotatingFileHandler
 import traceback
 from tkinter import N, messagebox
 import pystray
-from win11toast import notify as toast
+from win11toast import notify as toast, clear_toast
 from PIL import Image
 import psutil
 import webbrowser
@@ -798,7 +798,7 @@ def _prepare_scaled_icon(scale: float = 0.7) -> str | None:
         logging.warning(f"缩放通知图标失败，使用原图: {e}")
         return ICON_NOTIFY_PATH
 
-def notify(msg, level="info", show_error=False, title: str | None = None):
+def notify(msg, level="info", show_error=False, title: str | None = None, unique: bool = True, mode: str = "replace"):
     """发送系统通知并记录日志，统一显示为应用名而不是 python。
 
     参数:
@@ -818,11 +818,24 @@ def notify(msg, level="info", show_error=False, title: str | None = None):
             icon_param = None
             if icon_use:
                 icon_param = {"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"}
+            tag = group = None
+            if mode == "replace":
+                # 固定 tag/group，实现覆盖
+                tag = "rc_live"
+                group = "rc_live_group"
+                try:
+                    clear_toast(app_id=APP_NOTIFY_NAME, tag=tag, group=group)
+                except Exception:
+                    pass
+            elif unique:
+                now_ms = int(time.time()*1000)
+                tag = f"t{now_ms%1000000}"
+                group = "rc_fast"
             # 正确参数形式：title= 标题, body= 内容, app_id= 自定义应用名
             if icon_param:
-                toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME, icon=icon_param)
+                toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME, icon=icon_param, tag=tag, group=group)
             else:
-                toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME)
+                toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME, tag=tag, group=group)
         except TypeError:
             # 旧版本可能不支持 body 关键字（不大可能），尝试最简降级
             try:

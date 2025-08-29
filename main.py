@@ -17,7 +17,7 @@ import psutil
 import pystray
 from PIL import Image
 import wmi
-from win11toast import notify as _toast_notify
+from win11toast import notify as _toast_notify, clear_toast as _toast_clear
 import json
 import logging
 from logging.handlers import RotatingFileHandler
@@ -364,7 +364,7 @@ def _prepare_scaled_icon(scale: float = 0.7) -> str | None:
         logging.warning(f"缩放通知图标失败，使用原图: {e}")
         return icon_path
 
-def notify(message: str, level: str = "info", title: str | None = None, show_error: bool = False) -> None:
+def notify(message: str, level: str = "info", title: str | None = None, show_error: bool = False, unique: bool = True, mode: str = "replace") -> None:
     """发送系统通知，统一应用名。"""
     if not NOTIFY_ENABLED:
         logging.info(f"通知(已禁用): {message}")
@@ -375,10 +375,22 @@ def notify(message: str, level: str = "info", title: str | None = None, show_err
     icon_path = _prepare_scaled_icon()
     try:
         try:
+            tag = group = None
+            if mode == "replace":
+                tag = "rc_live"
+                group = "rc_live_group"
+                try:
+                    _toast_clear(app_id=APP_NOTIFY_NAME, tag=tag, group=group)
+                except Exception:
+                    pass
+            elif unique:
+                now_ms = int(time.time()*1000)
+                tag = f"t{now_ms%1000000}"
+                group = "rc_fast"
             if icon_path:
-                _toast_notify(title=t_title, body=message, app_id=APP_NOTIFY_NAME, icon={"src": icon_path, "placement": "appLogoOverride", "hint-crop": "none"})
+                _toast_notify(title=t_title, body=message, app_id=APP_NOTIFY_NAME, icon={"src": icon_path, "placement": "appLogoOverride", "hint-crop": "none"}, tag=tag, group=group)
             else:
-                _toast_notify(title=t_title, body=message, app_id=APP_NOTIFY_NAME)
+                _toast_notify(title=t_title, body=message, app_id=APP_NOTIFY_NAME, tag=tag, group=group)
         except TypeError:
             if icon_path:
                 _toast_notify(t_title, message, app_id=APP_NOTIFY_NAME, icon={"src": icon_path, "placement": "appLogoOverride", "hint-crop": "none"})  # type: ignore
