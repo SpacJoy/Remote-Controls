@@ -749,120 +749,178 @@ def open_gui():
         logging.error(f"打开配置界面出现异常: {e}")
         notify(f"打开配置界面失败: {e}", level="error")
 
-def notify(msg, level="info", show_error=False):
-    """
-    发送通知并记录日志
-    
+APP_NOTIFY_NAME = "远程控制托盘"
+_ICON_CANDIDATES = [
+    ICON_FILE,
+    "icon.ico",
+    os.path.join("res", "icon.ico"),
+]
+ICON_NOTIFY_PATH = None
+for _p in _ICON_CANDIDATES:
+    try:
+        rp = resource_path(_p)
+        if rp and os.path.exists(rp):
+            ICON_NOTIFY_PATH = rp
+            break
+    except Exception:
+        pass
+
+_SCALED_NOTIFY_ICON = None
+
+def _prepare_scaled_icon(scale: float = 0.7) -> str | None:
+    """生成带透明留白的缩放图标，减少被裁切、显得过大的问题。只生成一次缓存。"""
+    global _SCALED_NOTIFY_ICON
+    if _SCALED_NOTIFY_ICON:
+        return _SCALED_NOTIFY_ICON
+    if not ICON_NOTIFY_PATH:
+        return None
+    try:
+        from PIL import Image as _PILImage
+        base = _PILImage.open(ICON_NOTIFY_PATH)
+        # 取最大边，生成 64x64 画布
+        canvas_size = 64
+        # 计算缩放后尺寸（保持比例）
+        max_edge = max(base.size)
+        target_edge = max(16, int(canvas_size * scale))
+        ratio = target_edge / float(max_edge)
+        new_size = (max(1, int(base.size[0]*ratio)), max(1, int(base.size[1]*ratio)))
+        base = base.resize(new_size, _PILImage.LANCZOS)
+        canvas = _PILImage.new("RGBA", (canvas_size, canvas_size), (0,0,0,0))
+        off = ((canvas_size - new_size[0])//2, (canvas_size - new_size[1])//2)
+        canvas.paste(base, off, base if base.mode in ("RGBA","LA") else None)
+        import tempfile, hashlib
+        h = hashlib.md5((ICON_NOTIFY_PATH+str(scale)).encode('utf-8')).hexdigest()[:8]
+        out_path = os.path.join(tempfile.gettempdir(), f"rc_toast_icon_{h}.png")
+        canvas.save(out_path, "PNG")
+        _SCALED_NOTIFY_ICON = out_path
+        return out_path
+    except Exception as e:
+        logging.warning(f"缩放通知图标失败，使用原图: {e}")
+        return ICON_NOTIFY_PATH
+
+def notify(msg, level="info", show_error=False, title: str | None = None):
+    """发送系统通知并记录日志，统一显示为应用名而不是 python。
+
     参数:
-    - msg: 通知消息
-    - level: 日志级别 ( "info", "warning", "error", "critical")
-    - show_error: 是否在通知失败时显示错误对话框
+    - msg: 通知内容
+    - level: info/warning/error/critical
+    - show_error: 通知失败时是否弹出消息框
+    - title: 自定义标题（默认使用 APP_NOTIFY_NAME）
     """
-    # 根据级别记录日志
-    log_func = getattr(logging, level.lower())
+    log_func = getattr(logging, level.lower(), logging.info)
     log_func(f"通知: {msg}")
-    
-    # 在单独的线程中发送通知，避免阻塞主线程
+
+    t_title = title or APP_NOTIFY_NAME
+
     def _show_toast_in_thread():
         try:
-            toast(msg)
+            icon_use = _prepare_scaled_icon()
+            icon_param = None
+            if icon_use:
+                icon_param = {"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"}
+            # 正确参数形式：title= 标题, body= 内容, app_id= 自定义应用名
+            if icon_param:
+                toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME, icon=icon_param)
+            else:
+                toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME)
+        except TypeError:
+            # 旧版本可能不支持 body 关键字（不大可能），尝试最简降级
+            try:
+                icon_use = _prepare_scaled_icon()
+                if icon_use:
+                    toast(t_title, msg, app_id=APP_NOTIFY_NAME, icon={"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"})
+                else:
+                    toast(t_title, msg, app_id=APP_NOTIFY_NAME)
+            except Exception:
+                try:
+                    icon_use = _prepare_scaled_icon()
+                    if icon_use:
+                        toast(t_title, msg, icon={"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"})
+                    else:
+                        toast(t_title, msg)
+                except Exception as e:
+                    logging.error(f"发送通知失败: {e}")
+                    if show_error:
+                        try:
+                            messagebox.showinfo(t_title, msg)
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            print(f"[{t_title}] {msg}")
+                        except Exception:
+                            pass
         except Exception as e:
             logging.error(f"发送通知失败: {e}")
             if show_error:
                 try:
-                    messagebox.showinfo("通知", msg)
-                except Exception as e2:
-                    logging.error(f"显示消息框也失败: {e2}")
+                    messagebox.showinfo(t_title, msg)
+                except Exception:
+                    pass
             else:
-                print(msg)
-    
-    # 启动一个守护线程来显示通知
-    t = threading.Thread(target=_show_toast_in_thread)
-    t.daemon = True
-    t.start()
+                try:
+                    print(f"[{t_title}] {msg}")
+                except Exception:
+                    pass
 
-def close_exe(name:str,skip_admin:bool=False):
-    """关闭指定名称的进程"""
-    logging.info(f"执行函数: close_exe; 参数: {name}")
-    try:
-        is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
-        if is_admin or skip_admin:
-            logging.info(f"尝试关闭进程: {name}")
-            script_content = f"""
-            @echo off
-            taskkill /im "{name}" /f
-            if %errorlevel% equ 0 (
-                echo 成功关闭进程 "{name}".
-            ) else (
-                echo 进程 "{name}" 未运行或关闭失败.
-            )
-            exit
-            """
-            temp_script = os.path.join(os.environ.get('TEMP', '.'), 'stop_tray.bat')
-            with open(temp_script, 'w') as f:
-                f.write(script_content)
-            
-            # 以管理员权限运行批处理
-            rest=ctypes.windll.shell32.ShellExecuteW(
-                None, "runas", "cmd.exe", f"/c {temp_script}", None, 0
-            )
-            if rest > 32:
-                logging.info(f"成功关闭进程，PID: {rest}")
-            else:
-                # logging.error(f"关闭进程失败，错误码: {rest}")
-                notify(f"关闭进程失败，错误码: {rest}", level="error", show_error=True)
-                return
-        else:
-            # logging.warning(f"当前用户没有管理员权限，无法关闭进程{name}")
-            notify(f"当前用户没有管理员权限，无法关闭进程{name}", level="warning")
-    except FileNotFoundError:
-        # logging.error(f"未找到进程文件: {name}")
-        notify(f"未找到进程文件: {name}", level="error", show_error=True)
-    except Exception as e:
-        logging.error(f"关闭{name}时出错: {e}")
-        # 如果出错，仍然尝试正常退出
-        threading.Timer(1.0, lambda: os._exit(0)).start()
+    th = threading.Thread(target=_show_toast_in_thread, daemon=True)
+    th.start()
 
-def close_script(script_name,skip_admin:bool=False):
-    """关闭脚本函数"""
+def close_script(script_name, skip_admin: bool = False):
+    """关闭脚本函数（按名字匹配 python.exe/pythonw.exe 中的命令行）。"""
     logging.info(f"执行函数: close_script; 参数: {script_name}")
     try:
         is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
         if is_admin or skip_admin:
-            # 通过名称查找进程（模糊匹配）
             logging.info(f"尝试关闭脚本: {script_name}")
-            cmd_find = f'tasklist /FI "IMAGENAME eq python.exe" /FO CSV /NH'
-            output = subprocess.check_output(cmd_find, shell=True).decode('utf-8')
-            
-            # 解析输出，找到目标脚本的PID
-            target_pids = []
+            cmd_find = 'tasklist /FI "IMAGENAME eq python.exe" /FO CSV /NH'
+            output = subprocess.check_output(cmd_find, shell=True).decode('utf-8', errors='ignore')
+            target_pids: list[str] = []
             for line in output.splitlines():
                 if script_name in line:
                     parts = line.replace('"', '').split(',')
-                    pid = parts[1].strip()
-                    target_pids.append(pid)
-            
-            # 终止所有匹配的进程
+                    if len(parts) > 1:
+                        pid = parts[1].strip()
+                        target_pids.append(pid)
             for pid in target_pids:
                 try:
-                    # 以管理员权限调用 taskkill
                     subprocess.run(
                         f'taskkill /F /PID {pid}',
                         shell=True,
                         check=True,
                         creationflags=subprocess.CREATE_NO_WINDOW
                     )
-                    print(f"已终止进程 PID: {pid}")
+                    logging.info(f"已终止进程 PID: {pid}")
                 except subprocess.CalledProcessError:
-                    print(f"无法终止进程 PID: {pid}（可能需要管理员权限）")
+                    logging.warning(f"无法终止进程 PID: {pid}")
         else:
-            # logging.warning(f"当前用户没有管理员权限，无法关闭脚本{script_name}")
             notify(f"当前用户没有管理员权限，无法关闭脚本{script_name}", level="warning")
     except FileNotFoundError:
-        # logging.error(f"未找到脚本文件: {script_name}")
         notify(f"未找到脚本文件: {script_name}", level="error", show_error=True)
     except Exception as e:
         logging.error(f"关闭脚本{script_name}时出错: {e}")
+
+def close_exe(name: str, skip_admin: bool = False):
+    """关闭指定 exe 进程（按名称）。"""
+    logging.info(f"执行函数: close_exe; 参数: {name}")
+    try:
+        is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+        if is_admin or skip_admin:
+            script_content = f"""
+            @echo off
+            taskkill /im "{name}" /f
+            exit /b 0
+            """
+            temp_script = os.path.join(os.environ.get('TEMP', '.'), f'_rc_kill_{name}.bat')
+            with open(temp_script, 'w', encoding='utf-8') as f:
+                f.write(script_content)
+            r = ctypes.windll.shell32.ShellExecuteW(None, 'runas', 'cmd.exe', f'/c "{temp_script}"', None, 0)
+            if r <= 32:
+                notify(f"结束进程 {name} 失败，错误码: {r}", level='error')
+        else:
+            notify(f"当前用户没有管理员权限，无法关闭进程 {name}", level='warning')
+    except Exception as e:
+        logging.error(f"关闭{name}进程时出错: {e}")
 
 def stop_tray():
     """关闭托盘程序"""

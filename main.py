@@ -17,7 +17,7 @@ import psutil
 import pystray
 from PIL import Image
 import wmi
-from win11toast import notify
+from win11toast import notify as _toast_notify
 import json
 import logging
 from logging.handlers import RotatingFileHandler
@@ -307,21 +307,95 @@ def set_volume(value: int) -> None:
 
 
 NOTIFY_ENABLED = True
+APP_NOTIFY_NAME = "远程控制主程序"
+def _resolve_notify_icon() -> str | None:
+    if '_RC_NOTIFY_ICON' in globals():
+        return globals()['_RC_NOTIFY_ICON']
+    bases = []
+    try:
+        if hasattr(sys, '_MEIPASS'):
+            bases.append(getattr(sys, '_MEIPASS'))  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    for src in [os.path.abspath(os.path.dirname(__file__)), os.path.abspath(os.path.dirname(sys.executable)), os.path.abspath('.')]:
+        try:
+            bases.append(src)
+        except Exception:
+            pass
+    rels = ["icon.ico", os.path.join("res", "icon.ico")]
+    for b in bases:
+        for r in rels:
+            p = os.path.join(b, r)
+            if os.path.exists(p):
+                globals()['_RC_NOTIFY_ICON'] = p
+                return p
+    globals()['_RC_NOTIFY_ICON'] = None
+    return None
 
-def notify_in_thread(message: str) -> None:
-    """
-    English: Displays a Windows toast notification in a separate thread
-    中文: 在单独线程中显示 Windows toast 通知
-    """
+_SCALED_NOTIFY_ICON = None
+
+def _prepare_scaled_icon(scale: float = 0.7) -> str | None:
+    """生成带透明留白的缩放图标（缓存一次）。"""
+    global _SCALED_NOTIFY_ICON
+    if _SCALED_NOTIFY_ICON:
+        return _SCALED_NOTIFY_ICON
+    icon_path = _resolve_notify_icon()
+    if not icon_path:
+        return None
+    try:
+        from PIL import Image as _PILImage
+        base = _PILImage.open(icon_path)
+        canvas_size = 64
+        max_edge = max(base.size)
+        target_edge = max(16, int(canvas_size * scale))
+        ratio = target_edge / float(max_edge)
+        new_size = (max(1, int(base.size[0]*ratio)), max(1, int(base.size[1]*ratio)))
+        base = base.resize(new_size, _PILImage.LANCZOS)
+        canvas = _PILImage.new("RGBA", (canvas_size, canvas_size), (0,0,0,0))
+        off = ((canvas_size - new_size[0])//2, (canvas_size - new_size[1])//2)
+        canvas.paste(base, off, base if base.mode in ("RGBA","LA") else None)
+        import tempfile, hashlib
+        h = hashlib.md5((icon_path+str(scale)).encode('utf-8')).hexdigest()[:8]
+        out_path = os.path.join(tempfile.gettempdir(), f"rc_main_toast_icon_{h}.png")
+        canvas.save(out_path, "PNG")
+        _SCALED_NOTIFY_ICON = out_path
+        return out_path
+    except Exception as e:
+        logging.warning(f"缩放通知图标失败，使用原图: {e}")
+        return icon_path
+
+def notify(message: str, level: str = "info", title: str | None = None, show_error: bool = False) -> None:
+    """发送系统通知，统一应用名。"""
     if not NOTIFY_ENABLED:
         logging.info(f"通知(已禁用): {message}")
         return
-    logging.info(f"通知: {message}")
-    def notify_message():
-        notify(message)
+    log_func = getattr(logging, level.lower(), logging.info)
+    log_func(f"通知: {message}")
+    t_title = title or APP_NOTIFY_NAME
+    icon_path = _prepare_scaled_icon()
+    try:
+        try:
+            if icon_path:
+                _toast_notify(title=t_title, body=message, app_id=APP_NOTIFY_NAME, icon={"src": icon_path, "placement": "appLogoOverride", "hint-crop": "none"})
+            else:
+                _toast_notify(title=t_title, body=message, app_id=APP_NOTIFY_NAME)
+        except TypeError:
+            if icon_path:
+                _toast_notify(t_title, message, app_id=APP_NOTIFY_NAME, icon={"src": icon_path, "placement": "appLogoOverride", "hint-crop": "none"})  # type: ignore
+            else:
+                _toast_notify(t_title, message, app_id=APP_NOTIFY_NAME)  # type: ignore
+    except Exception as e:
+        logging.error(f"通知发送失败: {e}")
+        if show_error:
+            try:
+                messagebox.showinfo(t_title, message)
+            except Exception:
+                pass
 
-    thread = threading.Thread(target=notify_message)
-    thread.daemon = True
+def notify_in_thread(message: str) -> None:
+    def _send():
+        notify(message)
+    thread = threading.Thread(target=_send, daemon=True)
     thread.start()
 
 
