@@ -728,18 +728,26 @@ def check_admin(icon=None, item=None):
         notify("主程序未运行")
         return
 
-def open_gui(icon=None, item=None):
-    """打开配置界面"""
+def open_gui():
+    """打开配置界面
+
+    逻辑说明：
+    - 通过菜单项点击打开。
+    """
     logging.info("执行函数: open_gui")
-    if os.path.exists(GUI_EXE):
-        subprocess.Popen([GUI_EXE])
-        logging.info(f"打开配置界面: {GUI_EXE}")
-    elif os.path.exists(GUI_PY):
-        logging.info(f"打开配置界面: {GUI_PY}")
-        subprocess.Popen([sys.executable, GUI_PY])
-    else:
-        logging.error(f"未找到配置界面: {GUI_EXE} 或 {GUI_PY}")
-        notify("未找到配置界面")
+    try:
+        if os.path.exists(GUI_EXE):
+            subprocess.Popen([GUI_EXE])
+            logging.info(f"打开配置界面: {GUI_EXE}")
+        elif os.path.exists(GUI_PY):
+            logging.info(f"打开配置界面: {GUI_PY}")
+            subprocess.Popen([sys.executable, GUI_PY])
+        else:
+            logging.error(f"未找到配置界面: {GUI_EXE} 或 {GUI_PY}")
+            notify("未找到配置界面")
+    except Exception as e:
+        logging.error(f"打开配置界面出现异常: {e}")
+        notify(f"打开配置界面失败: {e}", level="error")
 
 def notify(msg, level="info", show_error=False):
     """
@@ -861,24 +869,38 @@ def stop_tray():
     logging.info("执行函数: stop_tray")
     logging.info("="*30)
     logging.info("正在关闭托盘程序")
-    
-    # 有管理员权限或UAC未启用时，正常重启主程序并退出托盘
-    logging.info("托盘程序退出，将重启主程序并退出托盘")
-    
-    # 定义在restart_main完成后执行的回调函数
-    def exit_after_restart():
-        logging.info("主程序重启完成，现在可以安全退出托盘")
-        # 安全停止托盘图标
+    # 判断主程序是否正在运行
+    try:
+        running = is_main_running()
+    except Exception as e:
+        logging.error(f"检测主程序运行状态失败: {e}")
+        running = False
+
+    if not running:
+        # 主程序未运行 -> 仅退出托盘，不启动主程序
+        logging.info("主程序未运行，仅退出托盘，不启动主程序")
         if 'icon' in globals() and icon:
             try:
                 icon.stop()
                 logging.info("托盘图标已停止")
             except Exception as e:
                 logging.error(f"停止托盘图标时出错: {e}")
-        # 设置一个定时器在2秒后退出程序
+        threading.Timer(0.3, lambda: os._exit(0)).start()
+        return
+
+    # 主程序已在运行，沿用原逻辑：重启主程序再退出托盘
+    logging.info("托盘程序退出，将重启主程序并退出托盘（主程序当前已运行）")
+
+    def exit_after_restart():
+        logging.info("主程序重启完成，现在可以安全退出托盘")
+        if 'icon' in globals() and icon:
+            try:
+                icon.stop()
+                logging.info("托盘图标已停止")
+            except Exception as e:
+                logging.error(f"停止托盘图标时出错: {e}")
         threading.Timer(0.5, lambda: os._exit(0)).start()
-    
-    # 调用restart_main并传递回调函数
+
     restart_main(callback=exit_after_restart)
 
 def close_main():
@@ -962,19 +984,30 @@ def get_menu_items():
             version_text = f"版本-{BANBEN}（检查失败）"
         # 如果是"pending"状态，保持默认显示
     
-    return [
-    # 版本点击 -> 打开项目主页并后台检查更新
-    pystray.MenuItem(version_text, on_version_click),
-    # 托盘状态点击 -> 打开彩蛋随机图片（cd1~cd5.*）
-    pystray.MenuItem(f"托盘状态: {admin_status}", lambda icon, item: _open_random_egg_image()),
-        # 其他功能菜单项
-    pystray.MenuItem("打开配置界面", open_gui, default=True),
+    items = [
+        # 版本点击 -> 打开项目主页并后台检查更新
+        pystray.MenuItem(version_text, on_version_click),
+        # 托盘状态点击 -> 打开彩蛋随机图片（cd1~cd5.*）
+        pystray.MenuItem(f"托盘状态: {admin_status}", lambda icon, item: _open_random_egg_image()),
+    ]
+
+    # 脚本模式提示（仅脚本模式显示）
+    if is_script_mode:
+        # disabled 状态：使用一个空的回调函数并设置 default=False
+        items.append(pystray.MenuItem("当前运行方式：脚本模式", lambda icon, item: None, enabled=False))
+        
+
+    # 其他功能菜单项
+    items.extend([
+        pystray.MenuItem("打开配置界面", open_gui),
         pystray.MenuItem("检查主程序管理员权限", check_admin),
         pystray.MenuItem("启动主程序", is_admin_start_main),
-        pystray.MenuItem("重启主程序", lambda icon, item: restart_main(icon, item)),        
+        pystray.MenuItem("重启主程序", lambda icon, item: restart_main(icon, item)),
         pystray.MenuItem("关闭主程序", close_main),
         pystray.MenuItem("退出托盘（使用主程序自带托盘）", lambda icon, item: stop_tray()),
-    ]
+    ])
+
+    return items
 
 # 托盘启动时检查主程序状态，使用单独线程处理主程序启动/重启，避免阻塞UI
 def init_main_program():
