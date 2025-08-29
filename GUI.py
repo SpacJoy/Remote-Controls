@@ -784,16 +784,137 @@ def load_custom_themes() -> None:
             break
 
 
+_DETAIL_LAST_GEOM: str | None = None
+
 def show_detail_window():
-    detail_win = tk.Toplevel(root)
-    detail_win.title("详情信息")
-    detail_win.geometry("600x800")
-    detail_text = tk.Text(detail_win, wrap="word")
-    sleep()
-    detail_text.insert("end", "\n【内置主题详解】\n\n屏幕：\n\n        灯泡设备，通过API调节屏幕亮度(百分比)\n\n\n音量：\n\n        窗帘设备，可调节系统总音量(百分比)，暂停为静音\n\n\n媒体控制：\n\n        窗帘设备，可控制系统媒体播放\n\n        打开(on)：上一曲\n\n        关闭(off)：下一曲\n\n        暂停(pause)：播放/暂停\n\n        打开百分比(on#80)：\n\n          1-33%：下一曲\n\n          34-66%：播放/暂停\n\n          67-100%：上一曲\n\n\n【自定义主题详解】\n\n\n注：[均为开关设备]\n\n程序或脚本：\n\n        需要填写路径，或调用系统api选择程序或脚本文件\n\n\n服务：\n\n        主程序需要管理员权限（开机自启时默认拥有）\n        填写服务名称\n\n\n命令：\n\n        需要填写需要执行的命令，关闭为发送中断信号\n\n\n模拟按键：\n\n        字母段延迟受pyautogui模块影响，至少25ms左右\n\n\n\n")
-    detail_text.config(state="disabled")
-    detail_text.pack(expand=True, fill="both", padx=10, pady=10)
-    center_window(detail_win)
+        """显示详细信息窗口（改进版：分栏、滚动、加大行距、段落留白）。"""
+        global _DETAIL_LAST_GEOM
+        win = tk.Toplevel(root)
+        win.title("详情信息")
+        win.minsize(680, 520)
+        # 恢复上次窗口尺寸
+        if _DETAIL_LAST_GEOM:
+                try:
+                        win.geometry(_DETAIL_LAST_GEOM)
+                except Exception:
+                        pass
+        else:
+                win.geometry("760x640")
+
+        def _on_close():
+                nonlocal win
+                try:
+                        geom = win.winfo_geometry()
+                        # 只记录 宽x高+X+Y 结构
+                        if geom:
+                                # 去掉位置只保留宽高
+                                parts = geom.split("+")
+                                globals()["_DETAIL_LAST_GEOM"] = parts[0]
+                except Exception:
+                        pass
+                win.destroy()
+
+        win.protocol("WM_DELETE_WINDOW", _on_close)
+
+        notebook = ttk.Notebook(win)
+        notebook.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # 通用文本创建函数
+        def make_text_tab(title: str, content: str) -> None:
+                frame = ttk.Frame(notebook)
+                notebook.add(frame, text=title)
+                # 使用 Text + Scrollbar 而非 scrolledtext（避免某些打包环境主题差异）
+                txt = tk.Text(frame, wrap="word", undo=False, relief="flat", padx=8, pady=8)
+                vsb = ttk.Scrollbar(frame, orient="vertical", command=txt.yview)
+                txt.configure(yscrollcommand=lambda *a: vsb.set(*a))
+                vsb.pack(side="right", fill="y")
+                txt.pack(side="left", fill="both", expand=True)
+
+                # 字体：在系统默认字体基础上放大 + 行距
+                base_font = tkfont.nametofont("TkDefaultFont").copy()
+                size = max(10, base_font.cget("size"))
+                try:
+                        base_font.configure(size=size + 1)
+                except Exception:
+                        pass
+                txt.configure(font=base_font, spacing1=4, spacing2=2, spacing3=6)
+
+                # 插入内容并对标题/小节样式加粗
+                txt.tag_config("section", font=(base_font.cget("family"), base_font.cget("size") + 1, "bold"), spacing3=10)
+                txt.tag_config("sub", font=(base_font.cget("family"), base_font.cget("size"), "bold"))
+
+                # 解析行：以全角书名号/【】或以冒号结尾视为小节
+                lines = content.strip().splitlines()
+                for line in lines:
+                        striped = line.strip()
+                        if not striped:
+                                txt.insert("end", "\n")
+                                continue
+                        if striped.startswith("【") and striped.endswith("】"):
+                                txt.insert("end", striped + "\n", ("section",))
+                        elif striped.endswith("：") and len(striped) < 20:
+                                txt.insert("end", striped + "\n", ("sub",))
+                        else:
+                                txt.insert("end", striped + "\n")
+                txt.configure(state="disabled")
+
+        # 内置主题内容
+        builtin_content = """
+【内置主题概览】
+屏幕：
+    灯类型；调节系统亮度 (0-100)。
+
+音量：
+    窗帘类型；调节系统总音量 (0-100)，pause=静音。
+
+媒体控制：
+    窗帘类型；控制多媒体：
+        on=上一曲  off=下一曲  pause=播放/暂停
+        on#百分比：1-33 下一曲 / 34-66 播放暂停 / 67-100 上一曲。
+
+睡眠主题：
+    sleep / hibernate / display_off / display_on / lock；支持 on/off 延时。
+"""
+
+        custom_content = """
+【自定义主题类型】
+程序或脚本：
+    选择 EXE / .py / .pyw / .ps1 / .bat / .cmd；必要时自动选解释器。
+
+服务：
+    需管理员权限；填写服务名称；开/关对应 start/stop。
+
+命令：
+    PowerShell 执行；on 运行；off 发送 CTRL_BREAK 优雅中断（若支持）。
+
+按键(Hotkey)：
+    支持组合键 (ctrl/alt/shift/win)；可用 {down}/{up}；
+    字母段逐字符发送，可设置字母段间隔（>=25ms）。
+"""
+
+        tips_content = """
+【使用与提示】
+日志：
+    issues 时附 logs/RC.log 便于排查。
+
+更新：
+    版本托盘菜单可手动检查；未知版本显示为 'V未知版本' 并提示升级。
+
+权限：
+    部分功能（服务/亮度/计划任务）需管理员；不足时界面会提示。
+
+配置：
+    GUI 保存后主程序自动读取；残留互斥体会自动忽略并继续。
+
+多实例：
+    主程序具互斥 + 进程确认；脚本模式可选择结束/忽略/退出。
+"""
+
+        make_text_tab("内置主题", builtin_content)
+        make_text_tab("自定义主题", custom_content)
+        make_text_tab("提示说明", tips_content)
+
+        center_window(win)
 
 
 def rebuild_custom_theme_tree() -> None:
