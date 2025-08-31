@@ -159,19 +159,37 @@ if ($LASTEXITCODE -ne 0) {
 # 打包托盘程序
 Write-Host ""
 Write-Host "[6/8] 打包托盘程序 RC-tray.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller `
-    -F -n RC-tray --windowed --noconfirm `
-    --specpath $InstallerDir `
-    --icon=$IconIco `
-    --add-data "$IconIco;." `
-    --add-data "$Cd1;res" `
-    --add-data "$Cd2;res" `
-    --add-data "$Cd3;res" `
-    --add-data "$Cd4;res" `
-    --add-data "$Cd5;res" `
-    --distpath (Join-Path $InstallerDir 'dist') `
-    --workpath (Join-Path $InstallerDir 'build') `
-    tray.py
+<#
+  改动：不再依赖固定 spec/固定 cd1~cd5 列表。
+  动态收集 res 目录下存在的彩蛋图片 (cd1..cd9 任意扩展) 并添加为 --add-data。
+  若未来新增文件，无需修改脚本。
+  同时去掉 --specpath，使生成的临时 spec 仅用于本次构建，不强制写回 installer 目录（更少“以 spec 为准”耦合）。
+#>
+
+$TrayDist = (Join-Path $InstallerDir 'dist')
+$TrayBuild = (Join-Path $InstallerDir 'build')
+$EggPatterns = @('cd?.jpg','cd?.jpeg','cd?.png','cd?.gif','cd?.ico')
+$EggImages = @()
+foreach ($pat in $EggPatterns) {
+    $EggImages += Get-ChildItem -Path $ResDir -File -Filter $pat -ErrorAction SilentlyContinue
+}
+
+$TrayArgs = @(
+    '-F','-n','RC-tray','--windowed','--noconfirm',
+    "--icon=$IconIco",
+    '--add-data',"$IconIco;.",
+    '--distpath',$TrayDist,
+    '--workpath',$TrayBuild
+)
+
+foreach ($img in ($EggImages | Sort-Object FullName -Unique)) {
+    $TrayArgs += @('--add-data',"$($img.FullName);res")
+}
+
+$TrayArgs += 'tray.py'
+
+Write-Host ("  动态包含彩蛋图片数量: {0}" -f ($EggImages.Count)) -ForegroundColor Cyan
+& $PythonCmd -m PyInstaller @TrayArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：托盘程序打包失败" -ForegroundColor Red
     Read-Host "按Enter键退出"
