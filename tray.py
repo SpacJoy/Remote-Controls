@@ -334,7 +334,7 @@ def on_version_click(icon=None, item=None):
 
 def _open_random_egg_image() -> None:
     """
-    打开彩蛋图片：在 res 中查找 cd1~cd5.*（支持 .png/.jpg/.jpeg/.gif/.ico），
+    打开彩蛋图片：在 res 中查找 cd1~cd2.*（支持 .png/.jpg/.jpeg/.gif/.ico），
     每次随机挑选一张存在的图片，用系统默认查看器打开。
     """
     names: list[str] = []
