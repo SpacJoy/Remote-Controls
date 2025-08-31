@@ -332,15 +332,68 @@ def on_version_click(icon=None, item=None):
 
 
 def _open_random_egg_image() -> None:
-    """直接在浏览器打开远程随机图片链接，不再包含本地回退。"""
+    """打开/刷新远程随机图片：若已打开则聚焦并发送刷新(F5)，否则新开。
+
+    受限：浏览器标签内部不可直接精确定位；策略：
+    1. 首次打开后延迟记录前台窗口句柄；
+    2. 后续点击如果句柄仍存在且可见 -> 前置并发送 F5；失败则重新打开。
+    """
     remote_url = "https://random.ysy.146019.xyz/"
+    global _RANDOM_EGG_HWND
+    user32 = ctypes.windll.user32
+
+    def _is_window_valid(hwnd:int) -> bool:
+        try:
+            return hwnd and user32.IsWindow(hwnd) and user32.IsWindowVisible(hwnd)
+        except Exception:
+            return False
+
+    def _focus_and_refresh(hwnd:int) -> bool:
+        try:
+            SW_RESTORE = 9
+            user32.ShowWindow(hwnd, SW_RESTORE)
+            user32.SetForegroundWindow(hwnd)
+            # 发送 F5
+            KEYEVENTF_KEYUP = 0x0002
+            VK_F5 = 0x74
+            user32.keybd_event(VK_F5, 0, 0, 0)
+            user32.keybd_event(VK_F5, 0, KEYEVENTF_KEYUP, 0)
+            logging.info(f"已尝试刷新随机图片窗口 hwnd={hwnd}")
+            return True
+        except Exception as e:
+            logging.warning(f"刷新窗口失败 hwnd={hwnd}: {e}")
+            return False
+
+    # 若已有记录的窗口句柄，尝试刷新
+    if globals().get('_RANDOM_EGG_HWND') and _is_window_valid(_RANDOM_EGG_HWND):
+        if _focus_and_refresh(_RANDOM_EGG_HWND):
+            notify("已刷新随机图片标签", level="info")
+            return
+        else:
+            # 失效，清除记录，改为重新打开
+            _RANDOM_EGG_HWND = None  # type: ignore
+
+    # 需要新开
     try:
-        webbrowser.open_new_tab(remote_url)
-        logging.info(f"打开远程随机图片: {remote_url}")
-        notify("已打开远程随机图片，可刷新", level="info")
+        webbrowser.open(remote_url, new=2, autoraise=True)
+        logging.info(f"新开远程随机图片标签: {remote_url}")
+        notify("已打开随机图片标签", level="info")
     except Exception as e:
-        logging.error(f"打开远程随机图片失败: {e}")
-        notify("打开远程随机图片失败", level="error")
+        logging.error(f"打开随机图片失败: {e}")
+        notify("打开随机图片失败", level="error")
+        return
+
+    # 延迟记录窗口句柄（获取当前前台窗口）
+    def _record_hwnd():
+        try:
+            time.sleep(0.8)  # 等浏览器切到前台
+            fg = user32.GetForegroundWindow()
+            if _is_window_valid(fg):
+                globals()['_RANDOM_EGG_HWND'] = fg
+                logging.info(f"记录随机图片窗口句柄: {fg}")
+        except Exception as e:
+            logging.warning(f"记录窗口句柄失败: {e}")
+    threading.Thread(target=_record_hwnd, daemon=True).start()
 
 # 信号处理函数，用于捕获CTRL+C等中断信号
 def signal_handler(signum, frame):
