@@ -215,6 +215,36 @@ def execute_command(cmd: str, timeout: int = 30) -> int:
     return process.wait()
 
 
+def _normalize_command_for_powershell(cmd: str) -> str:
+    """规范化用户命令以避免被 PowerShell alias 误解析。
+
+    主要问题：在 Windows PowerShell / PowerShell 7 中，`curl` 是 `Invoke-WebRequest` 的别名，
+    用户输入 Linux 风格命令如: `curl -s https://example.com` 时，`-s` 不是 iwr 的参数，
+    结果触发交互提示: 需要提供 Uri。
+
+    处理策略：
+    1. 若命令以 `curl` 开头（忽略前导空白），替换为 `curl.exe` 强制调用真正的 curl 程序。
+    2. 将孤立的 ` curl `、行首/行尾或用分号分隔的 `curl` 也替换为 `curl.exe`（简单正则）。
+    3. 将参数中短选项 `-s`（两侧为边界）替换为 `--silent`，避免与其它工具混淆；仅当后接空白或行尾。
+    4. 保持其它内容不变；若系统无 curl.exe，则仍会按原样失败，但不会落入 iwr 交互提示。
+    """
+    try:
+        import re as _re
+        txt = cmd or ""
+        # 仅在未显式写成 curl.exe 时处理
+        # 处理行首
+        txt = _re.sub(r"^(\s*)curl(\s+)", r"\1curl.exe\2", txt, flags=_re.IGNORECASE)
+        # 处理分隔后的独立 curl（; && || 后）
+        txt = _re.sub(r"([;&|]\s*)curl(\s+)", r"\1curl.exe\2", txt, flags=_re.IGNORECASE)
+        # 处理末尾独立 curl（极少见）
+        txt = _re.sub(r"(\s+)curl(\s*)$", r"\1curl.exe\2", txt, flags=_re.IGNORECASE)
+        # 将 -s => --silent （避免 iwr 误判无 URI）
+        txt = _re.sub(r"(?<![A-Za-z0-9_-])-s(?![A-Za-z0-9_-])(?=\s|$)", "--silent", txt)
+        return txt
+    except Exception:
+        return cmd
+
+
 """
 MQTT订阅成功时的回调函数。
 
@@ -818,6 +848,8 @@ def process_command(command: str, topic: str) -> None:
                         "-NoProfile",
                         "-ExecutionPolicy", "Bypass",
                     ]
+                    # 规范化命令，解决 curl 被 PowerShell 映射为 Invoke-WebRequest 导致提示 Uri 的问题
+                    cmd_text_norm = _normalize_command_for_powershell(cmd_text)
 
                     if window_mode == "hide":
                         # 隐藏窗口：创建新控制台并将其隐藏，保留控制台以支持CTRL_BREAK
@@ -828,14 +860,14 @@ def process_command(command: str, topic: str) -> None:
                         args += [
                             "-WindowStyle", "Hidden",
                             "-NonInteractive",
-                            "-Command", cmd_text,
+                            "-Command", cmd_text_norm,
                         ]
                     else:
                         # 显示窗口：创建新控制台并保持窗口
                         creationflags |= 0x00000010  # CREATE_NEW_CONSOLE
                         args += [
                             "-NoExit",
-                            "-Command", cmd_text,
+                            "-Command", cmd_text_norm,
                         ]
 
                     proc = subprocess.Popen(
@@ -846,7 +878,7 @@ def process_command(command: str, topic: str) -> None:
                     )
                     register_command_process(cmd_topic, proc.pid)
                     notify_in_thread(f"已执行命令: {cmd_topic}")
-                    logging.info(f"执行命令[{cmd_topic}] (window={window_mode}): {cmd_text}; PID={proc.pid}")
+                    logging.info(f"执行命令[{cmd_topic}] (window={window_mode}): {cmd_text_norm}; PID={proc.pid}")
                 except Exception as e:
                     logging.error(f"执行命令失败[{cmd_topic}]: {e}")
                     notify_in_thread(f"执行命令失败: {cmd_topic}")
