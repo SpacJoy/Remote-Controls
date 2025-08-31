@@ -2,12 +2,11 @@
 程序文件名RC-tray.exe
 运行用户：当前登录用户（可能有管理员权限）
 
-打包（仅包含固定图片：icon.ico 与 cd1~cd5；根目录额外放置 icon.ico）：
-1) 推荐：使用 spec 文件
-    pyinstaller RC-tray.spec --noconfirm
-
-2) 直接命令行（等价）：
-pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\cd1.jpg;res" --add-data "res\\cd2.jpg;res" --add-data "res\\cd3.jpg;res" --add-data "res\\cd4.jpg;res" --add-data "res\\cd5.png;res" --add-data "res\\icon.ico;." tray.py
+打包（当前仅需 icon.ico；托盘随机图片改为远程接口，无需打包 cd1~cd5）：
+1) PyInstaller 示例：
+    pyinstaller -F -n RC-tray --windowed --icon=res\\icon.ico --add-data "res\\icon.ico;." tray.py
+2) Nuitka 示例：
+    python -m nuitka --onefile --windows-icon-from-ico=res\\icon.ico --include-data-files=res\\icon.ico=icon.ico --output-filename=RC-tray.exe tray.py
 """
 
 import os
@@ -333,100 +332,15 @@ def on_version_click(icon=None, item=None):
 
 
 def _open_random_egg_image() -> None:
-    """优先在远程随机打开 webp 图片，失败则回退到本地彩蛋图片。
-
-    主方案：
-        访问固定域名下的资源，例如：https://146019.xyz/res/loading/loading006.webp
-        逻辑：
-            1. 在给定的远程子目录列表中随机选一个目录（目前只有 loading，可扩展）
-            2. 随机选择若干次编号（默认 1..30，三位零填充）组合成 loadingXYZ.webp
-            3. 对随机挑选的若干个（最多 attempts 次）进行探测（HTTP 200）后使用浏览器打开第一个可访问的 URL
-            4. 若全部失败（网络/404 等），进入本地备用方案
-
-    备用方案：
-        与旧逻辑相同，扫描 res 目录下 cd1~cd2.* 的图片并随机打开一个。
-
-    说明：
-        - 远程子目录及最大编号可后续放入配置文件；当前写死在代码中，便于快速启用
-        - 若不需要探测，可直接打开随机 URL（但可能出现 404 空白），此处做一次 HEAD/GET 验证提升体验
-    """
-    # ---------------- 远程主方案配置开始 ----------------
-    remote_base = "https://146019.xyz/res"
-    # 默认目录配置：name=子目录名; prefix=文件名前缀; max=最大序号(含)
-    # 文件名格式：{prefix}{index:03d}.webp  例如 loading006.webp
-    default_remote_dirs = [
-        {"name": "loading", "prefix": "loading", "max": 22},
-        {"name": "bright_back", "prefix": "bright_back", "max": 21},
-        {"name": "dark_back", "prefix": "dark_back", "max": 8},
-        {"name": "mobile_bright_back", "prefix": "mobile_bright_back", "max": 29},
-        {"name": "mobile_dark_back", "prefix": "mobile_dark_back", "max": 11},
-    ]
-    # 按用户要求：不读取 / 依赖 config.json，直接使用硬编码默认目录
-    remote_dirs = default_remote_dirs
-
-    attempts = 6   # 远程随机尝试次数
-    timeout = 2.5  # 单次探测超时
-
-    # --- 尝试远程随机图片 ---
+    """直接在浏览器打开远程随机图片链接，不再包含本地回退。"""
+    remote_url = "https://random.ysy.146019.xyz/"
     try:
-        for _ in range(attempts):
-            if not remote_dirs:
-                break
-            entry = random.choice(remote_dirs)
-            sub = entry["name"]
-            prefix = entry.get("prefix", sub)
-            mmax = max(1, int(entry.get("max", 30)))
-            idx = random.randint(1, mmax)
-            file_name = f"{prefix}{idx:03d}.webp"
-            url = f"{remote_base}/{sub}/{file_name}"
-            try:
-                req = urllib.request.Request(url, headers={"User-Agent": f"RC-tray/{BANBEN}"})
-                # 直接 GET 少量图片开销（HEAD 有时服务器不支持）
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
-                    if resp.status == 200:
-                        webbrowser.open_new_tab(url)
-                        logging.info(f"打开远程图片: {url}")
-                        notify("已打开远程图片", level="info")
-                        return
-            except Exception as e:
-                logging.debug(f"远程图片尝试失败: {url} | {e}")
-        logging.info("远程图片全部尝试失败，进入本地备用方案")
+        webbrowser.open_new_tab(remote_url)
+        logging.info(f"打开远程随机图片: {remote_url}")
+        notify("已打开远程随机图片，可刷新", level="info")
     except Exception as e:
-        logging.warning(f"远程图片主方案出现异常，进入本地备用方案: {e}")
-
-    # --- 本地备用方案 ---
-    names: list[str] = []
-    for i in range(1, 3):  # 原描述 cd1~cd2
-        for ext in (".png", ".jpg", ".jpeg", ".gif", ".ico"):
-            names.append(f"cd{i}{ext}")
-
-    found: list[str] = []
-    for name in names:
-        candidate_paths = [
-            os.path.join(appdata_dir, "res", name),
-            resource_path(name),
-            resource_path(os.path.join("res", name)),
-        ]
-        for p in candidate_paths:
-            try:
-                if p and os.path.exists(p):
-                    found.append(p)
-                    break
-            except Exception:
-                continue
-
-    if not found:
-        notify("未找到本地备用图片（res/cd1~cd2.*）", level="warning")
-        return
-
-    pick = random.choice(found)
-    try:
-        os.startfile(pick)
-        logging.info(f"打开本地备用图片: {pick}")
-        notify("已打开本地备用图片", level="info")
-    except Exception as e:
-        logging.error(f"打开本地图片失败: {e}")
-        notify("打开本地图片失败", level="error")
+        logging.error(f"打开远程随机图片失败: {e}")
+        notify("打开远程随机图片失败", level="error")
 
 # 信号处理函数，用于捕获CTRL+C等中断信号
 def signal_handler(signum, frame):

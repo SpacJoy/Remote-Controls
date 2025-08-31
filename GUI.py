@@ -21,6 +21,21 @@ import win32com.client
 import re
 from typing import Any, Dict, List, Union
 
+def _normalize_command_for_powershell(cmd: str) -> str:
+    """规范化命令避免 PowerShell 将 curl 映射为 Invoke-WebRequest。
+    处理：行首/分隔符后的 curl -> curl.exe，末尾独立 curl -> curl.exe，独立 -s -> --silent。
+    出错则返回原串。"""
+    try:
+        import re as _re
+        txt = cmd or ""
+        txt = _re.sub(r"^(\s*)curl(\s+)", r"\1curl.exe\2", txt, flags=_re.IGNORECASE)
+        txt = _re.sub(r"([;&|]\s*)curl(\s+)", r"\1curl.exe\2", txt, flags=_re.IGNORECASE)
+        txt = _re.sub(r"(\s+)curl(\s*)$", r"\1curl.exe\2", txt, flags=_re.IGNORECASE)
+        txt = _re.sub(r"(?<![A-Za-z0-9_-])-s(?![A-Za-z0-9_-])(?=\s|$)", "--silent", txt)
+        return txt
+    except Exception:
+        return cmd
+
 # 统一版本来源
 try:
     from version_info import get_version_string
@@ -1040,6 +1055,7 @@ def modify_custom_theme() -> None:
         if not cmd:
             messagebox.showwarning("提示", "请先在“值”中输入要测试的命令")
             return
+        cmd = _normalize_command_for_powershell(cmd)
         # 在 PowerShell 中显示命令，等待用户按回车后再执行
         ps_script = (
             "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
@@ -1290,6 +1306,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         if not cmd:
             messagebox.showwarning("提示", "请先在“值”中输入要测试的命令")
             return
+        cmd = _normalize_command_for_powershell(cmd)
         ps_script = (
             "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
             "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
