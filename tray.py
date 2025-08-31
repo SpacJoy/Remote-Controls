@@ -338,7 +338,7 @@ def _open_random_egg_image() -> None:
     每次随机挑选一张存在的图片，用系统默认查看器打开。
     """
     names: list[str] = []
-    for i in range(1, 6):
+    for i in range(1, 3):
         for ext in (".png", ".jpg", ".jpeg", ".gif", ".ico"):
             names.append(f"cd{i}{ext}")
 
