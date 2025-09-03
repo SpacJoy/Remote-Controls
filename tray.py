@@ -28,6 +28,23 @@ import random
 import urllib.request
 import json
 import re
+import threading as _threading_for_hook
+
+# 安全：设置全局异常钩子，避免未捕获异常导致 PyInstaller 弹 CrashSender 进程（某些环境会尝试调用缺失的 CrashSender.exe）
+def _safe_excepthook(exc_type, exc_value, exc_tb):
+    try:
+        import traceback as _tb
+        msg = ''.join(_tb.format_exception(exc_type, exc_value, exc_tb))
+        logging.error("未捕获异常:\n" + msg)
+        # 尽量非阻塞提示
+        try:
+            notify("托盘内部异常(已记录)", level="error")
+        except Exception:
+            pass
+    except Exception:
+        pass
+    # 不再次抛出，防止触发外部 crash 报告
+sys.excepthook = _safe_excepthook
 
 # 统一版本来源
 try:
@@ -332,15 +349,47 @@ def on_version_click(icon=None, item=None):
 
 
 def _open_random_egg_image() -> None:
-    """始终新开标签页显示远程随机图片，避免误刷新用户当前浏览的其他标签。"""
+    """异步、安全地打开随机图片 URL，减少浏览器启动偶发触发 CrashSender 的概率。
+
+    策略：
+    - 使用 ShellExecuteW 打开 URL（更接近用户双击行为，较 webbrowser.open 更少包装层）。
+    - 失败时回退 webbrowser.open。
+    - 加 1 秒节流，防止快速连点产生竞态。
+    """
     remote_url = "https://random.ysy.146019.xyz/"
-    try:
-        webbrowser.open(remote_url, new=2, autoraise=True)
-        logging.info(f"打开随机图片新标签: {remote_url}")
-        notify("已打开随机图片(可刷新)", level="info")
-    except Exception as e:
-        logging.error(f"打开随机图片失败: {e}")
-        notify("打开随机图片失败", level="error")
+    global _LAST_RANDOM_OPEN_TS
+    now = time.time()
+    if globals().get('_LAST_RANDOM_OPEN_TS') and now - _LAST_RANDOM_OPEN_TS < 1.0:
+        notify("操作过快，稍后重试", level="warning")
+        return
+    _LAST_RANDOM_OPEN_TS = now
+
+    def _worker():
+        try:
+            # 优先 ShellExecuteW
+            try:
+                SW_SHOWNORMAL = 1
+                res = ctypes.windll.shell32.ShellExecuteW(None, 'open', remote_url, None, None, SW_SHOWNORMAL)
+                if res <= 32:
+                    logging.warning(f"ShellExecuteW 打开URL返回: {res}，回退 webbrowser")
+                    raise RuntimeError(f"ShellExecuteW失败 {res}")
+                logging.info(f"ShellExecuteW 打开随机图片: {remote_url} (ret={res})")
+                notify("已打开随机图片", level="info")
+                return
+            except Exception as e1:
+                logging.info(f"ShellExecuteW 失败: {e1}")
+                # 回退 webbrowser
+                try:
+                    webbrowser.open(remote_url, new=2, autoraise=True)
+                    logging.info(f"webbrowser.open 打开随机图片: {remote_url}")
+                    notify("已打开随机图片", level="info")
+                    return
+                except Exception as e2:
+                    logging.error(f"webbrowser 打开随机图片失败: {e2}")
+                    notify("打开随机图片失败", level="error")
+        except Exception as e:
+            logging.error(f"随机图片打开线程异常: {e}")
+    threading.Thread(target=_worker, daemon=True).start()
 
 # 信号处理函数，用于捕获CTRL+C等中断信号
 def signal_handler(signum, frame):
