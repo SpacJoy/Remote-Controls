@@ -161,6 +161,7 @@ except Exception as e:
     logging.error(f"测试模式清空日志失败: {e}")
 
 # 记录程序启动信息
+_TRAY_START_TIME = time.time()  # 记录托盘启动时间，用于检测长时间空闲状态
 logging.info("="*50)
 logging.info("远程控制托盘程序启动")
 logging.info(f"程序路径: {os.path.abspath(__file__)}")
@@ -168,6 +169,7 @@ logging.info(f"工作目录: {os.getcwd()}")
 logging.info(f"运行模式: {'脚本模式' if is_script_mode else 'EXE模式'}")
 logging.info(f"Python版本: {sys.version}")
 logging.info(f"系统信息: {sys.platform}")
+logging.info(f"启动时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(_TRAY_START_TIME))}")
 logging.info("="*50)
 
 # 在程序启动时查询托盘程序的管理员权限状态并保存为全局变量
@@ -349,14 +351,15 @@ def on_version_click(icon=None, item=None):
 
 
 def _open_random_egg_image() -> None:
-    """异步、安全地打开随机图片 URL，减少浏览器启动偶发触发 CrashSender 的概率。
+    """异步、安全地打开随机图片 URL，针对开机后长时间空闲导致的崩溃问题加强处理。
 
     策略：
-    - 使用 ShellExecuteW 打开 URL（更接近用户双击行为，较 webbrowser.open 更少包装层）。
-    - 失败时回退 webbrowser.open。
-    - 加 1 秒节流，防止快速连点产生竞态。
+    - 开机后长时间空闲可能导致系统库状态异常，加入重试和延迟处理
+    - 优先 ShellExecuteW，失败时多次重试并回退 webbrowser.open
+    - 加 1 秒节流，防止快速连点产生竞态
+    - 增强异常处理，避免触发 CrashSender.exe
     """
-    remote_url = "https://random.ysy.146019.xyz/"
+    remote_url = "https://rad.ysy.146019.xyz/bz"
     global _LAST_RANDOM_OPEN_TS
     now = time.time()
     if globals().get('_LAST_RANDOM_OPEN_TS') and now - _LAST_RANDOM_OPEN_TS < 1.0:
@@ -366,29 +369,66 @@ def _open_random_egg_image() -> None:
 
     def _worker():
         try:
-            # 优先 ShellExecuteW
-            try:
-                SW_SHOWNORMAL = 1
-                res = ctypes.windll.shell32.ShellExecuteW(None, 'open', remote_url, None, None, SW_SHOWNORMAL)
-                if res <= 32:
-                    logging.warning(f"ShellExecuteW 打开URL返回: {res}，回退 webbrowser")
-                    raise RuntimeError(f"ShellExecuteW失败 {res}")
-                logging.info(f"ShellExecuteW 打开随机图片: {remote_url} (ret={res})")
-                notify("已打开随机图片", level="info")
-                return
-            except Exception as e1:
-                logging.info(f"ShellExecuteW 失败: {e1}")
-                # 回退 webbrowser
+            # 检测是否为开机后首次调用（启动时间超过 30 分钟视为长时间空闲）
+            boot_time = time.time() - (globals().get('_TRAY_START_TIME', time.time()))
+            is_long_idle = boot_time > 1800  # 30分钟
+            
+            if is_long_idle:
+                logging.info("检测到长时间空闲后首次调用，增加稳定性处理")
+                # 短暂延迟让系统稳定
+                time.sleep(0.2)
+            
+            # 多次重试 ShellExecuteW（针对开机后系统库不稳定问题）
+            max_retries = 3 if is_long_idle else 1
+            for attempt in range(max_retries):
                 try:
-                    webbrowser.open(remote_url, new=2, autoraise=True)
-                    logging.info(f"webbrowser.open 打开随机图片: {remote_url}")
-                    notify("已打开随机图片", level="info")
-                    return
-                except Exception as e2:
-                    logging.error(f"webbrowser 打开随机图片失败: {e2}")
-                    notify("打开随机图片失败", level="error")
+                    if attempt > 0:
+                        logging.info(f"ShellExecuteW 重试第 {attempt + 1} 次")
+                        time.sleep(0.5)  # 重试间隔
+                    
+                    # 重新获取 shell32 句柄，避免长时间缓存导致的问题
+                    shell32 = ctypes.windll.shell32
+                    SW_SHOWNORMAL = 1
+                    res = shell32.ShellExecuteW(None, 'open', remote_url, None, None, SW_SHOWNORMAL)
+                    
+                    if res > 32:
+                        logging.info(f"ShellExecuteW 打开随机图片成功: {remote_url} (ret={res}, attempt={attempt + 1})")
+                        notify("已打开随机图片", level="info")
+                        return
+                    else:
+                        logging.warning(f"ShellExecuteW 返回错误码: {res} (attempt={attempt + 1})")
+                        if attempt == max_retries - 1:
+                            raise RuntimeError(f"ShellExecuteW失败，错误码: {res}")
+                        
+                except Exception as e1:
+                    logging.warning(f"ShellExecuteW 第 {attempt + 1} 次尝试失败: {e1}")
+                    if attempt == max_retries - 1:
+                        # 所有重试都失败，回退到 webbrowser
+                        logging.info("ShellExecuteW 重试全部失败，回退到 webbrowser")
+                        break
+            
+            # 回退 webbrowser（也加入重试）
+            try:
+                for wb_attempt in range(2):
+                    try:
+                        if wb_attempt > 0:
+                            time.sleep(0.3)
+                        webbrowser.open(remote_url, new=2, autoraise=True)
+                        logging.info(f"webbrowser.open 打开随机图片成功: {remote_url} (attempt={wb_attempt + 1})")
+                        notify("已打开随机图片", level="info")
+                        return
+                    except Exception as e2:
+                        logging.warning(f"webbrowser 第 {wb_attempt + 1} 次尝试失败: {e2}")
+                        if wb_attempt == 1:
+                            raise e2
+            except Exception as e2:
+                logging.error(f"webbrowser 打开随机图片失败: {e2}")
+                notify("打开随机图片失败，请检查默认浏览器设置", level="error")
+                
         except Exception as e:
             logging.error(f"随机图片打开线程异常: {e}")
+            notify("打开随机图片时发生异常", level="error")
+    
     threading.Thread(target=_worker, daemon=True).start()
 
 # 信号处理函数，用于捕获CTRL+C等中断信号
