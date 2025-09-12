@@ -447,7 +447,7 @@ jobs:
                   ---
                   相关文档：
                   - [README](https://github.com/${{ github.repository }}/blob/main/README.md)
-                  - [历史版本 (更新日志)](https://github.com/${{ github.repository }}/blob/main/md/up.md)
+                  - [历史版本 (历史更新日志)](https://github.com/${{ github.repository }}/blob/main/md/up.md)
                   "@
 
                   # 将内容写入GitHub输出（处理多行内容）
