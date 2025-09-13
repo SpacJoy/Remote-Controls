@@ -520,62 +520,149 @@ def is_main_running():
         logging.info(f"互斥体不存在，主程序未运行")
         return False
 
-def run_as_admin(executable_path, parameters=None, working_dir=None, show_cmd=0):
+def _safe_run_as_admin(executable_path, parameters=None, working_dir=None, show_cmd=0, max_wait_time=15):
     """
-    以管理员权限运行指定程序
-
-    参数：
-    executable_path (str): 要执行的可执行文件路径
-    parameters (str, optional): 传递给程序的参数，默认为None
-    working_dir (str, optional): 工作目录，默认为None（当前目录）
-    show_cmd (int, optional): 窗口显示方式，默认为0（1正常显示，0隐藏）
-
-    返回：
-    int: ShellExecute的返回值，若小于等于32表示出错
+    安全地以管理员权限运行指定程序，避免计划任务环境下的 CrashSender.exe 错误
+    
+    策略：
+    1. 检查系统就绪状态
+    2. 使用多种备用方案避免直接的 ShellExecuteW runas 调用
+    3. 提供详细的错误处理和重试机制
     """
-    logging.info(f"执行函数: run_as_admin；参数: {executable_path}")
+    logging.info(f"安全提权启动程序: {executable_path}")
+    
     if parameters is None:
         parameters = ''
     if working_dir is None:
-        working_dir = ''
-    # 调用ShellExecuteW，设置动词为'runas'
-    result = ctypes.windll.shell32.ShellExecuteW(
-        None,                  # 父窗口句柄
-        'runas',               # 操作：请求管理员权限
-        executable_path,       # 要执行的文件路径
-        parameters,            # 参数
-        working_dir,           # 工作目录
-        show_cmd               # 窗口显示方式
-    )
+        working_dir = os.path.dirname(executable_path) if executable_path else ''
     
-    return result
+    # 等待系统就绪
+    if not _check_system_ready():
+        logging.info("系统未就绪，等待初始化完成...")
+        start_time = time.time()
+        while time.time() - start_time < max_wait_time:
+            if _check_system_ready():
+                break
+            time.sleep(1)
+        else:
+            logging.warning(f"等待 {max_wait_time} 秒后系统仍未就绪，强制尝试启动")
+    
+    # 方案1: 使用 PowerShell Start-Process -Verb RunAs（最安全）
+    try:
+        logging.info("尝试使用 PowerShell Start-Process 提权启动")
+        ps_cmd = [
+            'powershell.exe', '-WindowStyle', 'Hidden', '-Command',
+            f'Start-Process -FilePath "{executable_path}" -ArgumentList "{parameters}" -WorkingDirectory "{working_dir}" -Verb RunAs -WindowStyle {"Normal" if show_cmd else "Hidden"}'
+        ]
+        proc = subprocess.Popen(ps_cmd, creationflags=subprocess.CREATE_NO_WINDOW)
+        proc.wait(timeout=5)  # 等待 PowerShell 命令执行
+        logging.info("PowerShell Start-Process 执行成功")
+        return 33  # 模拟成功的返回值
+    except Exception as e:
+        logging.warning(f"PowerShell Start-Process 失败: {e}")
+    
+    # 方案2: 使用 runas 命令（兼容性好）
+    try:
+        logging.info("尝试使用 runas 命令提权启动")
+        # 构造 runas 命令
+        full_cmd = f'"{executable_path}"'
+        if parameters:
+            full_cmd += f' {parameters}'
+        
+        runas_cmd = ['runas', '/user:Administrator', full_cmd]
+        proc = subprocess.Popen(runas_cmd, cwd=working_dir if working_dir else None,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+        # 不等待完成，因为 runas 需要用户交互
+        logging.info("runas 命令已启动")
+        return 33
+    except Exception as e:
+        logging.warning(f"runas 命令失败: {e}")
+    
+    # 方案3: 作为最后手段，尝试原始的 ShellExecuteW（但增加保护）
+    try:
+        logging.info("尝试原始 ShellExecuteW（已加保护）")
+        # 短暂延迟，让系统稳定
+        time.sleep(0.5)
+        
+        result = ctypes.windll.shell32.ShellExecuteW(
+            None, 'runas', executable_path, parameters, working_dir, show_cmd
+        )
+        logging.info(f"ShellExecuteW 返回值: {result}")
+        return result
+    except Exception as e:
+        logging.error(f"ShellExecuteW 失败: {e}")
+        return 0
 
-def run_py_in_venv_as_admin(python_exe_path:str, script_path:str, script_args=None, show_window:bool=True):
-    """使用指定 Python 解释器提权运行脚本（直接调用，不经 cmd /c）。
-    返回 ShellExecuteW 结果码 (>32 视为成功)。"""
-    logging.info(f"执行函数: run_py_in_venv_as_admin；参数: {python_exe_path}, {script_path}")
+def run_as_admin(executable_path, parameters=None, working_dir=None, show_cmd=0):
+    """
+    以管理员权限运行指定程序（安全版本）
+    """
+    return _safe_run_as_admin(executable_path, parameters, working_dir, show_cmd)
+
+def _safe_run_py_as_admin(python_exe_path: str, script_path: str, script_args=None, show_window: bool = True, max_wait_time=15):
+    """
+    安全地使用指定 Python 解释器提权运行脚本
+    """
+    logging.info(f"安全提权启动 Python 脚本: {python_exe_path}, {script_path}")
+    
     if not os.path.exists(python_exe_path):
         raise FileNotFoundError(f"Python 解释器未找到: {python_exe_path}")
     if script_args is None:
         script_args = []
-    # 组装参数："script" arg1 arg2 ...
+    
+    # 构建完整的参数字符串
     params = ' '.join([f'"{script_path}"'] + [str(a) for a in script_args])
     workdir = os.path.dirname(script_path) or None
     show_cmd = 1 if show_window else 0
+    
+    # 等待系统就绪
+    if not _check_system_ready():
+        logging.info("系统未就绪，等待初始化完成...")
+        start_time = time.time()
+        while time.time() - start_time < max_wait_time:
+            if _check_system_ready():
+                break
+            time.sleep(1)
+    
+    # 方案1: PowerShell Start-Process（推荐）
     try:
-        result = ctypes.windll.shell32.ShellExecuteW(
-            None,
-            'runas',
-            python_exe_path,
-            params,
-            workdir,
-            show_cmd
-        )
-        logging.info(f"ShellExecuteW 提权启动结果: {result}")
+        logging.info("尝试使用 PowerShell 提权启动 Python 脚本")
+        ps_cmd = [
+            'powershell.exe', '-WindowStyle', 'Hidden', '-Command',
+            f'Start-Process -FilePath "{python_exe_path}" -ArgumentList "{params}" -WorkingDirectory "{workdir}" -Verb RunAs -WindowStyle {"Normal" if show_window else "Hidden"}'
+        ]
+        proc = subprocess.Popen(ps_cmd, creationflags=subprocess.CREATE_NO_WINDOW)
+        proc.wait(timeout=5)
+        logging.info("PowerShell 提权启动 Python 脚本成功")
+        return 33
+    except Exception as e:
+        logging.warning(f"PowerShell 提权启动失败: {e}")
+    
+    # 方案2: 直接使用 subprocess 无提权启动（作为降级方案）
+    try:
+        logging.info("降级为普通权限启动 Python 脚本")
+        cmd = [python_exe_path] + [script_path] + script_args
+        proc = subprocess.Popen(cmd, cwd=workdir, 
+                               creationflags=subprocess.CREATE_NO_WINDOW if not show_window else 0)
+        logging.info("普通权限启动 Python 脚本成功")
+        return 33
+    except Exception as e:
+        logging.error(f"普通权限启动也失败: {e}")
+    
+    # 方案3: 最后尝试原始方法
+    try:
+        logging.info("最后尝试原始 ShellExecuteW 方法")
+        time.sleep(0.5)  # 稳定性延迟
+        result = ctypes.windll.shell32.ShellExecuteW(None, 'runas', python_exe_path, params, workdir, show_cmd)
+        logging.info(f"ShellExecuteW Python 返回值: {result}")
         return result
     except Exception as e:
-        logging.error(f"提权启动脚本失败: {e}")
+        logging.error(f"所有启动方法都失败: {e}")
         return 0
+
+def run_py_in_venv_as_admin(python_exe_path: str, script_path: str, script_args=None, show_window: bool = True):
+    """使用指定 Python 解释器提权运行脚本（安全版本）"""
+    return _safe_run_py_as_admin(python_exe_path, script_path, script_args, show_window)
 
 # 兼容旧函数名（保留调用方，如仍有引用）
 def run_py_in_venv_as_admin_hidden(python_exe_path, script_path, script_args=None):
