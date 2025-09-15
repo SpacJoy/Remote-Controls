@@ -356,7 +356,7 @@ def _open_random_egg_image() -> None:
     - 失败时回退 webbrowser.open。
     - 加 1 秒节流，防止快速连点产生竞态。
     """
-    remote_url = "https://random.ysy.146019.xyz/"
+    remote_url = "https://rad.ysy.146019.xyz/bz"
     global _LAST_RANDOM_OPEN_TS
     now = time.time()
     if globals().get('_LAST_RANDOM_OPEN_TS') and now - _LAST_RANDOM_OPEN_TS < 1.0:
