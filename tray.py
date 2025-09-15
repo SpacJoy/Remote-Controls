@@ -28,7 +28,6 @@ import random
 import urllib.request
 import json
 import re
-import winreg  # 用于检查系统注册表状态
 import threading as _threading_for_hook
 
 # 安全：设置全局异常钩子，避免未捕获异常导致 PyInstaller 弹 CrashSender 进程（某些环境会尝试调用缺失的 CrashSender.exe）
@@ -351,126 +350,80 @@ def on_version_click(icon=None, item=None):
         threading.Thread(target=_bg_check, daemon=True).start()
 
 
-def _check_system_ready() -> bool:
-    """检查系统是否完全就绪，避免计划任务启动时系统组件未完全初始化的问题。
-    
-    检查项：
-    1. Shell 服务是否就绪
-    2. 文件关联是否正常
-    3. 注册表访问是否正常
-    """
-    try:
-        # 检查 Shell 服务状态
-        import winreg
-        
-        # 尝试访问关键注册表项（HTTP 协议关联）
-        try:
-            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, "http\\shell\\open\\command") as key:
-                browser_cmd = winreg.QueryValue(key, "")
-                if not browser_cmd:
-                    return False
-        except Exception:
-            return False
-            
-        # 检查用户 Shell 文件夹是否可访问
-        try:
-            shell_folders = [
-                os.path.expanduser("~"),
-                os.path.expandvars("%APPDATA%"),
-                os.path.expandvars("%TEMP%")
-            ]
-            for folder in shell_folders:
-                if not os.path.exists(folder):
-                    return False
-        except Exception:
-            return False
-            
-        return True
-    except Exception as e:
-        logging.warning(f"系统就绪检查失败: {e}")
-        return False
-
-def _safe_open_url_with_retry(url: str, max_wait_time: int = 30) -> bool:
-    """安全打开 URL，带系统就绪检测和重试机制。
-    
-    针对计划任务启动时系统未完全就绪的问题，等待系统就绪后再尝试打开。
-    """
-    start_time = time.time()
-    
-    # 等待系统就绪（最多等待 max_wait_time 秒）
-    while time.time() - start_time < max_wait_time:
-        if _check_system_ready():
-            logging.info("系统组件检查完成，准备打开浏览器")
-            break
-        else:
-            logging.info("系统组件未完全就绪，等待1秒后重试...")
-            time.sleep(1)
-    else:
-        logging.warning(f"等待 {max_wait_time} 秒后系统仍未就绪，强制尝试打开")
-    
-    # 尝试多种方式打开 URL
-    methods = [
-        ("subprocess+start", lambda: subprocess.run(['cmd', '/c', 'start', '', url], 
-                                                   creationflags=subprocess.CREATE_NO_WINDOW, 
-                                                   check=True)),
-        ("webbrowser", lambda: webbrowser.open(url, new=2, autoraise=True)),
-        ("os.startfile", lambda: os.startfile(url))
-    ]
-    
-    for method_name, method_func in methods:
-        try:
-            logging.info(f"尝试使用 {method_name} 打开 URL: {url}")
-            method_func()
-            logging.info(f"{method_name} 打开 URL 成功")
-            return True
-        except Exception as e:
-            logging.warning(f"{method_name} 打开 URL 失败: {e}")
-            time.sleep(0.5)  # 稍等再试下一种方法
-    
-    return False
-
-
 def _open_random_egg_image() -> None:
-    """异步、安全地打开随机图片 URL，专门解决计划任务启动时的系统初始化问题。
+    """异步、安全地打开随机图片 URL，针对开机后长时间空闲导致的崩溃问题加强处理。
 
-    问题分析：
-    - 计划任务启动的程序可能在系统 Shell、文件关联等服务完全就绪前运行
-    - 导致 ShellExecuteW 等 Windows API 调用失败，触发 CrashSender.exe
-    - 重新启动程序时系统已完全就绪，所以不会出现问题
-
-    解决策略：
-    - 检测系统关键组件是否就绪
-    - 使用多种备用方案打开浏览器
-    - 彻底避免可能触发 CrashSender 的 API 调用
+    策略：
+    - 开机后长时间空闲可能导致系统库状态异常，加入重试和延迟处理
+    - 优先 ShellExecuteW，失败时多次重试并回退 webbrowser.open
+    - 加 1 秒节流，防止快速连点产生竞态
+    - 增强异常处理，避免触发 CrashSender.exe
     """
     remote_url = "https://rad.ysy.146019.xyz/bz"
     global _LAST_RANDOM_OPEN_TS
     now = time.time()
-    if globals().get('_LAST_RANDOM_OPEN_TS') and now - _LAST_RANDOM_OPEN_TS < 2.0:
+    if globals().get('_LAST_RANDOM_OPEN_TS') and now - _LAST_RANDOM_OPEN_TS < 1.0:
         notify("操作过快，稍后重试", level="warning")
         return
     _LAST_RANDOM_OPEN_TS = now
 
     def _worker():
         try:
-            # 检测是否为开机后早期启动（可能系统未完全就绪）
-            uptime = time.time() - globals().get('_TRAY_START_TIME', time.time())
-            is_early_boot = uptime < 300  # 5分钟内视为开机早期
+            # 检测是否为开机后首次调用（启动时间超过 30 分钟视为长时间空闲）
+            boot_time = time.time() - (globals().get('_TRAY_START_TIME', time.time()))
+            is_long_idle = boot_time > 1800  # 30分钟
             
-            if is_early_boot:
-                logging.info("检测到开机早期启动，使用安全模式打开浏览器")
-                # 开机早期使用安全方法，等待系统就绪
-                if _safe_open_url_with_retry(remote_url, max_wait_time=30):
-                    notify("已打开随机图片", level="info")
-                else:
-                    notify("打开随机图片失败（系统未就绪）", level="error")
-            else:
-                # 正常运行时使用标准方法
-                logging.info("正常运行状态，使用标准方式打开浏览器")
-                if _safe_open_url_with_retry(remote_url, max_wait_time=5):
-                    notify("已打开随机图片", level="info")
-                else:
-                    notify("打开随机图片失败", level="error")
+            if is_long_idle:
+                logging.info("检测到长时间空闲后首次调用，增加稳定性处理")
+                # 短暂延迟让系统稳定
+                time.sleep(0.2)
+            
+            # 多次重试 ShellExecuteW（针对开机后系统库不稳定问题）
+            max_retries = 3 if is_long_idle else 1
+            for attempt in range(max_retries):
+                try:
+                    if attempt > 0:
+                        logging.info(f"ShellExecuteW 重试第 {attempt + 1} 次")
+                        time.sleep(0.5)  # 重试间隔
+                    
+                    # 重新获取 shell32 句柄，避免长时间缓存导致的问题
+                    shell32 = ctypes.windll.shell32
+                    SW_SHOWNORMAL = 1
+                    res = shell32.ShellExecuteW(None, 'open', remote_url, None, None, SW_SHOWNORMAL)
+                    
+                    if res > 32:
+                        logging.info(f"ShellExecuteW 打开随机图片成功: {remote_url} (ret={res}, attempt={attempt + 1})")
+                        notify("已打开随机图片", level="info")
+                        return
+                    else:
+                        logging.warning(f"ShellExecuteW 返回错误码: {res} (attempt={attempt + 1})")
+                        if attempt == max_retries - 1:
+                            raise RuntimeError(f"ShellExecuteW失败，错误码: {res}")
+                        
+                except Exception as e1:
+                    logging.warning(f"ShellExecuteW 第 {attempt + 1} 次尝试失败: {e1}")
+                    if attempt == max_retries - 1:
+                        # 所有重试都失败，回退到 webbrowser
+                        logging.info("ShellExecuteW 重试全部失败，回退到 webbrowser")
+                        break
+            
+            # 回退 webbrowser（也加入重试）
+            try:
+                for wb_attempt in range(2):
+                    try:
+                        if wb_attempt > 0:
+                            time.sleep(0.3)
+                        webbrowser.open(remote_url, new=2, autoraise=True)
+                        logging.info(f"webbrowser.open 打开随机图片成功: {remote_url} (attempt={wb_attempt + 1})")
+                        notify("已打开随机图片", level="info")
+                        return
+                    except Exception as e2:
+                        logging.warning(f"webbrowser 第 {wb_attempt + 1} 次尝试失败: {e2}")
+                        if wb_attempt == 1:
+                            raise e2
+            except Exception as e2:
+                logging.error(f"webbrowser 打开随机图片失败: {e2}")
+                notify("打开随机图片失败，请检查默认浏览器设置", level="error")
                 
         except Exception as e:
             logging.error(f"随机图片打开线程异常: {e}")
