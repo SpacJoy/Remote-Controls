@@ -441,6 +441,17 @@ def notify_in_thread(message: str) -> None:
     thread.start()
 
 
+def notify_clear_live() -> None:
+    """清除使用 replace 模式的常驻提示。"""
+    try:
+        _toast_clear(app_id=APP_NOTIFY_NAME, tag="rc_live", group="rc_live_group")
+    except Exception:
+        pass
+
+# 退出标记：用于避免退出过程中触发 on_disconnect 时误发“重试”提示
+_IS_SHUTTING_DOWN = False
+
+
 def perform_computer_action(action: str, delay: int = 0) -> None:
     """
     根据配置执行计算机主题动作。
@@ -1684,10 +1695,21 @@ def on_message(client, userdata: list, message) -> None:
     English: Callback when an MQTT message is received
     中文: MQTT接收到消息时的回调函数
     """
-    userdata.append(message.payload)
-    command = message.payload.decode()
-    logging.info(f"'{message.topic}' 主题收到 '{command}'")
-    process_command(command, message.topic)
+    try:
+        userdata.append(message.payload)
+        payload = message.payload
+        if isinstance(payload, bytes):
+            try:
+                command = payload.decode('utf-8', errors='replace')
+            except Exception:
+                command = payload.decode(errors='ignore')
+        else:
+            # 已是 str
+            command = str(payload)
+        logging.info(f"'{message.topic}' 主题收到 '{command}'")
+        process_command(command, message.topic)
+    except Exception as e:
+        logging.error(f"处理MQTT消息时发生异常: {e}")
 
 
 """
@@ -1717,6 +1739,7 @@ def on_connect(client, userdata: list, flags: dict, reason_code, properties=None
             error_msg = f"MQTT认证失败: {reason_str}\n\n可能的原因：\n• 账号密码模式：用户名或密码错误\n• 私钥模式：客户端ID（私钥）错误\n• 服务器配置问题\n\n程序将停止重试，请检查配置后重新启动。"
             logging.error(f"MQTT认证失败: {reason_str}，停止重试")
             notify_in_thread("MQTT认证失败，程序即将退出")
+            notify_clear_live()
             
             # 认证失败时停止重试并退出程序
             try:
@@ -1734,7 +1757,8 @@ def on_connect(client, userdata: list, flags: dict, reason_code, properties=None
             notify_in_thread(f"连接MQTT失败: {reason_str}. 重新连接中...")
             logging.error(f"连接失败: {reason_str}. loop_forever() 将重试连接")
     else:
-        notify_in_thread(f"MQTT成功连接至{broker}")
+        # 成功连接：清除“正在重试/等待网络”提示，避免再弹成功提示打扰
+        notify_clear_live()
         logging.info(f"连接到 {broker}")
         for key, value in config.items():
             if key.endswith("_checked") and value == 1:
@@ -1743,6 +1767,19 @@ def on_connect(client, userdata: list, flags: dict, reason_code, properties=None
                 if topic:
                     client.subscribe(topic)
                     logging.info(f'订阅主题: "{topic}"')
+
+def on_disconnect(client, userdata, disconnect_flags, reason_code, properties=None) -> None:
+    """MQTT断开连接回调：弱网/无网时提示并自动重试。"""
+    if globals().get("_IS_SHUTTING_DOWN"):
+        # 正在退出，不提示重试
+        return
+    try:
+        rstr = str(reason_code)
+    except Exception:
+        rstr = f"{reason_code}"
+    logging.warning(f"MQTT断开连接: {rstr}，将自动重试")
+    # 使用 replace 模式，保持一条提示，避免刷屏
+    notify("网络未就绪或服务器不可用，正在重试连接…", level="warning", mode="replace")
 
 def get_main_proc(process_name):
     """查找程序进程是否存在"""
@@ -2023,6 +2060,10 @@ def exit_program() -> None:
     中文: 停止 MQTT 循环，并退出程序
     """
     logging.info("正在退出程序...")
+    try:
+        globals()["_IS_SHUTTING_DOWN"] = True
+    except Exception:
+        pass
     try:
         mqttc.loop_stop()
         mqttc.disconnect()
@@ -2430,8 +2471,12 @@ mqttc.on_connect = on_connect
 mqttc.on_message = on_message
 mqttc.on_subscribe = on_subscribe
 mqttc.on_unsubscribe = on_unsubscribe
+mqttc.on_disconnect = on_disconnect
 
 mqttc.user_data_set([])
+
+# 设置自动重连的退避时长，配合异步连接在弱网/无网下自动重试
+mqttc.reconnect_delay_set(min_delay=2, max_delay=30)
 
 # 根据认证模式设置连接参数
 if auth_mode == "username_password" and mqtt_username and mqtt_password:
@@ -2445,7 +2490,8 @@ if auth_mode == "username_password" and mqtt_username and mqtt_password:
     
     # 客户端ID可以设置为任意值
     final_client_id = config.get("client_id", mqtt_username)
-    mqttc._client_id = final_client_id
+    # 注意：paho 内部期望 _client_id 为 bytes，这里做兼容处理
+    mqttc._client_id = (final_client_id.encode("utf-8") if isinstance(final_client_id, str) else final_client_id)
     logging.info(f"客户端ID: {final_client_id}")
 else:
     # 方式一：使用私钥作为客户端ID（兼容巴法云等平台）
@@ -2463,230 +2509,31 @@ else:
     logging.info(f"客户端ID（私钥）: {client_id}")
     
     # 设置私钥作为客户端ID
-    mqttc._client_id = client_id
+    # 注意：paho 内部期望 _client_id 为 bytes，这里做兼容处理
+    mqttc._client_id = (client_id.encode("utf-8") if isinstance(client_id, str) else client_id)
     # 不设置用户名和密码
 
-# 全局变量控制网络重连状态
-_network_retry_active = False
-_network_retry_dialog = None
-_network_retry_thread = None
-
-def _show_network_retry_dialog():
-    """显示网络重连提示对话框"""
-    global _network_retry_dialog
-    try:
-        import tkinter as tk
-        from tkinter import ttk
-        
-        # 如果对话框已存在，直接返回
-        if _network_retry_dialog and _network_retry_dialog.winfo_exists():
-            return _network_retry_dialog
-            
-        # 创建对话框
-        _network_retry_dialog = tk.Tk()
-        _network_retry_dialog.title("网络连接中...")
-        _network_retry_dialog.geometry("400x200")
-        _network_retry_dialog.resizable(False, False)
-        
-        # 居中显示
-        _network_retry_dialog.eval('tk::PlaceWindow . center')
-        
-        # 设置置顶
-        _network_retry_dialog.attributes('-topmost', True)
-        
-        # 创建界面元素
-        main_frame = ttk.Frame(_network_retry_dialog, padding="20")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # 标题
-        title_label = ttk.Label(main_frame, text="正在连接服务器...", font=("微软雅黑", 12, "bold"))
-        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
-        
-        # 状态标签
-        status_label = ttk.Label(main_frame, text="检测到网络异常，正在自动重试连接", font=("微软雅黑", 9))
-        status_label.grid(row=1, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
-        
-        # 进度条
-        progress = ttk.Progressbar(main_frame, mode='indeterminate')
-        progress.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
-        progress.start(10)
-        
-        # 提示信息
-        tip_label = ttk.Label(main_frame, 
-                             text="• 程序将在网络恢复后自动连接\n• 无需手动重启，请保持程序运行\n• 连接成功后此窗口将自动关闭", 
-                             font=("微软雅黑", 8), foreground="gray")
-        tip_label.grid(row=3, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
-        
-        # 手动重试按钮
-        def manual_retry():
-            status_label.config(text="手动重试中...")
-            _network_retry_dialog.after(100, lambda: None)  # 触发界面更新
-        
-        retry_btn = ttk.Button(main_frame, text="立即重试", command=manual_retry)
-        retry_btn.grid(row=4, column=0, pady=5, sticky=tk.W)
-        
-        # 退出按钮
-        def close_and_exit():
-            global _network_retry_active
-            _network_retry_active = False
-            _network_retry_dialog.destroy()
-            exit_program()
-        
-        exit_btn = ttk.Button(main_frame, text="退出程序", command=close_and_exit)
-        exit_btn.grid(row=4, column=1, pady=5, sticky=tk.E)
-        
-        # 配置列权重
-        main_frame.columnconfigure(1, weight=1)
-        _network_retry_dialog.columnconfigure(0, weight=1)
-        _network_retry_dialog.rowconfigure(0, weight=1)
-        
-        # 更新状态的函数
-        def update_status(text):
-            if _network_retry_dialog and _network_retry_dialog.winfo_exists():
-                status_label.config(text=text)
-                _network_retry_dialog.update()
-        
-        _network_retry_dialog.update_status = update_status
-        
-        # 防止用户关闭窗口
-        def on_closing():
-            pass  # 不允许直接关闭
-        _network_retry_dialog.protocol("WM_DELETE_WINDOW", on_closing)
-        
-        return _network_retry_dialog
-        
-    except Exception as e:
-        logging.error(f"创建网络重连对话框失败: {e}")
-        return None
-
-def _close_network_retry_dialog():
-    """关闭网络重连提示对话框"""
-    global _network_retry_dialog, _network_retry_active
-    try:
-        _network_retry_active = False
-        if _network_retry_dialog and _network_retry_dialog.winfo_exists():
-            _network_retry_dialog.destroy()
-            _network_retry_dialog = None
-            logging.info("网络重连对话框已关闭")
-    except Exception as e:
-        logging.error(f"关闭网络重连对话框失败: {e}")
-
-def _test_network_connection(broker, port, timeout=5):
-    """测试网络连接是否可用"""
-    try:
-        import socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(timeout)
-        result = sock.connect_ex((broker, port))
-        sock.close()
-        return result == 0
-    except Exception as e:
-        logging.warning(f"网络测试失败: {e}")
-        return False
-
-def _network_retry_worker(broker, port, mqttc):
-    """网络重连工作线程"""
-    global _network_retry_active
-    
-    retry_count = 0
-    max_retries = 300  # 最多重试5分钟（每秒1次）
-    
-    while _network_retry_active and retry_count < max_retries:
-        retry_count += 1
-        
-        try:
-            # 更新状态显示
-            if _network_retry_dialog and hasattr(_network_retry_dialog, 'update_status'):
-                _network_retry_dialog.update_status(f"正在尝试连接... (第 {retry_count} 次)")
-            
-            # 测试基础网络连接
-            if _test_network_connection(broker, port, timeout=3):
-                logging.info(f"网络连接测试成功，尝试 MQTT 连接 (第 {retry_count} 次)")
-                
-                # 尝试MQTT连接
-                try:
-                    mqttc.connect(broker, port, keepalive=60)
-                    logging.info("MQTT连接成功，关闭重连对话框")
-                    
-                    # 关闭重连对话框
-                    if _network_retry_dialog:
-                        _network_retry_dialog.after(0, _close_network_retry_dialog)
-                    
-                    # 启动MQTT循环
-                    mqttc.loop_forever()
-                    return  # 连接成功，退出重试循环
-                    
-                except Exception as mqtt_e:
-                    logging.warning(f"MQTT连接失败: {mqtt_e}")
-                    if not _network_retry_active:
-                        break
-            else:
-                logging.debug(f"网络连接测试失败 (第 {retry_count} 次)")
-            
-        except Exception as e:
-            logging.warning(f"重连过程异常: {e}")
-        
-        # 等待1秒后重试
-        time.sleep(1)
-    
-    # 重试次数用完或被取消
-    if _network_retry_active:
-        logging.error(f"网络重连失败，已重试 {retry_count} 次")
-        if _network_retry_dialog and hasattr(_network_retry_dialog, 'update_status'):
-            _network_retry_dialog.update_status("连接失败，请检查网络设置")
-
-def _start_network_retry_mode(broker, port, mqttc):
-    """启动网络重连模式"""
-    global _network_retry_active, _network_retry_thread
-    
-    logging.info("启动网络自动重连模式")
-    _network_retry_active = True
-    
-    # 显示重连对话框
-    dialog = _show_network_retry_dialog()
-    
-    # 启动重连线程
-    _network_retry_thread = threading.Thread(
-        target=_network_retry_worker, 
-        args=(broker, port, mqttc),
-        daemon=True
-    )
-    _network_retry_thread.start()
-    
-    # 运行对话框主循环
-    if dialog:
-        try:
-            dialog.mainloop()
-        except Exception as e:
-            logging.error(f"对话框主循环异常: {e}")
-
-# 尝试连接MQTT服务器（支持自动重试）
+# 启动连接流程：使用异步连接以避免阻塞，并在弱网时自动重试
 try:
-    mqttc.connect(broker, port)
-    logging.info("首次MQTT连接成功")
-except socket.timeout:
-    logging.warning("MQTT连接超时，启动自动重连模式")
-    _start_network_retry_mode(broker, port, mqttc)
-except socket.gaierror:
-    logging.warning("无法解析MQTT服务器地址，启动自动重连模式")  
-    _start_network_retry_mode(broker, port, mqttc)
-except ConnectionRefusedError:
-    logging.warning("MQTT连接被拒绝，启动自动重连模式")
-    _start_network_retry_mode(broker, port, mqttc)
+    # 先给出“正在连接”替换型提示
+    notify("正在连接到MQTT服务器…", mode="replace")
+    mqttc.connect_async(broker, port)
 except Exception as e:
-    logging.warning(f"MQTT连接异常: {e}，启动自动重连模式")
-    _start_network_retry_mode(broker, port, mqttc)
-# 如果不在重连模式，正常启动MQTT循环
-if not _network_retry_active:
-    try:
-        mqttc.loop_forever()
-    except KeyboardInterrupt:
-        logging.warning("收到中断,程序停止")
-        notify_in_thread("收到中断信号\n程序停止")
-        exit_program()
-    except Exception as e:
-        logging.error(f"程序异常: {e}")
-        exit_program()
+    # connect_async 理论上很少抛异常，这里仅作为兜底
+    logging.error(f"启动异步连接失败: {e}")
+    notify("启动连接失败，正在重试…", level="error", mode="replace")
+try:
+    mqttc.loop_start()
+    # 主线程保持存活，避免在弱网异常时因回调抛出而结束进程
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    logging.warning("收到中断,程序停止")
+    notify_in_thread("收到中断信号\n程序停止")
+    exit_program()
+except Exception as e:
+    logging.error(f"程序异常: {e}")
+    exit_program()
 
 logging.info(f"总共收到以下消息: {mqttc.user_data_get()}")
 
