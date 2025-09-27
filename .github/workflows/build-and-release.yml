@@ -44,6 +44,12 @@ jobs:
               uses: actions/checkout@v4
               with:
                   fetch-depth: 0
+              
+            - name: Install Inno Setup 6
+              run: |
+                Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -OutFile "is.exe"
+                Start-Process -FilePath "is.exe" -ArgumentList "/VERYSILENT /NORESTART" -Wait
+              shell: pwsh
 
             - name: Extract version from tag or input
               id: version
