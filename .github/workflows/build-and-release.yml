@@ -377,6 +377,12 @@ jobs:
                       $escapedVersion = [regex]::Escape($version)
                       $pattern = "(?ms)^#\s*V$escapedVersion\b[\s\S]*?(?=^#\s*V\d+\.\d+\.\d+\b|\Z)"
                       $match = [regex]::Match($changelogFile, $pattern)
+                      
+                      # 如果简单模式不匹配，尝试包含日期的完整模式
+                      if (-not $match.Success) {
+                        $pattern = "(?ms)^#\s*V$escapedVersion\s*\([\d-]+\)[\s\S]*?(?=^#\s*V\d+\.\d+\.\d+\s*\(|\Z)"
+                        $match = [regex]::Match($changelogFile, $pattern)
+                      }
                       if ($match.Success) {
                         $section = $match.Value.Trim()
                         # 去掉第一行标题（# Vx.y.z ...）
@@ -404,6 +410,12 @@ jobs:
                         $escapedVersion = [regex]::Escape($version)
                         $pattern = "(?ms)^#\s*V$escapedVersion\b[\s\S]*?(?=^#\s*V\d+\.\d+\.\d+\b|\Z)"
                         $m = [regex]::Match($upContent, $pattern)
+                        
+                        # 如果简单模式不匹配，尝试包含日期的完整模式
+                        if (-not $m.Success) {
+                          $pattern = "(?ms)^#\s*V$escapedVersion\s*\([\d-]+\)[\s\S]*?(?=^#\s*V\d+\.\d+\.\d+\s*\(|\Z)"
+                          $m = [regex]::Match($upContent, $pattern)
+                        }
                         if ($m.Success) {
                           $section = $m.Value.Trim()
                           # 去掉第一行标题（# Vx.y.z ...）
@@ -476,25 +488,65 @@ jobs:
                   }
 
                   # 生成最终更新日志内容
-                  $finalChangelog = @"
-                  $versionNote
+                  try {
+                    $finalChangelog = @"
+$versionNote
 
-                  ### 🔄 更新内容
-                  $changelogContent
+### 🔄 更新内容
+$changelogContent
 
-                  ### 📚 相关链接
-                  - [📖 项目文档](https://github.com/${{ github.repository }}/blob/main/README.md)
-                  - [📋 完整更新日志](https://github.com/${{ github.repository }}/blob/main/md/up.md)
-                  - [💾 历史版本](https://github.com/${{ github.repository }}/releases)
-                  "@
+### 📚 相关链接
+- [📖 项目文档](https://github.com/${{ github.repository }}/blob/main/README.md)
+- [📋 完整更新日志](https://github.com/${{ github.repository }}/blob/main/md/up.md)
+- [💾 历史版本](https://github.com/${{ github.repository }}/releases)
+"@
 
-                  # 将内容写入GitHub输出（处理多行内容）
-                  $delimiter = "EOF$(Get-Random)"
-                  echo "changelog<<$delimiter" >> $env:GITHUB_OUTPUT
-                  echo $finalChangelog >> $env:GITHUB_OUTPUT
-                  echo $delimiter >> $env:GITHUB_OUTPUT
+                    echo "📄 生成的更新日志内容长度: $($finalChangelog.Length) 字符"
+                    
+                    # 验证GITHUB_OUTPUT环境变量
+                    if (-not $env:GITHUB_OUTPUT) {
+                      echo "❌ GITHUB_OUTPUT环境变量未设置"
+                      exit 1
+                    }
+                    echo "📁 GITHUB_OUTPUT路径: $($env:GITHUB_OUTPUT)"
+
+                    # 将内容写入GitHub输出（处理多行内容）
+                    $delimiter = "EOF_$(Get-Random)"
+                    @"
+changelog<<$delimiter
+$finalChangelog
+$delimiter
+"@ | Add-Content -Path $env:GITHUB_OUTPUT -Encoding UTF8
+                    
+                    # 验证输出是否成功写入
+                    if (Test-Path $env:GITHUB_OUTPUT) {
+                      $fileContent = Get-Content $env:GITHUB_OUTPUT -Raw
+                      echo "✅ GitHub输出写入成功，文件大小: $($fileContent.Length) 字符"
+                    } else {
+                      echo "❌ GitHub输出文件不存在"
+                      exit 1
+                    }
+                    
+                  } catch {
+                    echo "❌ 生成更新日志时发生错误: $($_.Exception.Message)"
+                    echo "错误详情: $($_.Exception)"
+                    exit 1
+                  }
 
                   echo "✅ 更新日志生成完成"
+                  
+                  # 添加调试信息输出
+                  echo "=== 调试信息 ==="
+                  echo "版本: $version"
+                  echo "标签: $tagName"
+                  echo "上一个标签: $previousTag"
+                  echo "重复版本: $isRepeatVersion"
+                  echo "内容长度: $($changelogContent.Length)"
+                  echo "最终日志长度: $($finalChangelog.Length)"
+                  echo "=== 结束调试 ==="
+                  
+                  # 确保成功退出
+                  exit 0
 
             # 可选：使用第三方Action生成更专业的更新日志
             - name: Generate Release Notes with GitHub API
