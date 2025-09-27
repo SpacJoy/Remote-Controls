@@ -489,17 +489,8 @@ jobs:
 
                   # 生成最终更新日志内容
                   try {
-                    $finalChangelog = @"
-$versionNote
-
-### 🔄 更新内容
-$changelogContent
-
-### 📚 相关链接
-- [📖 项目文档](https://github.com/${{ github.repository }}/blob/main/README.md)
-- [📋 完整更新日志](https://github.com/${{ github.repository }}/blob/main/md/up.md)
-- [💾 历史版本](https://github.com/${{ github.repository }}/releases)
-"@
+                    # 使用字符串拼接代替Here-String以避免YAML解析问题
+                    $finalChangelog = "$versionNote`n`n### 🔄 更新内容`n$changelogContent`n`n### 📚 相关链接`n- [📖 项目文档](https://github.com/${{ github.repository }}/blob/main/README.md)`n- [📋 完整更新日志](https://github.com/${{ github.repository }}/blob/main/md/up.md)`n- [💾 历史版本](https://github.com/${{ github.repository }}/releases)"
 
                     echo "📄 生成的更新日志内容长度: $($finalChangelog.Length) 字符"
                     
@@ -512,11 +503,9 @@ $changelogContent
 
                     # 将内容写入GitHub输出（处理多行内容）
                     $delimiter = "EOF_$(Get-Random)"
-                    @"
-changelog<<$delimiter
-$finalChangelog
-$delimiter
-"@ | Add-Content -Path $env:GITHUB_OUTPUT -Encoding UTF8
+                    # 使用字符串拼接代替Here-String以避免YAML解析问题
+                    $outputContent = "changelog<<$delimiter`n$finalChangelog`n$delimiter"
+                    $outputContent | Add-Content -Path $env:GITHUB_OUTPUT -Encoding UTF8
                     
                     # 验证输出是否成功写入
                     if (Test-Path $env:GITHUB_OUTPUT) {
