@@ -362,42 +362,17 @@ jobs:
                     echo "未找到现有Release，创建新的更新日志"
                   }
 
-                  # 生成commit日志
-                  $commitLog = ""
-                  if ($previousTag -ne "") {
-                    if ($isRepeatVersion) {
-                      # 重复版本：获取更广泛的commit历史
-                      echo "重复版本：获取扩展的commit历史"
-                      $commits = git log --pretty=format:"- %s (%h)" "HEAD~20..HEAD" | Where-Object { $_ -ne "" }
-                    } else {
-                      # 新版本：获取与上一个标签的差异
-                      $commits = git log --pretty=format:"- %s (%h)" "$previousTag..HEAD" | Where-Object { $_ -ne "" }
-                    }
-                    
-                    if ($commits) {
-                      $commitLog = $commits -join "`n"
-                    }
-                  }
-
-                  # 如果没有commit变更，添加默认说明
-                  if (-not $commitLog) {
-                    if ($isRepeatVersion) {
-                      $commitLog = "- 重新构建和发布优化`n- 修复构建流程和依赖问题"
-                    } else {
-                      $commitLog = "- 版本发布和构建优化"
-                    }
-                  }
-
-                  # ========= 从 md/up.md 中提取对应版本的更新日志段落 =========
+                  # 优先从 CHANGELOG.md 提取版本更新内容
+                  $changelogContent = ""
                   try {
-                    if (Test-Path 'md/up.md') {
-                      $upContent = Get-Content 'md/up.md' -Raw
+                    if (Test-Path 'CHANGELOG.md') {
+                      $changelogFile = Get-Content 'CHANGELOG.md' -Raw
                       # 匹配以 "# V<version>" 开头直到下一个版本标题或文件结尾
                       $escapedVersion = [regex]::Escape($version)
                       $pattern = "(?ms)^#\s*V$escapedVersion\b[\s\S]*?(?=^#\s*V\d+\.\d+\.\d+\b|\Z)"
-                      $m = [regex]::Match($upContent, $pattern)
-                      if ($m.Success) {
-                        $section = $m.Value.Trim()
+                      $match = [regex]::Match($changelogFile, $pattern)
+                      if ($match.Success) {
+                        $section = $match.Value.Trim()
                         # 去掉第一行标题（# Vx.y.z ...）
                         $lines = $section -split "`n"
                         if ($lines.Length -gt 1) {
@@ -405,23 +380,80 @@ jobs:
                         } else { $body = $section }
                         $body = $body.Trim()
                         if ($body) {
-                          echo "已从 md/up.md 提取版本段落并覆盖 commitLog"
-                          $commitLog = $body
+                          echo "已从 CHANGELOG.md 提取版本更新内容"
+                          $changelogContent = $body
                         }
-                      } else {
-                        echo "未在 md/up.md 中找到版本 $version 的标题段落，使用自动生成内容" 
                       }
-                    } else {
-                      echo "md/up.md 不存在，跳过版本段落提取"
                     }
                   } catch {
-                    echo "提取 up.md 版本段落时出现异常，使用原 commitLog: $_"
+                    echo "从 CHANGELOG.md 提取内容失败: $_"
+                  }
+
+                  # 如果 CHANGELOG.md 没有内容，尝试从 md/up.md 提取
+                  if (-not $changelogContent) {
+                    try {
+                      if (Test-Path 'md/up.md') {
+                        $upContent = Get-Content 'md/up.md' -Raw
+                        # 匹配以 "# V<version>" 开头直到下一个版本标题或文件结尾
+                        $escapedVersion = [regex]::Escape($version)
+                        $pattern = "(?ms)^#\s*V$escapedVersion\b[\s\S]*?(?=^#\s*V\d+\.\d+\.\d+\b|\Z)"
+                        $m = [regex]::Match($upContent, $pattern)
+                        if ($m.Success) {
+                          $section = $m.Value.Trim()
+                          # 去掉第一行标题（# Vx.y.z ...）
+                          $lines = $section -split "`n"
+                          if ($lines.Length -gt 1) {
+                            $body = ($lines | Select-Object -Skip 1) -join "`n"
+                          } else { $body = $section }
+                          $body = $body.Trim()
+                          if ($body) {
+                            echo "已从 md/up.md 提取版本段落"
+                            $changelogContent = $body
+                          }
+                        } else {
+                          echo "未在 md/up.md 中找到版本 $version 的标题段落"
+                        }
+                      } else {
+                        echo "md/up.md 不存在"
+                      }
+                    } catch {
+                      echo "提取 up.md 版本段落时出现异常: $_"
+                    }
+                  }
+
+                  # 如果还是没有内容，生成commit日志
+                  if (-not $changelogContent) {
+                    $commitLog = ""
+                    if ($previousTag -ne "") {
+                      if ($isRepeatVersion) {
+                        # 重复版本：获取更广泛的commit历史
+                        echo "使用扩展的commit历史"
+                        $commits = git log --pretty=format:"- %s (%h)" "HEAD~20..HEAD" | Where-Object { $_ -ne "" }
+                      } else {
+                        # 新版本：获取与上一个标签的差异
+                        $commits = git log --pretty=format:"- %s (%h)" "$previousTag..HEAD" | Where-Object { $_ -ne "" }
+                      }
+                      
+                      if ($commits) {
+                        $commitLog = $commits -join "`n"
+                      }
+                    }
+
+                    # 如果没有commit变更，添加默认说明
+                    if (-not $commitLog) {
+                      if ($isRepeatVersion) {
+                        $commitLog = "- 重新构建和发布优化`n- 修复构建流程和依赖问题"
+                      } else {
+                        $commitLog = "- 版本发布和构建优化"
+                      }
+                    }
+                    $changelogContent = $commitLog
                   }
 
                   # 处理重复版本的更新日志合并
                   $versionNote = ""
                   if ($isRepeatVersion) {
-                    $versionNote = "重新构建发布 - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC`n`n此版本包含之前发布的所有内容，并修复了构建流程问题。`n"
+                    $versionNote = "🔁 重新构建发布 - $(Get-Date -Format 'yyyy-MM-dd HH:mm') UTC`n`n此版本包含之前发布的所有内容，并修复了构建流程问题。`n"
                     
                     # 尝试从现有Release中提取之前的更新内容
                     if ($existingRelease -and $existingRelease.Contains("### 🔄 更新内容")) {
@@ -429,34 +461,34 @@ jobs:
                       if ($previousContent.Length -gt 1) {
                         $previousUpdates = ($previousContent[1] -split "### 📚 相关链接")[0].Trim()
                         if ($previousUpdates) {
-                          $commitLog = "**本次重新构建的更新：**`n$commitLog`n`n**之前版本的更新内容：**`n$previousUpdates"
+                          $changelogContent = "**本次重新构建的更新：**`n$changelogContent`n`n**之前版本的更新内容：**`n$previousUpdates"
                         }
                       }
                     }
                   } else {
-                    $versionNote = "自动构建发布 - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC"
+                    $versionNote = "🚀 自动构建发布 - $(Get-Date -Format 'yyyy-MM-dd HH:mm') UTC"
                   }
 
-                  # 生成更新日志内容（精简版）
-                  $changelog = @"
+                  # 生成最终更新日志内容
+                  $finalChangelog = @"
                   $versionNote
 
-                  更新内容
-                  $commitLog
+                  ### 🔄 更新内容
+                  $changelogContent
 
-                  ---
-                  相关文档：
-                  - [README](https://github.com/${{ github.repository }}/blob/main/README.md)
-                  - [历史版本 (历史更新日志)](https://github.com/${{ github.repository }}/blob/main/md/up.md)
+                  ### 📚 相关链接
+                  - [📖 项目文档](https://github.com/${{ github.repository }}/blob/main/README.md)
+                  - [📋 完整更新日志](https://github.com/${{ github.repository }}/blob/main/md/up.md)
+                  - [💾 历史版本](https://github.com/${{ github.repository }}/releases)
                   "@
 
                   # 将内容写入GitHub输出（处理多行内容）
                   $delimiter = "EOF$(Get-Random)"
                   echo "changelog<<$delimiter" >> $env:GITHUB_OUTPUT
-                  echo $changelog >> $env:GITHUB_OUTPUT
+                  echo $finalChangelog >> $env:GITHUB_OUTPUT
                   echo $delimiter >> $env:GITHUB_OUTPUT
 
-                  echo "更新日志生成完成"
+                  echo "✅ 更新日志生成完成"
 
             # 可选：使用第三方Action生成更专业的更新日志
             - name: Generate Release Notes with GitHub API

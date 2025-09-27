@@ -46,6 +46,28 @@ def _safe_excepthook(exc_type, exc_value, exc_tb):
     # 不再次抛出，防止触发外部 crash 报告
 sys.excepthook = _safe_excepthook
 
+# 增强的异常处理装饰器，用于捕获函数内部异常并防止CrashSender错误
+def safe_crash_handler(func_name: str = ""):
+    """装饰器：捕获函数内部所有异常，防止触发CrashSender.exe错误"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                logging.error(f"函数 {func_name or func.__name__} 发生异常: {e}")
+                logging.error(traceback.format_exc())
+                try:
+                    notify(f"操作失败: {func_name or func.__name__}", level="error")
+                except Exception:
+                    pass
+                # 特别处理CrashSender相关错误
+                if "CrashSender" in str(e) or "crash" in str(e).lower():
+                    logging.error("检测到CrashSender相关错误，已安全忽略")
+                    return None
+                return None
+        return wrapper
+    return decorator
+
 # 统一版本来源
 try:
     from version_info import get_version_string
@@ -169,6 +191,9 @@ logging.info(f"运行模式: {'脚本模式' if is_script_mode else 'EXE模式'}
 logging.info(f"Python版本: {sys.version}")
 logging.info(f"系统信息: {sys.platform}")
 logging.info("="*50)
+
+# 记录启动时间，用于开机自启保护
+sys._BOOT_TIME = time.time()
 
 # 在程序启动时查询托盘程序的管理员权限状态并保存为全局变量
 IS_TRAY_ADMIN = False
@@ -306,6 +331,7 @@ def _update_menu_after_version_check():
             logging.error(f"更新托盘菜单失败: {e}")
 
 # 版本菜单点击：打开项目主页，同时在后台检查更新并提示结果
+@safe_crash_handler("on_version_click")
 def on_version_click(icon=None, item=None):
     try:
         _open_url("https://github.com/chen6019/Remote-Controls")
@@ -348,6 +374,7 @@ def on_version_click(icon=None, item=None):
         threading.Thread(target=_bg_check, daemon=True).start()
 
 
+@safe_crash_handler("_open_random_egg_image")
 def _open_random_egg_image() -> None:
     """异步、安全地打开随机图片 URL，减少浏览器启动偶发触发 CrashSender 的概率。
 
@@ -355,6 +382,7 @@ def _open_random_egg_image() -> None:
     - 使用 ShellExecuteW 打开 URL（更接近用户双击行为，较 webbrowser.open 更少包装层）。
     - 失败时回退 webbrowser.open。
     - 加 1 秒节流，防止快速连点产生竞态。
+    - 增强错误处理，防止CrashSender.exe错误导致程序崩溃。
     """
     remote_url = "https://rad.ysy.146019.xyz/bz"
     global _LAST_RANDOM_OPEN_TS
@@ -366,6 +394,13 @@ def _open_random_egg_image() -> None:
 
     def _worker():
         try:
+            # 开机自启后的延迟保护 - 系统可能还未完全准备好
+            if hasattr(sys, 'frozen') and getattr(sys, '_BOOT_TIME', 0):
+                boot_time = getattr(sys, '_BOOT_TIME', 0)
+                current_time = time.time()
+                if current_time - boot_time < 30:  # 开机后30秒内增加保护
+                    time.sleep(0.5)  # 短暂延迟
+            
             # 优先 ShellExecuteW
             try:
                 SW_SHOWNORMAL = 1
@@ -378,6 +413,11 @@ def _open_random_egg_image() -> None:
                 return
             except Exception as e1:
                 logging.info(f"ShellExecuteW 失败: {e1}")
+                # 检查是否是CrashSender相关错误
+                if "CrashSender" in str(e1) or "crash" in str(e1).lower():
+                    logging.error("检测到CrashSender错误，安全忽略")
+                    notify("系统暂不可用，请稍后重试", level="warning")
+                    return
                 # 回退 webbrowser
                 try:
                     webbrowser.open(remote_url, new=2, autoraise=True)
@@ -386,10 +426,23 @@ def _open_random_egg_image() -> None:
                     return
                 except Exception as e2:
                     logging.error(f"webbrowser 打开随机图片失败: {e2}")
-                    notify("打开随机图片失败", level="error")
+                    # 再次检查CrashSender错误
+                    if "CrashSender" in str(e2) or "crash" in str(e2).lower():
+                        notify("系统暂不可用，请稍后重试", level="warning")
+                        return
         except Exception as e:
             logging.error(f"随机图片打开线程异常: {e}")
-    threading.Thread(target=_worker, daemon=True).start()
+            # 最后的CrashSender检查
+            if "CrashSender" in str(e) or "crash" in str(e).lower():
+                logging.error("检测到CrashSender错误，已安全处理")
+                notify("操作失败，请稍后重试", level="error")
+                return
+            # 其他异常也安全处理，不向上抛出
+            notify("打开图片失败，请稍后重试", level="error")
+    
+    # 使用守护线程执行，确保不会阻塞主程序
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
 
 # 信号处理函数，用于捕获CTRL+C等中断信号
 def signal_handler(signum, frame):
@@ -712,6 +765,7 @@ def is_main_admin():
         logging.warning(f"权限状态文件不存在: {status_file}")
         return False
 
+@safe_crash_handler("is_admin_start_main")
 def is_admin_start_main(icon=None, item=None):
     """管理员权限运行主程序"""
     logging.info("执行函数: is_admin_start_main")
@@ -736,6 +790,7 @@ def _admin_start_main_worker():
         else:
             notify(f"以管理员权限启动主程序失败，错误码: {rest}", level="error", show_error=True)
 
+@safe_crash_handler("check_admin")
 def check_admin(icon=None, item=None):
     """检查主程序的管理员权限状态"""
     logging.info("执行函数: check_admin")
@@ -750,6 +805,7 @@ def check_admin(icon=None, item=None):
         notify("主程序未运行")
         return
 
+@safe_crash_handler("open_gui")
 def open_gui():
     """打开配置界面
 
@@ -957,6 +1013,7 @@ def close_exe(name: str, skip_admin: bool = False):
     except Exception as e:
         logging.error(f"关闭{name}进程时出错: {e}")
 
+@safe_crash_handler("stop_tray")
 def stop_tray():
     """关闭托盘程序"""
     logging.info("执行函数: stop_tray")
@@ -996,6 +1053,7 @@ def stop_tray():
 
     restart_main(callback=exit_after_restart)
 
+@safe_crash_handler("close_main")
 def close_main():
     """关闭主程序"""
     logging.info(f"执行函数: close_main,{MAIN_EXE}")
@@ -1008,6 +1066,7 @@ def close_main():
         # logging.error(f"关闭主程序时出错: {e}")
         notify(f"关闭主程序时出错: {e}", level="error", show_error=True)
 
+@safe_crash_handler("restart_main")
 def restart_main(icon=None, item=None, callback=None):
     """重启主程序（先关闭再启动）"""
     # 使用单个线程执行重启过程，避免创建多个线程
@@ -1030,6 +1089,7 @@ def _restart_main_worker(callback=None):
         logging.info("执行重启后的回调函数")
         callback()
 
+@safe_crash_handler("start_notify")
 def start_notify():
     """启动时发送通知"""
     logging.info("执行函数: start_notify")
@@ -1049,6 +1109,7 @@ def start_notify():
     run_mode_info = "（脚本模式）" if is_script_mode else "（EXE模式）"
     notify(f"远程控制托盘程序已启动{run_mode_info}\n主程序状态: {main_status}\n托盘状态: {tray_status}{admin_tip}")
 
+@safe_crash_handler("get_menu_items")
 def get_menu_items():
     """生成动态菜单项列表"""
     logging.info("执行函数: get_menu_items")
@@ -1102,8 +1163,18 @@ def get_menu_items():
 
     return items
 
-# 托盘启动时检查主程序状态，使用单独线程处理主程序启动/重启，避免阻塞UI
+@safe_crash_handler("init_main_program")
 def init_main_program():
+    """初始化主程序，包含开机自启保护机制"""
+    # 开机自启保护：如果是开机自启，延迟执行
+    boot_delay = 0
+    if hasattr(sys, '_BOOT_TIME'):
+        elapsed = time.time() - sys._BOOT_TIME
+        if elapsed < 60:  # 如果启动时间在60秒内，认为是开机自启
+            boot_delay = 5  # 延迟5秒执行
+            logging.info(f"检测到开机自启，延迟 {boot_delay} 秒执行初始化")
+            time.sleep(boot_delay)
+    
     if is_main_running():
         logging.info("托盘启动时发现主程序正在运行，准备重启...")
         restart_main()
@@ -1152,6 +1223,21 @@ except KeyboardInterrupt:
 except Exception as e:
     logging.error(f"托盘图标运行时出错: {e}")
     logging.error(traceback.format_exc())
+    # 检查是否是CrashSender.exe相关的错误
+    error_str = str(e).lower()
+    if 'crashsender' in error_str or 'crash' in error_str:
+        logging.warning("检测到CrashSender相关错误，尝试安全退出")
+        # 尝试安全停止托盘图标
+        if 'icon' in globals() and icon:
+            try:
+                icon.stop()
+            except Exception as stop_e:
+                logging.error(f"停止托盘图标时出错: {stop_e}")
+        # 延迟退出，给系统时间处理
+        threading.Timer(1.0, lambda: os._exit(0)).start()
+    else:
+        # 如果不是CrashSender错误，正常处理
+        logging.warning("托盘程序异常退出")
 finally:
     logging.warning("托盘程序正在退出")
     os._exit(0)
