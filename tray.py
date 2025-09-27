@@ -790,6 +790,34 @@ def _admin_start_main_worker():
         else:
             notify(f"以管理员权限启动主程序失败，错误码: {rest}", level="error", show_error=True)
 
+@safe_crash_handler("_start_main_with_result")
+def _start_main_with_result():
+    """启动主程序并返回结果，用于 init_main_program"""
+    logging.info("执行函数: _start_main_with_result")
+    
+    # 尝试以管理员权限启动
+    if MAIN_EXE_NAME.endswith('.exe') and os.path.exists(MAIN_EXE):
+        logging.info(f"尝试以可执行文件方式启动: {MAIN_EXE}")
+        result = run_as_admin(MAIN_EXE)
+        if result > 32:
+            logging.info(f"成功以管理员权限启动主程序，PID: {result}")
+            return True
+        else:
+            logging.error(f"以管理员权限启动主程序失败，错误码: {result}")
+            return False
+    elif os.path.exists(MAIN_EXE):
+        logging.info(f"尝试以Python脚本方式启动: {sys.executable} {MAIN_EXE}")
+        result = run_py_in_venv_as_admin_hidden(sys.executable, MAIN_EXE)
+        if result > 32:
+            logging.info(f"成功以管理员权限启动主程序，PID: {result}")
+            return True
+        else:
+            logging.error(f"以管理员权限启动主程序失败，错误码: {result}")
+            return False
+    else:
+        logging.error(f"主程序文件不存在: {MAIN_EXE}")
+        return False
+
 @safe_crash_handler("check_admin")
 def check_admin(icon=None, item=None):
     """检查主程序的管理员权限状态"""
@@ -1175,12 +1203,41 @@ def init_main_program():
             logging.info(f"检测到开机自启，延迟 {boot_delay} 秒执行初始化")
             time.sleep(boot_delay)
     
+    # 记录启动结果
+    start_success = False
+    
     if is_main_running():
         logging.info("托盘启动时发现主程序正在运行，准备重启...")
         restart_main()
+        start_success = True  # 重启认为成功
     else:
         logging.info("托盘启动时未发现主程序运行，准备启动...")
-        is_admin_start_main()
+        # 捕获启动结果
+        try:
+            # 使用新的启动函数，返回启动结果
+            start_success = _start_main_with_result()
+        except Exception as e:
+            logging.error(f"启动主程序时发生异常: {e}")
+            start_success = False
+    
+    # 主程序启动完成后，触发通知更新
+    def delayed_notify():
+        time.sleep(2)  # 给主程序一些时间完成启动
+        try:
+            # 只有在主程序真正成功启动后才发送通知
+            if start_success:
+                logging.info("主程序启动成功，准备发送启动通知")
+                start_notify()  # 发送启动通知
+            else:
+                logging.warning("主程序启动失败，跳过启动通知发送")
+                # 发送失败通知给用户
+                notify("主程序启动失败，请检查日志了解详情", level="error", show_error=True)
+        except Exception as e:
+            logging.error(f"发送启动通知时出错: {e}")
+    
+    # 在新线程中延迟发送通知，避免阻塞主程序启动流程
+    notify_thread = threading.Thread(target=delayed_notify, daemon=True)
+    notify_thread.start()
 
 # 启动时检查管理员权限并请求提权
 check_and_request_uac()
@@ -1198,10 +1255,8 @@ menu = pystray.Menu(*menu_items)
 # 创建托盘图标
 icon = pystray.Icon("RC-main-Tray", image, f"远程控制托盘-{BANBEN}", menu)
 
-# 使用定时器延迟执行通知，不会阻塞主线程
-timer = threading.Timer(3.0, start_notify)
-timer.daemon = True  # 设置为守护线程，程序退出时自动结束
-timer.start()
+# 启动通知已移至 init_main_program 函数中，确保主程序启动完成后再发送
+# 这样可以避免通知显示时主程序还未完全启动的问题
 
 # 进程级 DPI 感知（提升托盘菜单/提示在高DPI显示的清晰度）
 try:
