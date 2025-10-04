@@ -654,6 +654,17 @@ def perform_hotkey(action_type: str, action_value: str, char_delay_ms: int | Non
             # 顺序处理各 token；显式 down/up 立即生效；纯字母段展开为字符序列
             try:
                 active_down: set[str] = set()  # 记录通过显式 down 按下的键
+                # 特殊功能键集合：即便是纯字母组成也不能被拆分为字符序列
+                # 修复问题: "Enter" / "enter" 被当作 e n t e r 五个字符依次输入
+                special_single_keys = {
+                    # 基础控制键
+                    'enter','esc','tab','space','backspace','delete','insert','home','end','pause','break',
+                    # 导航方向
+                    'up','down','left','right','pageup','pagedown','pgup','pgdn',
+                    # 功能扩展
+                    'capslock','numlock','scrolllock','printscreen','menu','apps',
+                    # 若后续扩展可在此添加
+                }
                 for key, act in parsed:
                     if key in mod_prio:
                         if act == "press":
@@ -680,8 +691,8 @@ def perform_hotkey(action_type: str, action_value: str, char_delay_ms: int | Non
                     if act == "up":
                         pyautogui.keyUp(map_key(key))
                         continue
-                    # 默认 press：纯字母段展开，否则按原样按压
-                    if key.isalpha():
+                    # 默认 press：纯字母段且不是特殊功能键才展开为字符序列
+                    if key.isalpha() and key not in special_single_keys:
                         for i, ch in enumerate(key):
                             if i > 0 and delay_s > 0:
                                 time.sleep(delay_s)
