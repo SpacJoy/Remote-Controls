@@ -384,7 +384,7 @@ def _open_random_egg_image() -> None:
     - 加 1 秒节流，防止快速连点产生竞态。
     - 增强错误处理，防止CrashSender.exe错误导致程序崩溃。
     """
-    remote_url = "https://rad.ysy.146019.xyz/bz"
+    remote_url = "https://eo-rad.ysy.spacjoy.top/bz"
     global _LAST_RANDOM_OPEN_TS
     now = time.time()
     if globals().get('_LAST_RANDOM_OPEN_TS') and now - _LAST_RANDOM_OPEN_TS < 1.0:
