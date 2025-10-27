@@ -1,4 +1,4 @@
-<#
+﻿<#
 Remote Controls 项目打包脚本 (PowerShell)
 用法：
     - 双击运行（推荐）
@@ -183,8 +183,15 @@ if ($Version) {
     $VersionInfoFile = (Join-Path $Root 'version_info.py')
     if (Test-Path $VersionInfoFile) {
         $VersionInfoContent = Get-Content -Path $VersionInfoFile -Raw
-        if ($VersionInfoContent -match 'VERSION\s*=\s*["'']([^"'']+)["'']') {
-            $FinalVersion = $matches[1]
+
+        # 使用 here-string 定义正则，避免在 PowerShell 5.1 中嵌套引号导致解析错误
+        $regex = @'
+VERSION\s*=\s*(['"])([^'"']+)\1
+'@
+
+        if ($VersionInfoContent -match $regex) {
+            # 正则中第2个捕获组为实际版本号
+            $FinalVersion = $matches[2]
             Write-Host "  从 version_info.py 检测到版本：$FinalVersion" -ForegroundColor Cyan
         } else {
             $FinalVersion = "0.0.0"

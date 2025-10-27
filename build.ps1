@@ -1,4 +1,4 @@
-<#
+﻿<#
 Remote Controls 顶层打包入口（PowerShell）
 作用：路径无关地转发到 installer/build_installer.ps1
 用法：
@@ -10,9 +10,10 @@ param(
     [string]$Version = ""
 )
 
-# 解析脚本所在目录与 installer 路径
+# 解析脚本所在目录与 installer 路径（兼容 WinPS 5.1 的 Join-Path 行为）
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$InstallerScript = Join-Path $ScriptDir 'installer' 'build_installer.ps1'
+$InstallerDir = Join-Path $ScriptDir 'installer'
+$InstallerScript = Join-Path $InstallerDir 'build_installer.ps1'
 
 if (-not (Test-Path $InstallerScript)) {
     Write-Host "错误：未找到 installer/build_installer.ps1" -ForegroundColor Red
@@ -20,11 +21,26 @@ if (-not (Test-Path $InstallerScript)) {
     exit 1
 }
 
-# 直接调用子脚本，保持 -NoProfile/-ExecutionPolicy 由外部控制
-if ($Version) {
-    & pwsh -NoProfile -ExecutionPolicy Bypass -File $InstallerScript $Version
+<#
+优先使用 pwsh（PowerShell 7+），若不可用则回退到当前会话直接调用脚本，
+以兼容 Windows PowerShell 5.1 未安装 pwsh 的环境。
+保持 -NoProfile/-ExecutionPolicy 的控制在外层（当使用 pwsh 子进程时）。
+#>
+
+$Pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+if ($Pwsh) {
+    if ($Version) {
+        & $Pwsh.Path -NoProfile -ExecutionPolicy Bypass -File $InstallerScript $Version
+    } else {
+        & $Pwsh.Path -NoProfile -ExecutionPolicy Bypass -File $InstallerScript
+    }
 } else {
-    & pwsh -NoProfile -ExecutionPolicy Bypass -File $InstallerScript
+    # 未找到 pwsh，直接在当前会话中调用子脚本
+    if ($Version) {
+        & $InstallerScript $Version
+    } else {
+        & $InstallerScript
+    }
 }
 
 exit $LASTEXITCODE
