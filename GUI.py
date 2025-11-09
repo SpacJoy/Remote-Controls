@@ -713,12 +713,19 @@ def load_custom_themes() -> None:
     while True:
         app_key = f"application{app_index}"
         if app_key in config:
+            # 新结构: on_value / off_value / off_preset (kill/none) 兼容旧 value
+            legacy_val = config.get(f"{app_key}_directory{app_index}", "")
+            on_val = config.get(f"{app_key}_on_value", legacy_val)
+            off_val = config.get(f"{app_key}_off_value", "")
+            off_preset = config.get(f"{app_key}_off_preset", "kill")  # kill: 终止/中断；none: 不操作
             theme = {
                 "type": "程序或脚本",
                 "checked": config.get(f"{app_key}_checked", 0),
                 "nickname": config.get(f"{app_key}_name", ""),
                 "name": config.get(app_key, ""),
-                "value": config.get(f"{app_key}_directory{app_index}", ""),
+                "on_value": on_val,
+                "off_value": off_val,
+                "off_preset": off_preset,
             }
             custom_themes.append(theme)
             status = "开" if theme["checked"] else "关"
@@ -732,12 +739,19 @@ def load_custom_themes() -> None:
     while True:
         serve_key = f"serve{serve_index}"
         if serve_key in config:
+            service_name = config.get(f"{serve_key}_value", "")
+            on_val = config.get(f"{serve_key}_on_value", service_name)
+            off_val = config.get(f"{serve_key}_off_value", "")
+            off_preset = config.get(f"{serve_key}_off_preset", "stop")
             theme = {
                 "type": "服务(需管理员权限)",
                 "checked": config.get(f"{serve_key}_checked", 0),
                 "nickname": config.get(f"{serve_key}_name", ""),
                 "name": config.get(serve_key, ""),
-                "value": config.get(f"{serve_key}_value", ""),
+                "value": service_name,
+                "on_value": on_val,
+                "off_value": off_val,
+                "off_preset": off_preset,
             }
             custom_themes.append(theme)
             status = "开" if theme["checked"] else "关"
@@ -753,12 +767,18 @@ def load_custom_themes() -> None:
     while True:
         cmd_key = f"command{command_index}"
         if cmd_key in config:
+            legacy_cmd = config.get(f"{cmd_key}_value", "")
+            on_cmd = config.get(f"{cmd_key}_on_value", legacy_cmd)
+            off_cmd = config.get(f"{cmd_key}_off_value", "")
+            off_preset = config.get(f"{cmd_key}_off_preset", "kill")
             theme = {
                 "type": "命令",
                 "checked": config.get(f"{cmd_key}_checked", 0),
                 "nickname": config.get(f"{cmd_key}_name", ""),
                 "name": config.get(cmd_key, ""),
-                "value": config.get(f"{cmd_key}_value", ""),
+                "on_value": on_cmd,
+                "off_value": off_cmd,
+                "off_preset": off_preset,
                 "window": config.get(f"{cmd_key}_window", "show"),
             }
             custom_themes.append(theme)
@@ -1015,31 +1035,144 @@ def modify_custom_theme() -> None:
     theme_name_entry.insert(0, theme["name"])
     theme_name_entry.grid(row=3, column=1, sticky="we")
 
-    ttk.Label(theme_window, text="值：").grid(row=4, column=0, sticky="ne")
-    # 可纵向拉伸的多行文本框 + 滚动条
-    value_frame_mod = ttk.Frame(theme_window)
-    value_frame_mod.grid(row=4, column=1, sticky="nsew")
+    # 新: 程序/命令类型拆分 ON/OFF 与关闭预设；Hotkey 保持原样
+    on_label_mod = ttk.Label(theme_window, text="打开(on)：")
+    on_label_mod.grid(row=4, column=0, sticky="e")
+    on_frame_mod = ttk.Frame(theme_window)
+    on_frame_mod.grid(row=4, column=1, sticky="nsew")
     try:
         theme_window.rowconfigure(4, weight=2)
     except Exception:
         pass
-    theme_value_text = tk.Text(value_frame_mod, height=4, wrap="word")
-    theme_value_text.insert("1.0", theme.get("value", ""))
-    theme_value_text.grid(row=0, column=0, sticky="nsew")
-    value_scroll_y = ttk.Scrollbar(value_frame_mod, orient="vertical", command=theme_value_text.yview)
-    value_scroll_y.grid(row=0, column=1, sticky="ns")
-    theme_value_text.configure(yscrollcommand=value_scroll_y.set)
+    on_value_text = tk.Text(on_frame_mod, height=3, wrap="word")
+    on_value_text.insert("1.0", theme.get("on_value", theme.get("value", "")))
+    on_value_text.grid(row=0, column=0, sticky="nsew")
+    on_scroll_y = ttk.Scrollbar(on_frame_mod, orient="vertical", command=on_value_text.yview)
+    on_scroll_y.grid(row=0, column=1, sticky="ns")
+    on_value_text.configure(yscrollcommand=on_scroll_y.set)
     try:
-        value_frame_mod.columnconfigure(0, weight=1)
-        value_frame_mod.rowconfigure(0, weight=1)
+        on_frame_mod.columnconfigure(0, weight=1)
+        on_frame_mod.rowconfigure(0, weight=1)
     except Exception:
         pass
+
+    off_label_mod = ttk.Label(theme_window, text="关闭(off)：")
+    off_label_mod.grid(row=5, column=0, sticky="e")
+    off_frame_mod = ttk.Frame(theme_window)
+    off_frame_mod.grid(row=5, column=1, sticky="nsew")
+    off_value_text = tk.Text(off_frame_mod, height=3, wrap="word")
+    off_value_text.insert("1.0", theme.get("off_value", ""))
+    off_value_text.grid(row=0, column=0, sticky="nsew")
+    off_scroll_y = ttk.Scrollbar(off_frame_mod, orient="vertical", command=off_value_text.yview)
+    off_scroll_y.grid(row=0, column=1, sticky="ns")
+    off_value_text.configure(yscrollcommand=off_scroll_y.set)
+    try:
+        off_frame_mod.columnconfigure(0, weight=1)
+        off_frame_mod.rowconfigure(0, weight=1)
+    except Exception:
+        pass
+
+    off_preset_label_mod = ttk.Label(theme_window, text="关闭预设：")
+    off_preset_label_mod.grid(row=6, column=0, sticky="e")
+    # 中文选项: 忽略(=none) / 强制结束(=kill) / 中断(=interrupt) / 停止服务(=stop) / 自定义(=custom)
+    if theme["type"] == "命令":
+        preset_internal_default = theme.get("off_preset", "kill")
+    elif theme["type"] == "程序或脚本":
+        preset_internal_default = theme.get("off_preset", "kill")
+    elif theme["type"] == "服务(需管理员权限)":
+        preset_internal_default = theme.get("off_preset", "stop")
+    else:
+        preset_internal_default = theme.get("off_preset", "none")
+    preset_display_map = {"none": "忽略", "kill": "强制结束", "interrupt": "中断", "stop": "停止服务", "custom": "自定义"}
+    preset_reverse_map = {v: k for k, v in preset_display_map.items()}
+    # 若旧值不在映射，回退到 忽略
+    preset_display_initial = preset_display_map.get(preset_internal_default, "忽略")
+    off_preset_var_mod = tk.StringVar(value=preset_display_initial)
+    def _build_preset_values_mod(t_type: str):
+        if t_type == "命令":
+            return ("忽略", "中断", "强制结束", "自定义")
+        elif t_type == "程序或脚本":
+            return ("忽略", "强制结束", "自定义")
+        elif t_type == "服务(需管理员权限)":
+            return ("忽略", "停止服务", "自定义")
+        else:
+            return ("忽略",)
+    off_preset_combo_mod = ttk.Combobox(
+        theme_window,
+        textvariable=off_preset_var_mod,
+        state="readonly",
+        values=_build_preset_values_mod(theme.get("type", "程序或脚本"))
+    )
+    off_preset_combo_mod.grid(row=6, column=1, sticky="w")
+
+    # 记录自定义内容以便在预设与自定义切换时还原
+    previous_custom_off_value_mod = theme.get("off_value", "")
+    def _preview_text_for_mod(code: str, t_type: str, service_name: str = "") -> str:
+        if t_type == "命令":
+            if code == "interrupt":
+                return "预设：中断 — 向最新记录的命令进程发送 CTRL+BREAK，并尝试优雅结束。"
+            if code == "kill":
+                return "预设：强制结束 — 结束所有记录的命令进程（kill/taskkill）。"
+            return "预设：忽略 — 不执行任何关闭动作。"
+        elif t_type == "程序或脚本":
+            if code == "kill":
+                return "预设：强制结束 — 将尝试结束由“打开(on)”目标派生的脚本/进程（cmd/bat 优先增强终止，ps1 专用终止，其它 taskkill /IM）。"
+            return "预设：忽略 — 不执行任何关闭动作。"
+        elif t_type == "服务(需管理员权限)":
+            if code == "stop":
+                svc = service_name or "指定服务"
+                return f"预设：停止服务 — 使用 sc stop {svc} 停止服务。"
+            return "预设：忽略 — 不执行任何关闭动作。"
+        else:
+            return "预设：忽略 — 不执行任何关闭动作。"
+
+    def _update_off_editability_mod(*_):
+        nonlocal previous_custom_off_value_mod
+        v_disp = off_preset_var_mod.get()
+        code = preset_reverse_map.get(v_disp, "none")
+        t_type = theme_type_var.get()
+        try:
+            if code == "custom":
+                # 从预览切回自定义，恢复用户之前的输入
+                off_value_text.configure(state=tk.NORMAL)
+                try:
+                    off_value_text.delete("1.0", tk.END)
+                    off_value_text.insert("1.0", previous_custom_off_value_mod)
+                except Exception:
+                    pass
+            else:
+                # 切换到预设，先缓存自定义内容
+                try:
+                    if str(off_value_text.cget("state")) == str(tk.NORMAL):
+                        _cur = off_value_text.get("1.0", "end-1c")
+                        if _cur.strip():
+                            previous_custom_off_value_mod = _cur
+                except Exception:
+                    pass
+                # 写入预览说明并禁用
+                try:
+                    off_value_text.configure(state=tk.NORMAL)
+                    off_value_text.delete("1.0", tk.END)
+                    service_name = on_value_text.get("1.0", "end-1c").strip()
+                    off_value_text.insert("1.0", _preview_text_for_mod(code, t_type, service_name))
+                except Exception:
+                    pass
+                off_value_text.configure(state=tk.DISABLED)
+        except Exception:
+            pass
+
+    _update_off_editability_mod()
+    off_preset_combo_mod.bind("<<ComboboxSelected>>", _update_off_editability_mod)
 
     def select_file():
         file_path = filedialog.askopenfilename()
         if file_path:
-            theme_value_text.delete("1.0", tk.END)
-            theme_value_text.insert("1.0", file_path)
+            # 根据类型写入到 on_value 文本框
+            try:
+                on_value_text.delete("1.0", tk.END)
+                on_value_text.insert("1.0", file_path)
+            except Exception:
+                pass
 
     def open_services():
         try:
@@ -1051,7 +1184,7 @@ def modify_custom_theme() -> None:
                 messagebox.showerror("错误", f"无法打开服务管理器: {e}")
 
     def test_command_in_powershell():
-        cmd = theme_value_text.get("1.0", "end-1c").strip()
+        cmd = on_value_text.get("1.0", "end-1c").strip()
         if not cmd:
             messagebox.showwarning("提示", "请先在“值”中输入要测试的命令")
             return
@@ -1078,9 +1211,9 @@ def modify_custom_theme() -> None:
 
     # 垂直方向自适应：占位扩展区，推开底部按钮
     try:
-        theme_window.rowconfigure(5, weight=1)
+        theme_window.rowconfigure(7, weight=1)
         _spacer_mod = ttk.Frame(theme_window)
-        _spacer_mod.grid(row=5, column=0, columnspan=4, sticky="nsew")
+        _spacer_mod.grid(row=7, column=0, columnspan=4, sticky="nsew")
     except Exception:
         pass
 
@@ -1125,12 +1258,35 @@ def modify_custom_theme() -> None:
         else:
             cmd_window_check.grid_remove()
         if t == "按键(Hotkey)":
-            value_frame_mod.grid_remove()
-            select_file_btn_mod.grid_remove()
+            on_label_mod.grid_remove()
+            off_label_mod.grid_remove()
+            on_frame_mod.grid_remove()
+            off_frame_mod.grid_remove()
+            off_preset_combo_mod.grid_remove()
+            try:
+                off_preset_label_mod.grid_remove()
+            except Exception:
+                pass
             hotkey_frame_mod.grid(row=4, column=1, columnspan=2, sticky="we")
         else:
             hotkey_frame_mod.grid_remove()
-            value_frame_mod.grid(row=4, column=1, sticky="nsew")
+            on_label_mod.grid(row=4, column=0, sticky="e")
+            on_frame_mod.grid(row=4, column=1, sticky="nsew")
+            off_label_mod.grid(row=5, column=0, sticky="e")
+            off_frame_mod.grid(row=5, column=1, sticky="nsew")
+            off_preset_label_mod.grid(row=6, column=0, sticky="e")
+            # 根据类型刷新可选值
+            values_now = _build_preset_values_mod(t)
+            off_preset_combo_mod.configure(values=values_now)
+            if off_preset_var_mod.get() not in values_now:
+                if t == "命令" and "强制结束" in values_now:
+                    off_preset_var_mod.set("强制结束")
+                elif t == "服务(需管理员权限)" and "停止服务" in values_now:
+                    off_preset_var_mod.set("停止服务")
+                else:
+                    off_preset_var_mod.set(values_now[0])
+            off_preset_combo_mod.grid(row=6, column=1, sticky="w")
+            _update_off_editability_mod()
             # 根据类型设置按钮文本与功能
             if t == "程序或脚本":
                 select_file_btn_mod.configure(text="选择文件", command=select_file)
@@ -1150,7 +1306,17 @@ def modify_custom_theme() -> None:
         theme["checked"] = theme_checked_var.get()
         theme["nickname"] = theme_nickname_entry.get()
         theme["name"] = theme_name_entry.get()
-        theme["value"] = theme_value_text.get("1.0", "end-1c").strip()
+        # 保存拆分字段
+        theme["on_value"] = on_value_text.get("1.0", "end-1c").strip()
+        # 根据预设决定是否保存 off_value
+        off_preset_code = preset_reverse_map.get(off_preset_var_mod.get(), "none")
+        if off_preset_code == "custom":
+            theme["off_value"] = off_value_text.get("1.0", "end-1c").strip()
+        else:
+            theme["off_value"] = ""
+        theme["off_preset"] = off_preset_code
+        if theme["type"] == "服务(需管理员权限)":
+            theme["value"] = theme["on_value"]
         if theme["type"] == "命令":
             theme["window"] = "show" if cmd_window_var.get() else "hide"
         if theme["type"] == "按键(Hotkey)":
@@ -1208,10 +1374,10 @@ def modify_custom_theme() -> None:
             theme_window.lift()
 
     ttk.Button(theme_window, text="保存", command=save_theme).grid(
-        row=6, column=0, pady=15, padx=15
+        row=8, column=0, pady=15, padx=15
     )
-    ttk.Button(theme_window, text="删除", command=delete_theme).grid(row=6, column=1)
-    ttk.Button(theme_window, text="取消", command=lambda:theme_window.destroy()).grid(row=6, column=2)
+    ttk.Button(theme_window, text="删除", command=delete_theme).grid(row=8, column=1)
+    ttk.Button(theme_window, text="取消", command=lambda:theme_window.destroy()).grid(row=8, column=2)
 
     center_window(theme_window)
 
@@ -1267,30 +1433,124 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     theme_name_entry = ttk.Entry(theme_window)
     theme_name_entry.grid(row=3, column=1, sticky="we")
 
-    ttk.Label(theme_window, text="值：").grid(row=4, column=0, sticky="ne")
-    # 可纵向拉伸的多行文本框 + 滚动条（用于程序/服务/命令）
-    value_frame_add = ttk.Frame(theme_window)
-    value_frame_add.grid(row=4, column=1, sticky="nsew")
+    # 新：程序/命令类型拆分 ON/OFF 与关闭预设；Hotkey 保持原样
+    on_label_add = ttk.Label(theme_window, text="打开(on)：")
+    on_label_add.grid(row=4, column=0, sticky="e")
+    on_frame_add = ttk.Frame(theme_window)
+    on_frame_add.grid(row=4, column=1, sticky="nsew")
     try:
         theme_window.rowconfigure(4, weight=2)
     except Exception:
         pass
-    theme_value_text2 = tk.Text(value_frame_add, height=4, wrap="word")
-    theme_value_text2.grid(row=0, column=0, sticky="nsew")
-    value2_scroll_y = ttk.Scrollbar(value_frame_add, orient="vertical", command=theme_value_text2.yview)
-    value2_scroll_y.grid(row=0, column=1, sticky="ns")
-    theme_value_text2.configure(yscrollcommand=value2_scroll_y.set)
+    on_value_text_add = tk.Text(on_frame_add, height=3, wrap="word")
+    on_value_text_add.grid(row=0, column=0, sticky="nsew")
+    on_scroll_y_add = ttk.Scrollbar(on_frame_add, orient="vertical", command=on_value_text_add.yview)
+    on_scroll_y_add.grid(row=0, column=1, sticky="ns")
+    on_value_text_add.configure(yscrollcommand=on_scroll_y_add.set)
     try:
-        value_frame_add.columnconfigure(0, weight=1)
-        value_frame_add.rowconfigure(0, weight=1)
+        on_frame_add.columnconfigure(0, weight=1)
+        on_frame_add.rowconfigure(0, weight=1)
     except Exception:
         pass
+
+    off_label_add = ttk.Label(theme_window, text="关闭(off)：")
+    off_label_add.grid(row=5, column=0, sticky="e")
+    off_frame_add = ttk.Frame(theme_window)
+    off_frame_add.grid(row=5, column=1, sticky="nsew")
+    off_value_text_add = tk.Text(off_frame_add, height=3, wrap="word")
+    off_value_text_add.grid(row=0, column=0, sticky="nsew")
+    off_scroll_y_add = ttk.Scrollbar(off_frame_add, orient="vertical", command=off_value_text_add.yview)
+    off_scroll_y_add.grid(row=0, column=1, sticky="ns")
+    off_value_text_add.configure(yscrollcommand=off_scroll_y_add.set)
+    try:
+        off_frame_add.columnconfigure(0, weight=1)
+        off_frame_add.rowconfigure(0, weight=1)
+    except Exception:
+        pass
+
+    off_preset_label_add = ttk.Label(theme_window, text="关闭预设：")
+    off_preset_label_add.grid(row=6, column=0, sticky="e")
+    preset_display_map_add = {"none": "忽略", "kill": "强制结束", "interrupt": "中断", "stop": "停止服务", "custom": "自定义"}
+    preset_reverse_map_add = {v: k for k, v in preset_display_map_add.items()}
+    off_preset_var_add = tk.StringVar(value="强制结束")
+    def _build_preset_values_add(t_type: str):
+        if t_type == "命令":
+            return ("忽略", "中断", "强制结束", "自定义")
+        elif t_type == "程序或脚本":
+            return ("忽略", "强制结束", "自定义")
+        elif t_type == "服务(需管理员权限)":
+            return ("忽略", "停止服务", "自定义")
+        else:
+            return ("忽略",)
+    off_preset_combo_add = ttk.Combobox(theme_window, textvariable=off_preset_var_add, state="readonly", values=_build_preset_values_add("程序或脚本"))
+    off_preset_combo_add.grid(row=6, column=1, sticky="w")
+
+    previous_custom_off_value_add = ""
+    def _preview_text_for_add(code: str, t_type: str, service_name: str = "") -> str:
+        if t_type == "命令":
+            if code == "interrupt":
+                return "预设：中断 — 向最新记录的命令进程发送 CTRL+BREAK，并尝试优雅结束。"
+            if code == "kill":
+                return "预设：强制结束 — 结束所有记录的命令进程（kill/taskkill）。"
+            return "预设：忽略 — 不执行任何关闭动作。"
+        elif t_type == "程序或脚本":
+            if code == "kill":
+                return "预设：强制结束 — 将尝试结束由“打开(on)”目标派生的脚本/进程（cmd/bat 优先增强终止，ps1 专用终止，其它 taskkill /IM）。"
+            return "预设：忽略 — 不执行任何关闭动作。"
+        elif t_type == "服务(需管理员权限)":
+            if code == "stop":
+                svc = service_name or "指定服务"
+                return f"预设：停止服务 — 使用 sc stop {svc} 停止服务。"
+            return "预设：忽略 — 不执行任何关闭动作。"
+        else:
+            return "预设：忽略 — 不执行任何关闭动作。"
+
+    def _update_off_editability_add(*_):
+        nonlocal previous_custom_off_value_add
+        v_disp = off_preset_var_add.get()
+        code = preset_reverse_map_add.get(v_disp, "none")
+        t_type = theme_type_var.get()
+        try:
+            if code == "custom":
+                off_value_text_add.configure(state=tk.NORMAL)
+                try:
+                    off_value_text_add.delete("1.0", tk.END)
+                    off_value_text_add.insert("1.0", previous_custom_off_value_add)
+                except Exception:
+                    pass
+            else:
+                # 保存自定义缓存
+                try:
+                    if str(off_value_text_add.cget("state")) == str(tk.NORMAL):
+                        _cur = off_value_text_add.get("1.0", "end-1c")
+                        if _cur.strip():
+                            previous_custom_off_value_add = _cur
+                except Exception:
+                    pass
+                # 写入预览并禁用
+                try:
+                    off_value_text_add.configure(state=tk.NORMAL)
+                    off_value_text_add.delete("1.0", tk.END)
+                    service_name = on_value_text_add.get("1.0", "end-1c").strip()
+                    off_value_text_add.insert("1.0", _preview_text_for_add(code, t_type, service_name))
+                except Exception:
+                    pass
+                off_value_text_add.configure(state=tk.DISABLED)
+        except Exception:
+            pass
+
+    # 初始可编辑状态
+    _update_off_editability_add()
+    off_preset_combo_add.bind("<<ComboboxSelected>>", _update_off_editability_add)
 
     def select_file():
         file_path = filedialog.askopenfilename()
         if file_path:
-            theme_value_text2.delete("1.0", tk.END)
-            theme_value_text2.insert("1.0", file_path)
+            try:
+                on_value_text_add.delete("1.0", tk.END)
+                on_value_text_add.insert("1.0", file_path)
+            except Exception:
+                pass
 
     def open_services():
         try:
@@ -1302,7 +1562,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
                 messagebox.showerror("错误", f"无法打开服务管理器: {e}")
 
     def test_command_in_powershell():
-        cmd = theme_value_text2.get("1.0", "end-1c").strip()
+        cmd = on_value_text_add.get("1.0", "end-1c").strip()
         if not cmd:
             messagebox.showwarning("提示", "请先在“值”中输入要测试的命令")
             return
@@ -1361,9 +1621,9 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
 
     # 垂直方向自适应：占位扩展区，推开底部按钮
     try:
-        theme_window.rowconfigure(5, weight=1)
+        theme_window.rowconfigure(7, weight=1)
         _spacer_add = ttk.Frame(theme_window)
-        _spacer_add.grid(row=5, column=0, columnspan=4, sticky="nsew")
+        _spacer_add.grid(row=7, column=0, columnspan=4, sticky="nsew")
     except Exception:
         pass
 
@@ -1379,20 +1639,37 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             cmd_window_check.grid_remove()
         # Hotkey 面板显示控制；同时隐藏/显示 值 文本和选择按钮
         if t == "按键(Hotkey)":
-            # 隐藏值文本和选择按钮
-            value_frame_add.grid_remove()
+            on_label_add.grid_remove()
+            on_frame_add.grid_remove()
+            off_label_add.grid_remove()
+            off_frame_add.grid_remove()
+            off_preset_combo_add.grid_remove()
+            off_preset_label_add.grid_remove()
             select_file_btn_add.grid_remove()
             hotkey_frame_add.grid(row=4, column=1, columnspan=2, sticky="we")
         else:
             hotkey_frame_add.grid_remove()
-            value_frame_add.grid(row=4, column=1, sticky="nsew")
-            # 根据类型设置按钮文本与功能
+            on_label_add.grid(row=4, column=0, sticky="e")
+            on_frame_add.grid(row=4, column=1, sticky="nsew")
+            off_label_add.grid(row=5, column=0, sticky="e")
+            off_frame_add.grid(row=5, column=1, sticky="nsew")
+            off_preset_label_add.grid(row=6, column=0, sticky="e")
+            values_now = _build_preset_values_add(t)
+            off_preset_combo_add.configure(values=values_now)
+            if off_preset_var_add.get() not in values_now:
+                if t == "命令" and "强制结束" in values_now:
+                    off_preset_var_add.set("强制结束")
+                elif t == "服务(需管理员权限)" and "停止服务" in values_now:
+                    off_preset_var_add.set("停止服务")
+                else:
+                    off_preset_var_add.set(values_now[0])
+            off_preset_combo_add.grid(row=6, column=1, sticky="w")
+            _update_off_editability_add()
             if t == "程序或脚本":
                 select_file_btn_add.configure(text="选择文件", command=select_file)
                 select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
             elif t == "服务(需管理员权限)":
-                select_file_btn_add.configure(text="打开服务", command=open_services)
-                select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
+                select_file_btn_add.grid_remove()
             elif t == "命令":
                 select_file_btn_add.configure(text="PowerShell测试", command=test_command_in_powershell)
                 select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
@@ -1406,8 +1683,16 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             "checked": theme_checked_var.get(),
             "nickname": theme_nickname_entry.get(),
             "name": theme_name_entry.get(),
-            "value": theme_value_text2.get("1.0", "end-1c").strip(),
         }
+        if theme["type"] in ("程序或脚本","命令","服务(需管理员权限)"):
+            theme["on_value"] = on_value_text_add.get("1.0","end-1c").strip()
+            theme["off_preset"] = preset_reverse_map_add.get(off_preset_var_add.get(), "none")
+            if theme["off_preset"] == "custom":
+                theme["off_value"] = off_value_text_add.get("1.0","end-1c").strip()
+            else:
+                theme["off_value"] = ""
+        if theme["type"] == "服务(需管理员权限)":
+            theme["value"] = theme["on_value"]
         if theme["type"] == "命令":
             theme["window"] = "show" if cmd_window_var.get() else "hide"
         if theme["type"] == "按键(Hotkey)":
@@ -1447,16 +1732,16 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             theme["off_type"] = _off_type
             theme["off_value"] = _off_value
             theme["char_delay_ms"] = _char_delay_ms
-            theme["value"] = ""
+            theme["value"] = ""  # 兼容旧结构
         custom_themes.append(theme)
         # 重新构建整个树视图以确保索引正确
         rebuild_custom_theme_tree()
         theme_window.destroy()
 
     ttk.Button(theme_window, text="保存", command=save_theme).grid(
-        row=6, column=0, pady=15, padx=15
+        row=8, column=0, pady=15, padx=15
     )
-    ttk.Button(theme_window, text="取消", command=theme_window.destroy).grid(row=6, column=2)
+    ttk.Button(theme_window, text="取消", command=theme_window.destroy).grid(row=8, column=2)
 
     center_window(theme_window)
 
@@ -1509,21 +1794,36 @@ def generate_config() -> None:
             config[prefix] = theme["name"]
             config[f"{prefix}_name"] = theme["nickname"]
             config[f"{prefix}_checked"] = theme["checked"]
-            config[f"{prefix}_directory{app_index}"] = theme["value"]
+            # 兼容旧结构: 仍写入 legacy directory 字段，以便旧版本读取
+            legacy_dir = theme.get("on_value", "")
+            config[f"{prefix}_directory{app_index}"] = legacy_dir
+            # 新结构: on/off 值与关闭预设
+            config[f"{prefix}_on_value"] = theme.get("on_value", "")
+            config[f"{prefix}_off_value"] = theme.get("off_value", "")
+            config[f"{prefix}_off_preset"] = theme.get("off_preset", "kill")
             app_index += 1
         elif theme["type"] == "服务(需管理员权限)":
             prefix = f"serve{serve_index}"
             config[prefix] = theme["name"]
             config[f"{prefix}_name"] = theme["nickname"]
             config[f"{prefix}_checked"] = theme["checked"]
-            config[f"{prefix}_value"] = theme["value"]
+            service_name = theme.get("value", "") or theme.get("on_value", "")
+            config[f"{prefix}_value"] = service_name
+            config[f"{prefix}_on_value"] = theme.get("on_value", service_name)
+            config[f"{prefix}_off_value"] = theme.get("off_value", "")
+            config[f"{prefix}_off_preset"] = theme.get("off_preset", "stop")
             serve_index += 1
         elif theme["type"] == "命令":
             prefix = f"command{command_index}"
             config[prefix] = theme["name"]
             config[f"{prefix}_name"] = theme["nickname"]
             config[f"{prefix}_checked"] = theme["checked"]
-            config[f"{prefix}_value"] = theme["value"]
+            # 兼容旧结构: 保留 value 写 on_value
+            config[f"{prefix}_value"] = theme.get("on_value", "")
+            # 新结构: on/off 值与关闭预设
+            config[f"{prefix}_on_value"] = theme.get("on_value", "")
+            config[f"{prefix}_off_value"] = theme.get("off_value", "")
+            config[f"{prefix}_off_preset"] = theme.get("off_preset", "interrupt")
             # 保存命令窗口显示/隐藏设置，默认显示
             config[f"{prefix}_window"] = theme.get("window", "show")
             command_index += 1

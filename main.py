@@ -728,96 +728,162 @@ def process_command(command: str, topic: str) -> None:
     # 先判断应用程序或服务类型主题
     for application, directory in applications:
         if topic == application:
+            # 解析该应用的 on/off 以及关闭预设（兼容旧版）
+            app_key_found = None
+            for i in range(1, 50):
+                k = f"application{i}"
+                try:
+                    if config.get(k) == application:
+                        app_key_found = k
+                        break
+                except Exception:
+                    continue
+            on_path = None
+            off_path = None
+            off_preset = "kill"  # 程序默认关闭预设：kill
+            try:
+                if app_key_found:
+                    on_path = config.get(f"{app_key_found}_on_value")
+                    off_path = config.get(f"{app_key_found}_off_value")
+                    off_preset = config.get(f"{app_key_found}_off_preset", "kill") or "kill"
+            except Exception:
+                pass
+            # 兼容旧字段：若未提供 on_value 则使用旧的 directory
+            if not on_path:
+                on_path = directory
+
             if command == "off":
-                process_name = os.path.basename(directory)
-                logging.info(f"尝试终止进程: {process_name}")
-                notify_in_thread(f"尝试终止进程: {process_name}")
-                
-                # 检查是否是脚本文件
-                if directory.lower().endswith(('.cmd', '.bat', '.ps1', '.py', '.pyw')):
-                    # 对于不同类型的脚本使用不同的终止方法
-                    if directory.lower().endswith(('.cmd', '.bat')):
-                        # 批处理文件：先尝试增强版终止方法
-                        if terminate_batch_process_enhanced(directory):
-                            notify_in_thread(f"成功终止批处理脚本: {process_name}")
-                        elif terminate_script_process(directory):
-                            notify_in_thread(f"成功终止脚本: {process_name}")
+                # 若提供了 off_value，则执行该路径/脚本；否则按关闭预设处理
+                if off_path:
+                    target = off_path
+                    if not os.path.isfile(target):
+                        logging.error(f"关闭动作失败，文件不存在: {target}")
+                        notify_in_thread(f"关闭失败，文件不存在: {target}")
+                        return
+                    logging.info(f"执行程序关闭脚本/程序: {target}")
+                    try:
+                        abs_path = os.path.abspath(target)
+                        work_dir = os.path.dirname(abs_path)
+                        if target.lower().endswith('.ps1'):
+                            subprocess.Popen(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", abs_path], cwd=work_dir)
+                            notify_in_thread(f"执行关闭PowerShell脚本: {os.path.basename(target)}")
+                        elif target.lower().endswith(('.py', '.pyw')):
+                            subprocess.Popen(["python", abs_path], cwd=work_dir)
+                            notify_in_thread(f"执行关闭Python脚本: {os.path.basename(target)}")
+                        elif target.lower().endswith(('.cmd', '.bat')):
+                            subprocess.Popen(["cmd", "/c", abs_path], shell=False, cwd=work_dir)
+                            notify_in_thread(f"执行关闭批处理脚本: {os.path.basename(target)}")
                         else:
-                            notify_in_thread(f"终止脚本失败: {process_name}")
-                    elif directory.lower().endswith('.ps1'):
-                        # PowerShell脚本：使用专门的PowerShell终止方法
-                        if terminate_powershell_process_enhanced(directory):
-                            notify_in_thread(f"成功终止PowerShell脚本: {process_name}")
-                        elif terminate_script_process(directory):
-                            notify_in_thread(f"成功终止脚本: {process_name}")
-                        else:
-                            notify_in_thread(f"终止PowerShell脚本失败: {process_name}")
-                    else:
-                        # Python脚本：使用标准方法
-                        if terminate_script_process(directory):
-                            notify_in_thread(f"成功终止Python脚本: {process_name}")
-                        else:
-                            notify_in_thread(f"终止Python脚本失败: {process_name}")
+                            # 可执行文件/其他
+                            try:
+                                hinst = ctypes.windll.shell32.ShellExecuteW(None, 'open', abs_path, None, work_dir, 1)
+                            except Exception:
+                                hinst = 0
+                            if not isinstance(hinst, int) and hasattr(hinst, 'value'):
+                                hinst = int(hinst.value)
+                            if hinst is None:
+                                hinst = 0
+                            if hinst <= 32:
+                                subprocess.Popen([abs_path], cwd=work_dir)
+                            notify_in_thread(f"执行关闭程序: {os.path.basename(target)}")
+                    except Exception as e:
+                        logging.error(f"执行关闭操作失败: {e}")
+                        notify_in_thread(f"执行关闭操作失败: {os.path.basename(target)}")
                 else:
-                    # 普通可执行文件
-                    result = subprocess.run(
-                        ["taskkill", "/F", "/IM", process_name],
-                        capture_output=True,
-                        text=True,
-                    )
-                    if result.returncode == 0:
-                        logging.info(f"成功终止进程: {result.stdout}")
-                        notify_in_thread(f"成功终止进程: {process_name}")
+                    # 未提供 off_value，按预设处理（kill/none）
+                    if off_preset in ("none", "custom"):
+                        logging.info("关闭预设为 none，跳过关闭操作")
+                        notify_in_thread("关闭预设：不执行任何操作")
+                        return
+                    # 使用 on_path 推断要终止的进程/脚本名
+                    target = on_path or directory
+                    if not target:
+                        logging.error("未找到可用于关闭的目标路径")
+                        notify_in_thread("关闭失败：未找到目标")
+                        return
+                    process_name = os.path.basename(target)
+                    logging.info(f"尝试终止进程/脚本: {process_name}")
+                    notify_in_thread(f"尝试终止: {process_name}")
+
+                    if target.lower().endswith(('.cmd', '.bat', '.ps1', '.py', '.pyw')):
+                        # 按脚本类型选择终止方法
+                        if target.lower().endswith(('.cmd', '.bat')):
+                            if terminate_batch_process_enhanced(target):
+                                notify_in_thread(f"成功终止批处理脚本: {process_name}")
+                            elif terminate_script_process(target):
+                                notify_in_thread(f"成功终止脚本: {process_name}")
+                            else:
+                                notify_in_thread(f"终止脚本失败: {process_name}")
+                        elif target.lower().endswith('.ps1'):
+                            if terminate_powershell_process_enhanced(target):
+                                notify_in_thread(f"成功终止PowerShell脚本: {process_name}")
+                            elif terminate_script_process(target):
+                                notify_in_thread(f"成功终止脚本: {process_name}")
+                            else:
+                                notify_in_thread(f"终止PowerShell脚本失败: {process_name}")
+                        else:
+                            if terminate_script_process(target):
+                                notify_in_thread(f"成功终止Python脚本: {process_name}")
+                            else:
+                                notify_in_thread(f"终止Python脚本失败: {process_name}")
                     else:
-                        logging.error(f"终止进程失败: {result.stderr}")
-                        notify_in_thread(f"终止进程失败: {process_name}")
+                        # 普通可执行文件
+                        result = subprocess.run([
+                            "taskkill", "/F", "/IM", process_name
+                        ], capture_output=True, text=True)
+                        if result.returncode == 0:
+                            logging.info(f"成功终止进程: {result.stdout}")
+                            notify_in_thread(f"成功终止进程: {process_name}")
+                        else:
+                            logging.error(f"终止进程失败: {result.stderr}")
+                            notify_in_thread(f"终止进程失败: {process_name}")
             elif command == "on":
-                if not directory or not os.path.isfile(directory):
-                    logging.error(f"启动失败，文件不存在: {directory}")
-                    notify_in_thread(f"启动失败，文件不存在: {directory}")
+                target = on_path
+                if not target or not os.path.isfile(target):
+                    logging.error(f"启动失败，文件不存在: {target}")
+                    notify_in_thread(f"启动失败，文件不存在: {target}")
                     return
-                
-                logging.info(f"启动: {directory}")
-                
+                logging.info(f"启动: {target}")
+
                 # 检查文件类型，选择合适的启动方式
-                if directory.lower().endswith('.ps1'):
+                if target.lower().endswith('.ps1'):
                     # PowerShell脚本需要通过PowerShell解释器启动（设置工作目录）
                     try:
-                        abs_path = os.path.abspath(directory)
+                        abs_path = os.path.abspath(target)
                         work_dir = os.path.dirname(abs_path)
                         subprocess.Popen(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", abs_path], cwd=work_dir)
-                        notify_in_thread(f"启动PowerShell脚本: {os.path.basename(directory)}")
-                        logging.info(f"成功启动PowerShell脚本: {directory}")
+                        notify_in_thread(f"启动PowerShell脚本: {os.path.basename(target)}")
+                        logging.info(f"成功启动PowerShell脚本: {target}")
                     except Exception as e:
                         logging.error(f"启动PowerShell脚本失败: {e}")
-                        notify_in_thread(f"启动PowerShell脚本失败: {os.path.basename(directory)}")
-                elif directory.lower().endswith(('.py', '.pyw')):
+                        notify_in_thread(f"启动PowerShell脚本失败: {os.path.basename(target)}")
+                elif target.lower().endswith(('.py', '.pyw')):
                     # Python脚本需要通过Python解释器启动（设置工作目录）
                     try:
-                        abs_path = os.path.abspath(directory)
+                        abs_path = os.path.abspath(target)
                         work_dir = os.path.dirname(abs_path)
                         subprocess.Popen(["python", abs_path], cwd=work_dir)
-                        notify_in_thread(f"启动Python脚本: {os.path.basename(directory)}")
-                        logging.info(f"成功启动Python脚本: {directory}")
+                        notify_in_thread(f"启动Python脚本: {os.path.basename(target)}")
+                        logging.info(f"成功启动Python脚本: {target}")
                     except Exception as e:
                         logging.error(f"启动Python脚本失败: {e}")
-                        notify_in_thread(f"启动Python脚本失败: {os.path.basename(directory)}")
-                elif directory.lower().endswith(('.cmd', '.bat')):
+                        notify_in_thread(f"启动Python脚本失败: {os.path.basename(target)}")
+                elif target.lower().endswith(('.cmd', '.bat')):
                     # 批处理文件需要通过cmd启动（设置工作目录）
                     try:
-                        abs_path = os.path.abspath(directory)
+                        abs_path = os.path.abspath(target)
                         work_dir = os.path.dirname(abs_path)
                         # 使用cmd /c来启动批处理文件，确保路径正确处理
                         subprocess.Popen(["cmd", "/c", abs_path], shell=False, cwd=work_dir)
-                        notify_in_thread(f"启动批处理脚本: {os.path.basename(directory)}")
-                        logging.info(f"成功启动批处理脚本: {directory}")
+                        notify_in_thread(f"启动批处理脚本: {os.path.basename(target)}")
+                        logging.info(f"成功启动批处理脚本: {target}")
                     except Exception as e:
                         logging.error(f"启动批处理脚本失败: {e}")
-                        notify_in_thread(f"启动批处理脚本失败: {os.path.basename(directory)}")
+                        notify_in_thread(f"启动批处理脚本失败: {os.path.basename(target)}")
                 else:
                     # 其他可执行文件（使用ShellExecuteW模拟双击，必要时兜底）
                     try:
-                        abs_path = os.path.abspath(directory)
+                        abs_path = os.path.abspath(target)
                         work_dir = os.path.dirname(abs_path)
                         # 优先使用ShellExecuteW，lpDirectory指定工作目录
                         try:
@@ -832,20 +898,16 @@ def process_command(command: str, topic: str) -> None:
                         if hinst <= 32:
                             # 回退到Popen，并指定工作目录
                             subprocess.Popen([abs_path], cwd=work_dir)
-                        notify_in_thread(f"启动程序: {os.path.basename(directory)}")
-                        logging.info(f"成功启动程序: {directory}")
+                        notify_in_thread(f"启动程序: {os.path.basename(target)}")
+                        logging.info(f"成功启动程序: {target}")
                     except Exception as e:
                         logging.error(f"启动程序失败: {e}")
-                        notify_in_thread(f"启动程序失败: {os.path.basename(directory)}")
+                        notify_in_thread(f"启动程序失败: {os.path.basename(target)}")
             return
     
     # 命令类型（统一通过 PowerShell 执行）
     for cmd_topic, cmd_text in commands:
         if topic == cmd_topic:
-            if not cmd_text:
-                logging.error(f"命令为空，无法执行: {cmd_topic}")
-                notify_in_thread(f"命令为空: {cmd_topic}")
-                return
             if command == "on":
                 try:
                     # 始终使用 PowerShell 执行命令
@@ -853,10 +915,12 @@ def process_command(command: str, topic: str) -> None:
 
                     # 读取该命令的窗口显示设置（默认为show）
                     window_mode = None
+                    cmd_key_found = None
                     try:
                         for i in range(1, 50):
                             key = f"command{i}"
                             if config.get(key) == cmd_topic:
+                                cmd_key_found = key
                                 window_mode = config.get(f"{key}_window", "show")
                                 break
                     except Exception:
@@ -870,8 +934,21 @@ def process_command(command: str, topic: str) -> None:
                         "-NoProfile",
                         "-ExecutionPolicy", "Bypass",
                     ]
+                    # 读取 on_value（兼容旧 value）
+                    on_cmd = None
+                    try:
+                        if cmd_key_found:
+                            on_cmd = config.get(f"{cmd_key_found}_on_value")
+                    except Exception:
+                        pass
+                    if not on_cmd:
+                        on_cmd = cmd_text
+                    if not on_cmd:
+                        logging.error(f"命令为空，无法执行: {cmd_topic}")
+                        notify_in_thread(f"命令为空: {cmd_topic}")
+                        return
                     # 规范化命令，解决 curl 被 PowerShell 映射为 Invoke-WebRequest 导致提示 Uri 的问题
-                    cmd_text_norm = _normalize_command_for_powershell(cmd_text)
+                    cmd_text_norm = _normalize_command_for_powershell(on_cmd)
 
                     if window_mode == "hide":
                         # 隐藏窗口：创建新控制台并将其隐藏，保留控制台以支持CTRL_BREAK
@@ -905,10 +982,74 @@ def process_command(command: str, topic: str) -> None:
                     logging.error(f"执行命令失败[{cmd_topic}]: {e}")
                     notify_in_thread(f"执行命令失败: {cmd_topic}")
             elif command == "off":
-                if interrupt_command_processes(cmd_topic):
-                    notify_in_thread(f"已发送中断信号: {cmd_topic}")
+                # 若配置了 off_value，则直接执行；否则按预设 interrupt/kill/none 处理
+                off_cmd = None
+                off_preset = "kill"
+                cmd_key_found = None
+                try:
+                    for i in range(1, 50):
+                        key = f"command{i}"
+                        if config.get(key) == cmd_topic:
+                            cmd_key_found = key
+                            off_cmd = config.get(f"{key}_off_value")
+                            off_preset = config.get(f"{key}_off_preset", "kill") or "kill"
+                            break
+                except Exception:
+                    pass
+
+                if off_cmd:
+                    try:
+                        # 与 on 相同的执行方式（窗口模式沿用配置）
+                        creationflags = 0x00000200  # CREATE_NEW_PROCESS_GROUP
+                        window_mode = config.get(f"{cmd_key_found}_window", "show") if cmd_key_found else "show"
+                        startupinfo = None
+                        args = [
+                            "powershell.exe",
+                            "-NoProfile",
+                            "-ExecutionPolicy", "Bypass",
+                        ]
+                        off_cmd_norm = _normalize_command_for_powershell(off_cmd)
+                        if window_mode == "hide":
+                            startupinfo = subprocess.STARTUPINFO()
+                            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                            startupinfo.wShowWindow = 0
+                            creationflags |= 0x00000010  # CREATE_NEW_CONSOLE
+                            args += [
+                                "-WindowStyle", "Hidden",
+                                "-NonInteractive",
+                                "-Command", off_cmd_norm,
+                            ]
+                        else:
+                            creationflags |= 0x00000010  # CREATE_NEW_CONSOLE
+                            args += [
+                                "-NoExit",
+                                "-Command", off_cmd_norm,
+                            ]
+                        proc = subprocess.Popen(
+                            args,
+                            shell=False,
+                            creationflags=creationflags,
+                            startupinfo=startupinfo,
+                        )
+                        register_command_process(cmd_topic, proc.pid)
+                        notify_in_thread(f"已执行关闭命令: {cmd_topic}")
+                        logging.info(f"执行关闭命令[{cmd_topic}] (window={window_mode}): {off_cmd_norm}; PID={proc.pid}")
+                    except Exception as e:
+                        logging.error(f"执行关闭命令失败[{cmd_topic}]: {e}")
+                        notify_in_thread(f"执行关闭命令失败: {cmd_topic}")
                 else:
-                    notify_in_thread(f"未找到可中断进程或中断失败: {cmd_topic}")
+                    if off_preset in ("none", "custom"):
+                        notify_in_thread(f"关闭预设：不执行任何操作: {cmd_topic}")
+                    elif off_preset == "kill":
+                        if kill_command_processes(cmd_topic):
+                            notify_in_thread(f"已强制结束进程: {cmd_topic}")
+                        else:
+                            notify_in_thread(f"未找到可结束的进程: {cmd_topic}")
+                    else:  # 默认 interrupt
+                        if interrupt_command_processes(cmd_topic):
+                            notify_in_thread(f"已发送中断信号: {cmd_topic}")
+                        else:
+                            notify_in_thread(f"未找到可中断进程或中断失败: {cmd_topic}")
             return
             
     def check_service_status(service_name):
@@ -923,42 +1064,85 @@ def process_command(command: str, topic: str) -> None:
             logging.error(f"无法获取服务{service_name}的状态:{result.stderr}")
             return "unknown"
     
-    for serve, serve_name in serves:
-        if topic == serve:
+    for srv in serves:
+        if topic == srv.get("topic"):
+            service_name = (srv.get("service_name") or srv.get("on_value") or "").strip()
+            off_preset = (srv.get("off_preset") or "stop")
+            off_command = (srv.get("off_value") or "").strip()
             if command == "off":
-                status = check_service_status(serve_name)
+                if off_preset == "none":
+                    logging.info(f"服务[{topic}]关闭预设=忽略，跳过关闭")
+                    notify_in_thread(f"{topic} 关闭预设：不执行任何操作")
+                    return
+                if off_preset == "custom":
+                    if not off_command:
+                        logging.warning(f"服务[{topic}]关闭预设=自定义，但未配置命令")
+                        notify_in_thread(f"{topic} 自定义关闭命令为空，已跳过")
+                        return
+                    try:
+                        cmd_text_norm = _normalize_command_for_powershell(off_command)
+                        args = [
+                            "powershell.exe",
+                            "-NoProfile",
+                            "-ExecutionPolicy", "Bypass",
+                            "-Command", cmd_text_norm,
+                        ]
+                        subprocess.Popen(
+                            args,
+                            shell=False,
+                            creationflags=0x00000010,  # CREATE_NEW_CONSOLE
+                        )
+                        logging.info(f"服务[{topic}]执行自定义关闭命令: {cmd_text_norm}")
+                        notify_in_thread(f"已执行 {topic} 自定义关闭命令")
+                    except Exception as e:
+                        logging.error(f"执行服务自定义关闭命令失败[{topic}]: {e}")
+                        notify_in_thread(f"执行 {topic} 自定义关闭命令失败，请查看日志")
+                    return
+
+                # 默认 stop 预设
+                if not service_name:
+                    logging.error(f"服务[{topic}]未配置服务名称，无法执行停止操作")
+                    notify_in_thread(f"{topic} 未配置服务名称，无法停止")
+                    return
+                status = check_service_status(service_name)
                 if status == "unknown":
-                    logging.error(f"无法获取服务{serve_name}的状态")
-                    notify_in_thread(f"无法获取 {serve_name} 的状态,详情请查看日志")
+                    logging.error(f"无法获取服务{service_name}的状态")
+                    notify_in_thread(f"无法获取 {service_name} 的状态,详情请查看日志")
                 if status == "stopped":
-                    logging.info(f"{serve_name} 还没有运行")
-                    notify_in_thread(f"{serve_name} 还没有运行")
+                    logging.info(f"{service_name} 还没有运行")
+                    notify_in_thread(f"{service_name} 还没有运行")
                 else:
-                    result = subprocess.run(["sc", "stop", serve_name], shell=True)
+                    result = subprocess.run(["sc", "stop", service_name], shell=True)
                     if result.returncode == 0:
-                        logging.info(f"成功关闭 {serve_name}")
-                        notify_in_thread(f"成功关闭 {serve_name}")
+                        logging.info(f"成功关闭 {service_name}")
+                        notify_in_thread(f"成功关闭 {service_name}")
                     else:
-                        logging.error(f"关闭 {serve_name} 失败")
+                        logging.error(f"关闭 {service_name} 失败")
                         logging.error(result.stderr)
-                        notify_in_thread(f"关闭 {serve_name} 失败")
+                        notify_in_thread(f"关闭 {service_name} 失败")
+                return
             elif command == "on":
-                status = check_service_status(serve_name)
+                if not service_name:
+                    logging.error(f"服务[{topic}]未配置服务名称，无法启动")
+                    notify_in_thread(f"{topic} 未配置服务名称，无法启动")
+                    return
+                status = check_service_status(service_name)
                 if status == "unknown":
-                    logging.error(f"无法获取服务{serve_name}的状态")
-                    notify_in_thread(f"无法获取 {serve_name} 的状态,详情请查看日志")
+                    logging.error(f"无法获取服务{service_name}的状态")
+                    notify_in_thread(f"无法获取 {service_name} 的状态,详情请查看日志")
                 if status == "running":
-                    logging.info(f"{serve_name} 已经在运行")
-                    notify_in_thread(f"{serve_name} 已经在运行")
+                    logging.info(f"{service_name} 已经在运行")
+                    notify_in_thread(f"{service_name} 已经在运行")
                 else:
-                    result = subprocess.run(["sc", "start", serve_name], shell=True)
+                    result = subprocess.run(["sc", "start", service_name], shell=True)
                     if result.returncode == 0:
-                        logging.info(f"成功启动 {serve_name}")
-                        notify_in_thread(f"成功启动 {serve_name}")
+                        logging.info(f"成功启动 {service_name}")
+                        notify_in_thread(f"成功启动 {service_name}")
                     else:
-                        logging.error(f"启动 {serve_name} 失败")
+                        logging.error(f"启动 {service_name} 失败")
                         logging.error(result.stderr)
-                        notify_in_thread(f"启动 {serve_name} 失败")
+                        notify_in_thread(f"启动 {service_name} 失败")
+                return
             return
 
     # 若不匹配应用程序或服务，再判断是否为内置主题
@@ -1250,6 +1434,47 @@ def interrupt_command_processes(topic: str) -> bool:
 
     # 清理注册表中已退出或被终止的PID
     command_process_registry[topic] = cleanup_dead_pids(pids)
+    return did_any
+
+def kill_command_processes(topic: str) -> bool:
+    """强制结束该命令主题下记录的所有进程。
+
+    返回是否至少结束了一个进程。
+    """
+    pids = command_process_registry.get(topic, [])
+    if not pids:
+        logging.warning(f"命令[{topic}]未记录到任何PID用于kill")
+        return False
+    pids = cleanup_dead_pids(pids)
+    if not pids:
+        command_process_registry[topic] = []
+        logging.info(f"命令[{topic}]持有PID均已退出")
+        return False
+    did_any = False
+    alive_after = []
+    for pid in pids:
+        try:
+            if psutil.pid_exists(pid):
+                proc = psutil.Process(pid)
+                try:
+                    proc.kill()
+                    did_any = True
+                    logging.info(f"已kill PID={pid}")
+                except Exception as e:
+                    logging.warning(f"proc.kill失败 PID={pid}: {e}，尝试taskkill")
+                    result = subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, text=True)
+                    if result.returncode == 0:
+                        did_any = True
+                        logging.info(f"taskkill成功 PID={pid}: {result.stdout}")
+                    else:
+                        logging.warning(f"taskkill失败 PID={pid}: {result.stderr}")
+                # 不再保留该PID
+            else:
+                logging.info(f"PID={pid} 已不存在，跳过")
+        except Exception as e:
+            logging.error(f"结束PID失败 PID={pid}: {e}")
+        # 不添加到 alive_after 保证清理
+    command_process_registry[topic] = alive_after
     return did_any
 
 def terminate_script_process(script_path: str) -> bool:
@@ -2326,12 +2551,27 @@ logging.info(f"读取的应用程序列表: {applications}\n")
 serves = []
 for i in range(1, 50):
     serve_key = f"serve{i}"
-    serve_name_key = f"serve{i}_value"
-    serve = load_theme(serve_key)
-    serve_name = config.get(serve_name_key) if serve else None
-    if serve:
-        logging.info(f"加载服务: {serve_key}, 名称: {serve_name}")
-        serves.append((serve, serve_name))
+    serve_topic = load_theme(serve_key)
+    if serve_topic:
+        service_name = config.get(f"{serve_key}_value", "")
+        on_value = config.get(f"{serve_key}_on_value", service_name)
+        off_preset = (config.get(f"{serve_key}_off_preset", "stop") or "stop")
+        off_value = config.get(f"{serve_key}_off_value", "") or ""
+        serves.append(
+            {
+                "topic": serve_topic,
+                "service_name": service_name,
+                "on_value": on_value,
+                "off_preset": off_preset,
+                "off_value": off_value,
+            }
+        )
+        logging.info(
+            "加载服务: %s, 名称: %s, 关闭预设: %s",
+            serve_key,
+            service_name,
+            off_preset,
+        )
 logging.info(f"读取的服务列表: {serves}\n")
 
 # 加载命令主题到命令列表
@@ -2383,8 +2623,13 @@ for key in ["Computer", "screen", "volume", "sleep", "media"]:
 for application, directory in applications:
     logging.info(f'主题"{application}"，值："{directory}"')
 
-for serve, serve_name in serves:
-    logging.info(f'主题"{serve}"，值："{serve_name}"')
+for srv in serves:
+    logging.info(
+        '主题"%s"，值："%s"，关闭预设：%s',
+        srv.get("topic"),
+        srv.get("service_name"),
+        srv.get("off_preset"),
+    )
 for cmd_topic, cmd_value in commands:
     logging.info(f'主题"{cmd_topic}"，值："{cmd_value}"')
     
