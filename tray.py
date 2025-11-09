@@ -15,6 +15,7 @@ import subprocess
 import threading
 import time
 import ctypes
+import contextlib
 import logging
 from logging.handlers import RotatingFileHandler
 import traceback
@@ -29,6 +30,7 @@ import urllib.request
 import json
 import re
 import threading as _threading_for_hook
+from ctypes import wintypes
 
 # 安全：设置全局异常钩子，避免未捕获异常导致 PyInstaller 弹 CrashSender 进程（某些环境会尝试调用缺失的 CrashSender.exe）
 def _safe_excepthook(exc_type, exc_value, exc_tb):
@@ -203,6 +205,75 @@ try:
 except Exception as e:
     logging.error(f"检查托盘程序管理员权限时出错: {e}")
     IS_TRAY_ADMIN = False
+
+# impersonation constants for elevated sessions that still need toast notifications
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+TOKEN_QUERY = 0x0008
+TOKEN_DUPLICATE = 0x0002
+TOKEN_IMPERSONATE = 0x0004
+TOKEN_IMPERSONATE_PRIVS = TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_IMPERSONATE
+SecurityImpersonation = 2
+TokenImpersonation = 2
+
+
+@contextlib.contextmanager
+def _impersonate_shell_user():
+    """Temporarily impersonate the shell (explorer) user for WinRT toast access.
+
+    在管理员进程中通知会触发 winrt 崩溃，模拟普通桌面用户避免此问题。
+    返回 True 表示模拟成功，False 表示失败（此时调用方应回退）。
+    """
+    if not IS_TRAY_ADMIN:
+        yield True
+        return
+
+    shell_hwnd = ctypes.windll.user32.GetShellWindow()
+    if not shell_hwnd:
+        yield False
+        return
+
+    pid = wintypes.DWORD()
+    ctypes.windll.user32.GetWindowThreadProcessId(shell_hwnd, ctypes.byref(pid))
+    if not pid.value:
+        yield False
+        return
+
+    h_proc = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+    if not h_proc:
+        yield False
+        return
+
+    h_token = wintypes.HANDLE()
+    try:
+        if not ctypes.windll.advapi32.OpenProcessToken(h_proc, TOKEN_IMPERSONATE_PRIVS, ctypes.byref(h_token)):
+            yield False
+            return
+
+        dup_token = wintypes.HANDLE()
+        if not ctypes.windll.advapi32.DuplicateTokenEx(
+            h_token,
+            TOKEN_IMPERSONATE_PRIVS,
+            None,
+            SecurityImpersonation,
+            TokenImpersonation,
+            ctypes.byref(dup_token),
+        ):
+            yield False
+            return
+
+        try:
+            if not ctypes.windll.advapi32.SetThreadToken(None, dup_token):
+                yield False
+                return
+            try:
+                yield True
+            finally:
+                ctypes.windll.advapi32.SetThreadToken(None, None)
+        finally:
+            ctypes.windll.kernel32.CloseHandle(dup_token)
+    finally:
+        ctypes.windll.kernel32.CloseHandle(h_token)
+        ctypes.windll.kernel32.CloseHandle(h_proc)
 # 配置
 MAIN_EXE_NAME = "RC-main.exe" if getattr(sys, "frozen", False) else "main.py"
 GUI_EXE_ = "RC-GUI.exe"
@@ -872,6 +943,7 @@ for _p in _ICON_CANDIDATES:
         pass
 
 _SCALED_NOTIFY_ICON = None
+_TOAST_DISABLED = False
 
 def _prepare_scaled_icon(scale: float = 0.7) -> str | None:
     """生成带透明留白的缩放图标，减少被裁切、显得过大的问题。只生成一次缓存。"""
@@ -913,74 +985,86 @@ def notify(msg, level="info", show_error=False, title: str | None = None, unique
     - show_error: 通知失败时是否弹出消息框
     - title: 自定义标题（默认使用 APP_NOTIFY_NAME）
     """
+    global _TOAST_DISABLED
     log_func = getattr(logging, level.lower(), logging.info)
     log_func(f"通知: {msg}")
 
     t_title = title or APP_NOTIFY_NAME
 
+    def _fallback_notify():
+        if show_error:
+            try:
+                messagebox.showinfo(t_title, msg)
+            except Exception:
+                pass
+        else:
+            try:
+                print(f"[{t_title}] {msg}")
+            except Exception:
+                pass
+
+    if _TOAST_DISABLED:
+        _fallback_notify()
+        return
+
     def _show_toast_in_thread():
         try:
-            icon_use = _prepare_scaled_icon()
-            icon_param = None
-            if icon_use:
-                icon_param = {"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"}
-            tag = group = None
-            if mode == "replace":
-                # 固定 tag/group，实现覆盖
-                tag = "rc_live"
-                group = "rc_live_group"
-                try:
-                    clear_toast(app_id=APP_NOTIFY_NAME, tag=tag, group=group)
-                except Exception:
-                    pass
-            elif unique:
-                now_ms = int(time.time()*1000)
-                tag = f"t{now_ms%1000000}"
-                group = "rc_fast"
-            # 正确参数形式：title= 标题, body= 内容, app_id= 自定义应用名
-            if icon_param:
-                toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME, icon=icon_param, tag=tag, group=group)
-            else:
-                toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME, tag=tag, group=group)
+            global _TOAST_DISABLED
+            with _impersonate_shell_user() as impersonated:
+                if not impersonated:
+                    raise RuntimeError("模拟 shell 用户失败，无法发送 toast")
+
+                icon_use = _prepare_scaled_icon()
+                icon_param = None
+                if icon_use:
+                    icon_param = {"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"}
+                tag = group = None
+                if mode == "replace":
+                    # 固定 tag/group，实现覆盖
+                    tag = "rc_live"
+                    group = "rc_live_group"
+                    try:
+                        clear_toast(app_id=APP_NOTIFY_NAME, tag=tag, group=group)
+                    except Exception:
+                        pass
+                elif unique:
+                    now_ms = int(time.time()*1000)
+                    tag = f"t{now_ms%1000000}"
+                    group = "rc_fast"
+                # 正确参数形式：title= 标题, body= 内容, app_id= 自定义应用名
+                if icon_param:
+                    toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME, icon=icon_param, tag=tag, group=group)
+                else:
+                    toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME, tag=tag, group=group)
         except TypeError:
             # 旧版本可能不支持 body 关键字（不大可能），尝试最简降级
             try:
-                icon_use = _prepare_scaled_icon()
-                if icon_use:
-                    toast(t_title, msg, app_id=APP_NOTIFY_NAME, icon={"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"})
-                else:
-                    toast(t_title, msg, app_id=APP_NOTIFY_NAME)
-            except Exception:
-                try:
+                with _impersonate_shell_user() as impersonated:
+                    if not impersonated:
+                        raise RuntimeError("模拟 shell 用户失败，无法发送 toast")
                     icon_use = _prepare_scaled_icon()
                     if icon_use:
-                        toast(t_title, msg, icon={"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"})
+                        toast(t_title, msg, app_id=APP_NOTIFY_NAME, icon={"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"})
                     else:
-                        toast(t_title, msg)
+                        toast(t_title, msg, app_id=APP_NOTIFY_NAME)
+            except Exception:
+                try:
+                    with _impersonate_shell_user() as impersonated:
+                        if not impersonated:
+                            raise RuntimeError("模拟 shell 用户失败，无法发送 toast")
+                        icon_use = _prepare_scaled_icon()
+                        if icon_use:
+                            toast(t_title, msg, icon={"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"})
+                        else:
+                            toast(t_title, msg)
                 except Exception as e:
                     logging.error(f"发送通知失败: {e}")
-                    if show_error:
-                        try:
-                            messagebox.showinfo(t_title, msg)
-                        except Exception:
-                            pass
-                    else:
-                        try:
-                            print(f"[{t_title}] {msg}")
-                        except Exception:
-                            pass
+                    _TOAST_DISABLED = True
+                    _fallback_notify()
         except Exception as e:
             logging.error(f"发送通知失败: {e}")
-            if show_error:
-                try:
-                    messagebox.showinfo(t_title, msg)
-                except Exception:
-                    pass
-            else:
-                try:
-                    print(f"[{t_title}] {msg}")
-                except Exception:
-                    pass
+            _TOAST_DISABLED = True
+            _fallback_notify()
 
     th = threading.Thread(target=_show_toast_in_thread, daemon=True)
     th.start()
