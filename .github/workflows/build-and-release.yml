@@ -401,42 +401,8 @@ jobs:
                     echo "从 CHANGELOG.md 提取内容失败: $_"
                   }
 
-                  # 如果 CHANGELOG.md 没有内容，尝试从 md/up.md 提取
                   if (-not $changelogContent) {
-                    try {
-                      if (Test-Path 'md/up.md') {
-                        $upContent = Get-Content 'md/up.md' -Raw
-                        # 匹配以 "# V<version>" 开头直到下一个版本标题或文件结尾
-                        $escapedVersion = [regex]::Escape($version)
-                        $pattern = "(?ms)^#\s*V$escapedVersion\b[\s\S]*?(?=^#\s*V\d+\.\d+\.\d+\b|\Z)"
-                        $m = [regex]::Match($upContent, $pattern)
-                        
-                        # 如果简单模式不匹配，尝试包含日期的完整模式
-                        if (-not $m.Success) {
-                          $pattern = "(?ms)^#\s*V$escapedVersion\s*\([\d-]+\)[\s\S]*?(?=^#\s*V\d+\.\d+\.\d+\s*\(|\Z)"
-                          $m = [regex]::Match($upContent, $pattern)
-                        }
-                        if ($m.Success) {
-                          $section = $m.Value.Trim()
-                          # 去掉第一行标题（# Vx.y.z ...）
-                          $lines = $section -split "`n"
-                          if ($lines.Length -gt 1) {
-                            $body = ($lines | Select-Object -Skip 1) -join "`n"
-                          } else { $body = $section }
-                          $body = $body.Trim()
-                          if ($body) {
-                            echo "已从 md/up.md 提取版本段落"
-                            $changelogContent = $body
-                          }
-                        } else {
-                          echo "未在 md/up.md 中找到版本 $version 的标题段落"
-                        }
-                      } else {
-                        echo "md/up.md 不存在"
-                      }
-                    } catch {
-                      echo "提取 up.md 版本段落时出现异常: $_"
-                    }
+                    echo "未在 CHANGELOG.md 中找到版本 $version 的段落，后续将使用提交记录生成更新内容"
                   }
 
                   # 如果还是没有内容，生成commit日志
@@ -490,7 +456,7 @@ jobs:
                   # 生成最终更新日志内容
                   try {
                     # 使用字符串拼接代替Here-String以避免YAML解析问题
-                    $finalChangelog = "$versionNote`n`n### 🔄 更新内容`n$changelogContent`n`n### 📚 相关链接`n- [📖 项目文档](https://github.com/${{ github.repository }}/blob/main/README.md)`n- [📋 完整更新日志](https://github.com/${{ github.repository }}/blob/main/md/up.md)`n- [💾 历史版本](https://github.com/${{ github.repository }}/releases)"
+                    $finalChangelog = "$versionNote`n`n### 🔄 更新内容`n$changelogContent`n`n### 📚 相关链接`n- [📖 项目文档](https://github.com/${{ github.repository }}/blob/main/README.md)`n- [📋 完整更新日志](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)`n- [💾 历史版本](https://github.com/${{ github.repository }}/releases)"
 
                     echo "📄 生成的更新日志内容长度: $($finalChangelog.Length) 字符"
                     
