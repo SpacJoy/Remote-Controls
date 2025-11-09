@@ -914,17 +914,20 @@ def show_detail_window():
         custom_content = """
 【自定义主题类型】
 程序或脚本：
-    选择 EXE / .py / .pyw / .ps1 / .bat / .cmd；必要时自动选解释器。
+    “打开(on)”支持选择 EXE/.py/.ps1/.bat/.cmd 等；必要时自动补全解释器。
+    “关闭(off)”可选预设（强制结束/忽略）或自定义脚本，切到自定义时可单独选文件。
 
-服务：
-    需管理员权限；填写服务名称；开/关对应 start/stop。
+服务(需管理员权限)：
+    填写服务名称；“打开(on)”即启动，默认关闭预设为停止服务，可改为忽略或自定义命令。
+    需管理员权限运行主程序/托盘，界面会提示不足权限。
 
 命令：
-    PowerShell 执行；on 运行；off 发送 CTRL_BREAK 优雅中断（若支持）。
+    “打开(on)”为 PowerShell 片段，可随时点击测试按钮；
+    关闭预设默认“中断”(CTRL+BREAK)，可改为强制结束或自定义并独立测试。
 
 按键(Hotkey)：
-    支持组合键 (ctrl/alt/shift/win)；可用 {down}/{up}；
-    字母段逐字符发送，可设置字母段间隔（>=25ms）。
+    支持 ctrl/alt/shift/win 组合；可使用 {down}/{up} 形式；
+    逐字符发送可设置间隔 (>=0)，保存时会提示非 ASCII 风险。
 """
 
         tips_content = """
@@ -1076,7 +1079,7 @@ def modify_custom_theme() -> None:
     off_preset_label_mod.grid(row=6, column=0, sticky="e")
     # 中文选项: 忽略(=none) / 强制结束(=kill) / 中断(=interrupt) / 停止服务(=stop) / 自定义(=custom)
     if theme["type"] == "命令":
-        preset_internal_default = theme.get("off_preset", "kill")
+        preset_internal_default = theme.get("off_preset", "interrupt")
     elif theme["type"] == "程序或脚本":
         preset_internal_default = theme.get("off_preset", "kill")
     elif theme["type"] == "服务(需管理员权限)":
@@ -1160,8 +1163,16 @@ def modify_custom_theme() -> None:
                 off_value_text.configure(state=tk.DISABLED)
         except Exception:
             pass
+        try:
+            if t_type == "程序或脚本" and code == "custom":
+                off_action_btn_mod.state(["!disabled"])
+            elif t_type == "命令" and code == "custom":
+                off_action_btn_mod.state(["!disabled"])
+            else:
+                off_action_btn_mod.state(["disabled"])
+        except Exception:
+            pass
 
-    _update_off_editability_mod()
     off_preset_combo_mod.bind("<<ComboboxSelected>>", _update_off_editability_mod)
 
     def select_file():
@@ -1208,6 +1219,53 @@ def modify_custom_theme() -> None:
 
     select_file_btn_mod = ttk.Button(theme_window, text="选择文件", command=select_file)
     select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=15)
+    def select_off_file():
+        nonlocal previous_custom_off_value_mod
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            try:
+                if off_preset_var_mod.get() != "自定义":
+                    off_preset_var_mod.set("自定义")
+                previous_custom_off_value_mod = file_path
+                off_value_text.configure(state=tk.NORMAL)
+                off_value_text.delete("1.0", tk.END)
+                off_value_text.insert("1.0", file_path)
+            except Exception:
+                pass
+            _update_off_editability_mod()
+
+    def test_off_command_in_powershell():
+        if preset_reverse_map.get(off_preset_var_mod.get(), "none") != "custom":
+            messagebox.showwarning("提示", "请先将关闭预设切换为“自定义”并填写命令")
+            return
+        try:
+            off_value_text.configure(state=tk.NORMAL)
+        except Exception:
+            pass
+        cmd = off_value_text.get("1.0", "end-1c").strip()
+        if not cmd:
+            messagebox.showwarning("提示", "请先在“关闭(off)”中输入要测试的命令")
+            return
+        cmd = _normalize_command_for_powershell(cmd)
+        ps_script = (
+            "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
+            "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
+            "\nWrite-Host $cmd -ForegroundColor Yellow;"
+            "\nRead-Host '按回车后执行';"
+            "\nWrite-Host '正在执行...' -ForegroundColor Green;"
+            "\ntry { iex $cmd } catch { Write-Host ('发生错误: ' + $_.Exception.Message) -ForegroundColor Red }"
+        )
+        try:
+            subprocess.Popen(
+                ["powershell.exe", "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            )
+        except Exception as e:
+            messagebox.showerror("错误", f"无法启动 PowerShell: {e}")
+
+    off_action_btn_mod = ttk.Button(theme_window, text="选择文件", command=select_off_file)
+    off_action_btn_mod.grid(row=5, column=2, sticky="w", padx=15)
+    _update_off_editability_mod()
 
     # 垂直方向自适应：占位扩展区，推开底部按钮
     try:
@@ -1268,6 +1326,9 @@ def modify_custom_theme() -> None:
             except Exception:
                 pass
             hotkey_frame_mod.grid(row=4, column=1, columnspan=2, sticky="we")
+            select_file_btn_mod.grid_remove()
+            off_action_btn_mod.state(["disabled"])
+            off_action_btn_mod.grid_remove()
         else:
             hotkey_frame_mod.grid_remove()
             on_label_mod.grid(row=4, column=0, sticky="e")
@@ -1279,24 +1340,34 @@ def modify_custom_theme() -> None:
             values_now = _build_preset_values_mod(t)
             off_preset_combo_mod.configure(values=values_now)
             if off_preset_var_mod.get() not in values_now:
-                if t == "命令" and "强制结束" in values_now:
-                    off_preset_var_mod.set("强制结束")
+                if t == "命令" and "中断" in values_now:
+                    off_preset_var_mod.set("中断")
                 elif t == "服务(需管理员权限)" and "停止服务" in values_now:
                     off_preset_var_mod.set("停止服务")
                 else:
                     off_preset_var_mod.set(values_now[0])
             off_preset_combo_mod.grid(row=6, column=1, sticky="w")
-            _update_off_editability_mod()
             # 根据类型设置按钮文本与功能
             if t == "程序或脚本":
                 select_file_btn_mod.configure(text="选择文件", command=select_file)
                 select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=15)
+                off_action_btn_mod.configure(text="选择文件", command=select_off_file)
+                off_action_btn_mod.grid(row=5, column=2, sticky="w", padx=15)
             elif t == "服务(需管理员权限)":
                 select_file_btn_mod.configure(text="打开服务", command=open_services)
                 select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=15)
+                off_action_btn_mod.state(["disabled"])
+                off_action_btn_mod.grid_remove()
             elif t == "命令":
                 select_file_btn_mod.configure(text="PowerShell测试", command=test_command_in_powershell)
                 select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=15)
+                off_action_btn_mod.configure(text="PowerShell测试(关闭)", command=test_off_command_in_powershell)
+                off_action_btn_mod.grid(row=5, column=2, sticky="w", padx=15)
+            else:
+                select_file_btn_mod.grid_remove()
+                off_action_btn_mod.state(["disabled"])
+                off_action_btn_mod.grid_remove()
+            _update_off_editability_mod()
 
     theme_type_combobox.bind("<<ComboboxSelected>>", _update_type_specific_mod)
     _update_type_specific_mod()
@@ -1538,9 +1609,16 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
                 off_value_text_add.configure(state=tk.DISABLED)
         except Exception:
             pass
+        try:
+            if t_type == "程序或脚本" and code == "custom":
+                off_action_btn_add.state(["!disabled"])
+            elif t_type == "命令" and code == "custom":
+                off_action_btn_add.state(["!disabled"])
+            else:
+                off_action_btn_add.state(["disabled"])
+        except Exception:
+            pass
 
-    # 初始可编辑状态
-    _update_off_editability_add()
     off_preset_combo_add.bind("<<ComboboxSelected>>", _update_off_editability_add)
 
     def select_file():
@@ -1585,6 +1663,53 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
 
     select_file_btn_add = ttk.Button(theme_window, text="选择文件", command=select_file)
     select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
+    def select_off_file_add():
+        nonlocal previous_custom_off_value_add
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            try:
+                if off_preset_var_add.get() != "自定义":
+                    off_preset_var_add.set("自定义")
+                previous_custom_off_value_add = file_path
+                off_value_text_add.configure(state=tk.NORMAL)
+                off_value_text_add.delete("1.0", tk.END)
+                off_value_text_add.insert("1.0", file_path)
+            except Exception:
+                pass
+            _update_off_editability_add()
+
+    def test_off_command_in_powershell_add():
+        if preset_reverse_map_add.get(off_preset_var_add.get(), "none") != "custom":
+            messagebox.showwarning("提示", "请先将关闭预设切换为“自定义”并填写命令")
+            return
+        try:
+            off_value_text_add.configure(state=tk.NORMAL)
+        except Exception:
+            pass
+        cmd = off_value_text_add.get("1.0", "end-1c").strip()
+        if not cmd:
+            messagebox.showwarning("提示", "请先在“关闭(off)”中输入要测试的命令")
+            return
+        cmd = _normalize_command_for_powershell(cmd)
+        ps_script = (
+            "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
+            "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
+            "\nWrite-Host $cmd -ForegroundColor Yellow;"
+            "\nRead-Host '按回车后执行';"
+            "\nWrite-Host '正在执行...' -ForegroundColor Green;"
+            "\ntry { iex $cmd } catch { Write-Host ('发生错误: ' + $_.Exception.Message) -ForegroundColor Red }"
+        )
+        try:
+            subprocess.Popen(
+                ["powershell.exe", "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            )
+        except Exception as e:
+            messagebox.showerror("错误", f"无法启动 PowerShell: {e}")
+
+    off_action_btn_add = ttk.Button(theme_window, text="选择文件", command=select_off_file_add)
+    off_action_btn_add.grid(row=5, column=2, sticky="w", padx=15)
+    _update_off_editability_add()
 
     # Hotkey 专用设置区（默认隐藏，选中“按键(Hotkey)”时显示）
     hotkey_frame_add = ttk.Labelframe(theme_window, text="按键(Hotkey) 设置")
@@ -1646,6 +1771,8 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             off_preset_combo_add.grid_remove()
             off_preset_label_add.grid_remove()
             select_file_btn_add.grid_remove()
+            off_action_btn_add.state(["disabled"])
+            off_action_btn_add.grid_remove()
             hotkey_frame_add.grid(row=4, column=1, columnspan=2, sticky="we")
         else:
             hotkey_frame_add.grid_remove()
@@ -1657,22 +1784,32 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             values_now = _build_preset_values_add(t)
             off_preset_combo_add.configure(values=values_now)
             if off_preset_var_add.get() not in values_now:
-                if t == "命令" and "强制结束" in values_now:
-                    off_preset_var_add.set("强制结束")
+                if t == "命令" and "中断" in values_now:
+                    off_preset_var_add.set("中断")
                 elif t == "服务(需管理员权限)" and "停止服务" in values_now:
                     off_preset_var_add.set("停止服务")
                 else:
                     off_preset_var_add.set(values_now[0])
             off_preset_combo_add.grid(row=6, column=1, sticky="w")
-            _update_off_editability_add()
             if t == "程序或脚本":
                 select_file_btn_add.configure(text="选择文件", command=select_file)
                 select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
+                off_action_btn_add.configure(text="选择文件", command=select_off_file_add)
+                off_action_btn_add.grid(row=5, column=2, sticky="w", padx=15)
             elif t == "服务(需管理员权限)":
                 select_file_btn_add.grid_remove()
+                off_action_btn_add.state(["disabled"])
+                off_action_btn_add.grid_remove()
             elif t == "命令":
                 select_file_btn_add.configure(text="PowerShell测试", command=test_command_in_powershell)
                 select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
+                off_action_btn_add.configure(text="PowerShell测试(关闭)", command=test_off_command_in_powershell_add)
+                off_action_btn_add.grid(row=5, column=2, sticky="w", padx=15)
+            else:
+                select_file_btn_add.grid_remove()
+                off_action_btn_add.state(["disabled"])
+                off_action_btn_add.grid_remove()
+            _update_off_editability_add()
 
     theme_type_combobox.bind("<<ComboboxSelected>>", _update_type_specific_add)
     _update_type_specific_add()

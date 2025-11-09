@@ -10,14 +10,14 @@
 
 - MQTT 控制：支持“私钥客户端ID（巴法云等）”与“用户名/密码”两种认证
 - 设备动作：锁屏/关机/重启；亮度；音量与媒体控制；热键发送
-- 自定义主题：程序/脚本（.ps1/.py/.bat/.exe）、服务、命令、热键
+- 自定义主题：支持程序/脚本、服务、命令、热键四类，开关动作可分别配置
 - 托盘管理：一键启动/重启/关闭主程序，显示权限与运行模式
 - 打包与发布：一键构建（github actions），安装器自动注入版本
 - Windows Toast 通知，可开关；异常保护与弱网自动重连
 
 ## 快速开始
 
-1) 下载或构建
+1. 下载或构建
 
 - 到 Releases 下载 RC-main/GUI/tray 可执行文件 或 安装包：Remote-Controls-Installer-2.3.7.exe 或在本地构建：
 
@@ -26,12 +26,12 @@ python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.
 ./build.ps1
 ```
 
-2) 配置 MQTT 与主题
+2. 配置 MQTT 与主题
 
 - 运行 `RC-GUI.exe`，填写 MQTT（密钥或用户名/密码、服务器、端口），保存生成 `config.json`
 - 在 GUI 启用需要的主题（内置 + 自定义）
 
-3) 运行与控制
+3. 运行与控制
 
 - 运行 `RC-tray.exe`（推荐）或 `RC-main.exe`；托盘可管理主程序并显示状态
 - 需要接入小爱/米家：参考下方“教程”绑定巴法云账号并同步设备
@@ -48,9 +48,16 @@ python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.
   - 睡眠（开关）：sleep/hibernate/display_off/display_on/lock
   - 自定义：脚本/程序/服务/命令/热键（支持 {down}/{up}、逐字符、录制器）
 
+### 自定义主题详解
+
+- 程序或脚本：填写“打开(on)”路径或命令，关闭动作可选预设（强制结束、忽略）或自定义脚本，双按钮分别支持选择文件。
+- 服务(需管理员权限)：“打开(on)”写入服务名；关闭预设默认停止服务，也可改为忽略，自定义内容需确保具有管理员权限。
+- 命令：默认显示 PowerShell 测试按钮；打开与关闭各自支持预设，中断(`CTRL+BREAK`)为默认关闭方式，切换到自定义时可测试代码片段。
+- 按键(Hotkey)：可录制或手动输入键盘组合，支持设置按键类型（不执行/键盘组合）和字符间隔，保存时会提示全角字符风险。
+
 ## 项目结构
 
-```
+```text
 Remote-Controls/
 ├─ main.py         # 主程序：MQTT、主题执行、权限/自启、内置托盘
 ├─ GUI.py          # 图形配置：MQTT/主题/热键/自启
@@ -62,7 +69,7 @@ Remote-Controls/
 └─ scripts/        # 清理等辅助脚本
 ```
 
-#### 详细教程：<https://github.com/SpacJoy/Remote-Controls/blob/main/md/Detailed-introduction.md>
+### 详细教程：<https://github.com/SpacJoy/Remote-Controls/blob/main/md/Detailed-introduction.md>
 
 ## 托盘与权限
 
