@@ -15,6 +15,8 @@
 - 打包与发布：一键构建（github actions），安装器自动注入版本
 - Windows Toast 通知，可开关；异常保护与弱网自动重连
 
+# ![Star History Chart](https://api.star-history.com/svg?repos=spacjoy/Remote-Controls&type=Date)
+
 ## 快速开始
 
 1. 下载或构建

@@ -137,5 +137,3 @@
    ![tray](../res/main_tray.png)
 
 自动管理：托盘检测主程序状态；如独立托盘未运行，主程序会启用内置简洁托盘。
-
-![Star History Chart](https://api.star-history.com/svg?repos=chen6019/Remote-Controls&type=Date)
