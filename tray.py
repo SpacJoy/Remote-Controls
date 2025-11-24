@@ -831,11 +831,13 @@ def is_admin_start_main(icon=None, item=None):
 def _admin_start_main_worker():
     """管理员权限运行主程序的实际工作函数"""
     notify("正在启动主程序...")
+    success = False
     if MAIN_EXE_NAME.endswith('.exe') and os.path.exists(MAIN_EXE):
         logging.info(f"以可执行文件方式启动: {MAIN_EXE}")
         rest=run_as_admin(MAIN_EXE)
         if rest > 32:
             logging.info(f"成功以管理员权限启动主程序，PID: {rest}")
+            success = True
         else:
             notify(f"以管理员权限启动主程序失败，错误码: {rest}", level="error", show_error=True)
     elif os.path.exists(MAIN_EXE):
@@ -843,8 +845,13 @@ def _admin_start_main_worker():
         rest=run_py_in_venv_as_admin_hidden(sys.executable, MAIN_EXE)
         if rest > 32:
             logging.info(f"成功以管理员权限启动主程序，PID: {rest}")
+            success = True
         else:
             notify(f"以管理员权限启动主程序失败，错误码: {rest}", level="error", show_error=True)
+    
+    if success:
+        # 启动成功后刷新菜单，延迟2秒等待进程稳定
+        threading.Thread(target=lambda: (time.sleep(2), _update_menu_after_version_check()), daemon=True).start()
 
 def _start_main_with_result():
     """启动主程序并返回结果，用于 init_main_program"""
@@ -1141,6 +1148,10 @@ def close_main():
             close_exe(MAIN_EXE_NAME)
         elif os.path.exists(MAIN_EXE):
             close_script(MAIN_EXE_NAME)
+        
+        # 关闭后刷新菜单，延迟1秒等待进程退出
+        threading.Thread(target=lambda: (time.sleep(1), _update_menu_after_version_check()), daemon=True).start()
+
     except Exception as e:
         # logging.error(f"关闭主程序时出错: {e}")
         notify(f"关闭主程序时出错: {e}", level="error", show_error=True)
@@ -1227,6 +1238,14 @@ def get_menu_items():
         items.append(pystray.MenuItem("当前运行方式：脚本模式", lambda icon, item: None, enabled=False))
         
 
+    # 动态设置退出菜单文本
+    exit_text = "退出托盘"
+    try:
+        if is_main_running():
+            exit_text = "退出托盘（使用主程序自带托盘）"
+    except Exception:
+        pass
+
     # 其他功能菜单项
     items.extend([
         pystray.MenuItem("打开配置界面", open_gui),
@@ -1234,7 +1253,7 @@ def get_menu_items():
         pystray.MenuItem("启动主程序", is_admin_start_main),
         pystray.MenuItem("重启主程序", lambda icon, item: restart_main(icon, item)),
         pystray.MenuItem("关闭主程序", close_main),
-        pystray.MenuItem("退出托盘（使用主程序自带托盘）", lambda icon, item: stop_tray()),
+        pystray.MenuItem(exit_text, lambda icon, item: stop_tray()),
     ])
 
     return items
@@ -1275,6 +1294,11 @@ def init_main_program():
             if start_success:
                 logging.info("主程序启动成功，准备发送启动通知")
                 start_notify()  # 发送启动通知
+                # 刷新菜单以更新退出选项文本
+                try:
+                    _update_menu_after_version_check()
+                except Exception:
+                    pass
             else:
                 logging.warning("主程序启动失败，跳过启动通知发送")
                 # 发送失败通知给用户
