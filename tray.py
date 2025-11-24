@@ -189,19 +189,59 @@ def _impersonate_shell_user():
         yield True
         return
 
-    shell_hwnd = ctypes.windll.user32.GetShellWindow()
-    if not shell_hwnd:
+    pid = None
+    
+    # 1. 尝试通过 GetShellWindow 获取
+    try:
+        shell_hwnd = ctypes.windll.user32.GetShellWindow()
+        if shell_hwnd:
+            dw_pid = wintypes.DWORD()
+            ctypes.windll.user32.GetWindowThreadProcessId(shell_hwnd, ctypes.byref(dw_pid))
+            if dw_pid.value:
+                pid = dw_pid.value
+    except Exception:
+        pass
+
+    # 2. 如果失败，尝试通过查找 explorer.exe 进程获取
+    if not pid:
+        try:
+            # 获取当前活动控制台会话ID
+            active_session_id = ctypes.windll.kernel32.WTSGetActiveConsoleSessionId()
+            
+            # 遍历所有进程
+            for proc in psutil.process_iter(['pid', 'name']):
+                if proc.info['name'] and proc.info['name'].lower() == 'explorer.exe':
+                    try:
+                        # 尝试匹配 SessionId
+                        h_p = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, proc.info['pid'])
+                        if h_p:
+                            sess_id = wintypes.DWORD()
+                            if ctypes.windll.kernel32.ProcessIdToSessionId(proc.info['pid'], ctypes.byref(sess_id)):
+                                if sess_id.value == active_session_id:
+                                    pid = proc.info['pid']
+                                    ctypes.windll.kernel32.CloseHandle(h_p)
+                                    break
+                            ctypes.windll.kernel32.CloseHandle(h_p)
+                    except Exception:
+                        continue
+            
+            # 兜底：如果还没找到，使用第一个 explorer.exe
+            if not pid:
+                for proc in psutil.process_iter(['pid', 'name']):
+                    if proc.info['name'] and proc.info['name'].lower() == 'explorer.exe':
+                        pid = proc.info['pid']
+                        break
+        except Exception:
+            pass
+
+    if not pid:
+        logging.warning("无法找到 Shell 进程 (explorer.exe)，无法模拟用户")
         yield False
         return
 
-    pid = wintypes.DWORD()
-    ctypes.windll.user32.GetWindowThreadProcessId(shell_hwnd, ctypes.byref(pid))
-    if not pid.value:
-        yield False
-        return
-
-    h_proc = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+    h_proc = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
     if not h_proc:
+        logging.warning(f"无法打开 Shell 进程 (PID: {pid})")
         yield False
         return
 
@@ -444,11 +484,6 @@ def _open_random_egg_image() -> None:
                 return
             except Exception as e1:
                 logging.info(f"ShellExecuteW 失败: {e1}")
-                # 检查是否是CrashSender相关错误
-                if "CrashSender" in str(e1) or "crash" in str(e1).lower():
-                    logging.error("检测到CrashSender错误，安全忽略")
-                    notify("系统暂不可用，请稍后重试", level="warning")
-                    return
                 # 回退 webbrowser
                 try:
                     webbrowser.open(remote_url, new=2, autoraise=True)
@@ -457,18 +492,10 @@ def _open_random_egg_image() -> None:
                     return
                 except Exception as e2:
                     logging.error(f"webbrowser 打开随机图片失败: {e2}")
-                    # 再次检查CrashSender错误
-                    if "CrashSender" in str(e2) or "crash" in str(e2).lower():
-                        notify("系统暂不可用，请稍后重试", level="warning")
-                        return
+                    notify("系统暂不可用，请稍后重试", level="warning")
+                    return
         except Exception as e:
             logging.error(f"随机图片打开线程异常: {e}")
-            # 最后的CrashSender检查
-            if "CrashSender" in str(e) or "crash" in str(e).lower():
-                logging.error("检测到CrashSender错误，已安全处理")
-                notify("操作失败，请稍后重试", level="error")
-                return
-            # 其他异常也安全处理，不向上抛出
             notify("打开图片失败，请稍后重试", level="error")
     
     # 使用守护线程执行，确保不会阻塞主程序
@@ -796,7 +823,6 @@ def is_main_admin():
         logging.warning(f"权限状态文件不存在: {status_file}")
         return False
 
-@safe_crash_handler("is_admin_start_main")
 def is_admin_start_main(icon=None, item=None):
     """管理员权限运行主程序"""
     logging.info("执行函数: is_admin_start_main")
@@ -821,7 +847,6 @@ def _admin_start_main_worker():
         else:
             notify(f"以管理员权限启动主程序失败，错误码: {rest}", level="error", show_error=True)
 
-@safe_crash_handler("_start_main_with_result")
 def _start_main_with_result():
     """启动主程序并返回结果，用于 init_main_program"""
     logging.info("执行函数: _start_main_with_result")
@@ -849,7 +874,6 @@ def _start_main_with_result():
         logging.error(f"主程序文件不存在: {MAIN_EXE}")
         return False
 
-@safe_crash_handler("check_admin")
 def check_admin(icon=None, item=None):
     """检查主程序的管理员权限状态"""
     logging.info("执行函数: check_admin")
@@ -864,7 +888,6 @@ def check_admin(icon=None, item=None):
         notify("主程序未运行")
         return
 
-@safe_crash_handler("open_gui")
 def open_gui():
     """打开配置界面
 
@@ -972,15 +995,16 @@ def notify(msg, level="info", show_error=False, title: str | None = None, unique
             global _TOAST_DISABLED
             with _impersonate_shell_user() as impersonated:
                 if not impersonated:
-                    raise RuntimeError("模拟 shell 用户失败，无法发送 toast")
+                    logging.warning(f"模拟 Shell 用户失败，跳过通知: {msg}")
+                    return
 
                 icon_use = _prepare_scaled_icon()
                 icon_param = None
                 if icon_use:
                     icon_param = {"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"}
+                
                 tag = group = None
                 if mode == "replace":
-                    # 固定 tag/group，实现覆盖
                     tag = "rc_live"
                     group = "rc_live_group"
                     try:
@@ -991,36 +1015,22 @@ def notify(msg, level="info", show_error=False, title: str | None = None, unique
                     now_ms = int(time.time()*1000)
                     tag = f"t{now_ms%1000000}"
                     group = "rc_fast"
-                # 正确参数形式：title= 标题, body= 内容, app_id= 自定义应用名
-                if icon_param:
-                    toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME, icon=icon_param, tag=tag, group=group)
-                else:
-                    toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME, tag=tag, group=group)
-        except TypeError:
-            # 旧版本可能不支持 body 关键字（不大可能），尝试最简降级
-            try:
-                with _impersonate_shell_user() as impersonated:
-                    if not impersonated:
-                        raise RuntimeError("模拟 shell 用户失败，无法发送 toast")
-                    icon_use = _prepare_scaled_icon()
-                    if icon_use:
-                        toast(t_title, msg, app_id=APP_NOTIFY_NAME, icon={"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"})
-                    else:
-                        toast(t_title, msg, app_id=APP_NOTIFY_NAME)
-            except Exception:
+
+                # 尝试发送通知
                 try:
-                    with _impersonate_shell_user() as impersonated:
-                        if not impersonated:
-                            raise RuntimeError("模拟 shell 用户失败，无法发送 toast")
-                        icon_use = _prepare_scaled_icon()
-                        if icon_use:
-                            toast(t_title, msg, icon={"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"})
-                        else:
-                            toast(t_title, msg)
-                except Exception as e:
-                    logging.error(f"发送通知失败: {e}")
-                    _TOAST_DISABLED = True
-                    _fallback_notify()
+                    # 优先尝试完整参数
+                    if icon_param:
+                        toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME, icon=icon_param, tag=tag, group=group)
+                    else:
+                        toast(title=t_title, body=msg, app_id=APP_NOTIFY_NAME, tag=tag, group=group)
+                except TypeError:
+                    # 降级重试（旧版本库可能不支持某些参数）
+                    logging.info("win11toast 参数不兼容，尝试降级发送")
+                    if icon_use:
+                         toast(t_title, msg, app_id=APP_NOTIFY_NAME, icon={"src": icon_use, "placement": "appLogoOverride", "hint-crop": "none"})
+                    else:
+                         toast(t_title, msg, app_id=APP_NOTIFY_NAME)
+
         except Exception as e:
             logging.error(f"发送通知失败: {e}")
             _TOAST_DISABLED = True
@@ -1085,7 +1095,6 @@ def close_exe(name: str, skip_admin: bool = False):
     except Exception as e:
         logging.error(f"关闭{name}进程时出错: {e}")
 
-@safe_crash_handler("stop_tray")
 def stop_tray():
     """关闭托盘程序"""
     logging.info("执行函数: stop_tray")
@@ -1125,7 +1134,6 @@ def stop_tray():
 
     restart_main(callback=exit_after_restart)
 
-@safe_crash_handler("close_main")
 def close_main():
     """关闭主程序"""
     logging.info(f"执行函数: close_main,{MAIN_EXE}")
@@ -1138,7 +1146,6 @@ def close_main():
         # logging.error(f"关闭主程序时出错: {e}")
         notify(f"关闭主程序时出错: {e}", level="error", show_error=True)
 
-@safe_crash_handler("restart_main")
 def restart_main(icon=None, item=None, callback=None):
     """重启主程序（先关闭再启动）"""
     # 使用单个线程执行重启过程，避免创建多个线程
@@ -1161,7 +1168,6 @@ def _restart_main_worker(callback=None):
         logging.info("执行重启后的回调函数")
         callback()
 
-@safe_crash_handler("start_notify")
 def start_notify():
     """启动时发送通知"""
     logging.info("执行函数: start_notify")
@@ -1181,7 +1187,6 @@ def start_notify():
     run_mode_info = "（脚本模式）" if is_script_mode else "（EXE模式）"
     notify(f"远程控制托盘程序已启动{run_mode_info}\n主程序状态: {main_status}\n托盘状态: {tray_status}{admin_tip}")
 
-@safe_crash_handler("get_menu_items")
 def get_menu_items():
     """生成动态菜单项列表"""
     logging.info("执行函数: get_menu_items")
@@ -1235,7 +1240,6 @@ def get_menu_items():
 
     return items
 
-@safe_crash_handler("init_main_program")
 def init_main_program():
     """初始化主程序，包含开机自启保护机制"""
     # 开机自启保护：如果是开机自启，延迟执行
@@ -1322,21 +1326,7 @@ except KeyboardInterrupt:
 except Exception as e:
     logging.error(f"托盘图标运行时出错: {e}")
     logging.error(traceback.format_exc())
-    # 检查是否是CrashSender.exe相关的错误
-    error_str = str(e).lower()
-    if 'crashsender' in error_str or 'crash' in error_str:
-        logging.warning("检测到CrashSender相关错误，尝试安全退出")
-        # 尝试安全停止托盘图标
-        if 'icon' in globals() and icon:
-            try:
-                icon.stop()
-            except Exception as stop_e:
-                logging.error(f"停止托盘图标时出错: {stop_e}")
-        # 延迟退出，给系统时间处理
-        threading.Timer(1.0, lambda: os._exit(0)).start()
-    else:
-        # 如果不是CrashSender错误，正常处理
-        logging.warning("托盘程序异常退出")
+    logging.warning("托盘程序异常退出")
 finally:
     logging.warning("托盘程序正在退出")
     os._exit(0)
