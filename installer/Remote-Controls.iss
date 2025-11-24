@@ -16,8 +16,8 @@ AppId={{A9F7F8E7-8A1F-4C4D-8CF1-6B9E0D0B7A23}}
 AppName=Remote Controls
 AppVersion={#MyAppVersion}
 AppVerName=Remote Controls {#MyAppVersion}
-AppPublisher=chen6019
-AppPublisherURL=https://github.com/chen6019/Remote-Controls
+AppPublisher=spacjoy
+AppPublisherURL=https://github.com/spacjoy/Remote-Controls
 DefaultDirName={commonpf}\Remote-Controls
 DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
@@ -28,7 +28,10 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
+ArchitecturesInstallIn64BitMode=x64
 
+[Languages]
+Name: "chinesesimplified"; MessagesFile: ".\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加选项"; Flags: unchecked
@@ -61,7 +64,6 @@ Type: dirifempty; Name: "{app}\logs"
 
 [Code]
 var
-  CbKeepCfg: TNewCheckBox;
   KeepConfig: Boolean; // 是否保留配置文件，默认保留
 
 function IsProcessRunning(ProcessName: String): Boolean;
@@ -283,28 +285,22 @@ begin
   
   // 使用完整路径终止进程（防止同名进程干扰）
   try
-    Exec('taskkill', Format('/F /FI "IMAGENAME eq RC-main.exe" /FI "CPUTIME gt 00:00:00"', []), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('taskkill', '/F /FI "IMAGENAME eq RC-main.exe" /FI "CPUTIME gt 00:00:00"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   except
   end;
   
   try
-    Exec('taskkill', Format('/F /FI "IMAGENAME eq RC-GUI.exe" /FI "CPUTIME gt 00:00:00"', []), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('taskkill', '/F /FI "IMAGENAME eq RC-GUI.exe" /FI "CPUTIME gt 00:00:00"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   except
   end;
   
   try
-    Exec('taskkill', Format('/F /FI "IMAGENAME eq RC-tray.exe" /FI "CPUTIME gt 00:00:00"', []), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('taskkill', '/F /FI "IMAGENAME eq RC-tray.exe" /FI "CPUTIME gt 00:00:00"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   except
   end;
 end;
 
 function InitializeUninstall(): Boolean;
-var
-  UninstallForm: TSetupForm;
-  Panel: TPanel;
-  InfoLabel: TNewStaticText;
-  OkBtn, CancelBtn: TNewButton;
-  YPos: Integer;
 begin
   // 首先强制关闭可能运行的程序
   ForceCloseRunningProcesses();
@@ -317,80 +313,17 @@ begin
   if UninstallSilent then
     exit;
 
-  // 交互卸载：提供选项
-  UninstallForm := CreateCustomForm();
-  UninstallForm.Caption := '卸载选项';
-  UninstallForm.ClientWidth := 460;
-  UninstallForm.ClientHeight := 200;
-  UninstallForm.Position := poScreenCenter;
-
-  Panel := TPanel.Create(UninstallForm);
-  Panel.Parent := UninstallForm;
-  Panel.Left := 20;
-  Panel.Top := 20;
-  Panel.Width := 420;
-  Panel.Height := 130;
-  Panel.BevelOuter := bvNone;
-
-  YPos := 10;
-
-  // 提示：日志将自动删除；配置文件由程序运行时生成
-  InfoLabel := TNewStaticText.Create(Panel);
-  InfoLabel.Parent := Panel;
-  InfoLabel.Left := 10;
-  InfoLabel.Top := YPos;
-  InfoLabel.Width := 400;
-  InfoLabel.Height := 40;
-  InfoLabel.AutoSize := False;
-  InfoLabel.Caption := '提示：卸载将自动删除日志目录（logs）。配置文件由程序运行时生成，可选择是否保留。';
-
-  YPos := YPos + 50;
-
-  // 是否保留配置文件 config.json（默认勾选=保留）
-  CbKeepCfg := TNewCheckBox.Create(Panel);
-  CbKeepCfg.Parent := Panel;
-  CbKeepCfg.Left := 10;
-  CbKeepCfg.Top := YPos;
-  CbKeepCfg.Width := 400;
-  CbKeepCfg.Height := 19;
-  CbKeepCfg.Caption := '保留配置文件（config.json）';
-  CbKeepCfg.Checked := True;
-
-  // 确认/取消按钮
-  OkBtn := TNewButton.Create(UninstallForm);
-  OkBtn.Parent := UninstallForm;
-  OkBtn.Width := ScaleX(80);
-  OkBtn.Height := ScaleY(25);
-  OkBtn.Left := UninstallForm.ClientWidth - ScaleX(180);
-  OkBtn.Top := UninstallForm.ClientHeight - ScaleY(45);
-  OkBtn.Caption := '确认';
-  OkBtn.ModalResult := mrOk;
-
-  CancelBtn := TNewButton.Create(UninstallForm);
-  CancelBtn.Parent := UninstallForm;
-  CancelBtn.Width := ScaleX(80);
-  CancelBtn.Height := ScaleY(25);
-  CancelBtn.Left := UninstallForm.ClientWidth - ScaleX(90);
-  CancelBtn.Top := UninstallForm.ClientHeight - ScaleY(45);
-  CancelBtn.Caption := '取消';
-  CancelBtn.ModalResult := mrCancel;
-
-  UninstallForm.ActiveControl := OkBtn;
-
-  if UninstallForm.ShowModal = mrOk then begin
-    KeepConfig := CbKeepCfg.Checked;
-    Result := True;
-  end else begin
-    // 用户取消卸载
-    Result := False;
+  // 询问用户是否删除配置文件
+  if MsgBox('卸载程序将移除 Remote Controls。' #13#10 #13#10 '是否同时删除配置文件 (config.json) ' #13#10 '点击“是”删除配置文件，点击“否”保留配置文件。', mbConfirmation, MB_YESNO) = IDYES then
+  begin
+    KeepConfig := False;
   end;
-
-  UninstallForm.Free;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
+  OldConfigPath, NewConfigPath: String;
 begin
   if CurStep = ssInstall then begin
     // 在文件复制前再次确保程序已完全关闭
@@ -414,6 +347,18 @@ begin
   end;
   
   if CurStep = ssPostInstall then begin
+    // 尝试迁移旧版本配置文件 (从 x86 目录)
+    // 只有当新目录没有配置文件时才迁移
+    NewConfigPath := ExpandConstant('{app}\config.json');
+    if not FileExists(NewConfigPath) then begin
+      // 假设旧版本安装在 Program Files (x86) 下
+      // 注意：{commonpf32} 在 64 位系统上指向 Program Files (x86)
+      OldConfigPath := ExpandConstant('{commonpf32}\Remote-Controls\config.json');
+      if FileExists(OldConfigPath) then begin
+        FileCopy(OldConfigPath, NewConfigPath, False);
+      end;
+    end;
+
     CreateScheduledTasks();
   end;
 end;
@@ -422,7 +367,7 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  ConfigFile, LogsDir: String;
+  ConfigFile, LogsDir, AppDir: String;
 begin
   if CurUninstallStep = usUninstall then begin
     // 再次确保程序已完全关闭
@@ -436,11 +381,20 @@ begin
     if DirExists(LogsDir) then
       DelTree(LogsDir, True, True, True);
 
-  // 根据用户选择删除或保留配置文件（默认保留；静默卸载也保留）
-  if not KeepConfig then begin
+    // 根据用户选择删除或保留配置文件（默认保留；静默卸载也保留）
+    if not KeepConfig then begin
       ConfigFile := ExpandConstant('{app}\config.json');
       if FileExists(ConfigFile) then
         DeleteFile(ConfigFile);
+    end;
+  end;
+
+  if CurUninstallStep = usPostUninstall then begin
+    // 如果用户选择不保留配置，则彻底清理安装目录
+    if not KeepConfig then begin
+      AppDir := ExpandConstant('{app}');
+      if DirExists(AppDir) then
+        DelTree(AppDir, True, True, True);
     end;
   end;
 end;
