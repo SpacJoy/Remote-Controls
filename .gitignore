@@ -38,3 +38,4 @@ installer/EXE/close_RC.bat
 installer/EXE/close_RC_tray.bat
 logs/admin_status.txt
 test.py
+logs/Remote Controls Tray.xml

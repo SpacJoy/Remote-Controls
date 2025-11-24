@@ -155,7 +155,7 @@ begin
         
         RegistrationInfo := TaskDefinition.RegistrationInfo;
   RegistrationInfo.Description := '远程控制主程序 - 开机自启';
-  RegistrationInfo.Author := 'chen6019';
+  RegistrationInfo.Author := 'spacejoy';
         
         Principal := TaskDefinition.Principal;
         Principal.UserId := 'SYSTEM';
@@ -197,7 +197,7 @@ begin
         
         RegistrationInfo := TaskDefinition.RegistrationInfo;
   RegistrationInfo.Description := '远程控制托盘程序 - 用户登录时启动';
-  RegistrationInfo.Author := 'chen6019';
+  RegistrationInfo.Author := 'spacejoy';
         
         Principal := TaskDefinition.Principal;
         Principal.LogonType := 3; // TASK_LOGON_INTERACTIVE_TOKEN

@@ -32,51 +32,13 @@ import re
 import threading as _threading_for_hook
 from ctypes import wintypes
 
-# 安全：设置全局异常钩子，避免未捕获异常导致 PyInstaller 弹 CrashSender 进程（某些环境会尝试调用缺失的 CrashSender.exe）
-def _safe_excepthook(exc_type, exc_value, exc_tb):
-    try:
-        import traceback as _tb
-        msg = ''.join(_tb.format_exception(exc_type, exc_value, exc_tb))
-        logging.error("未捕获异常:\n" + msg)
-        # 尽量非阻塞提示
-        try:
-            notify("托盘内部异常(已记录)", level="error")
-        except Exception:
-            pass
-    except Exception:
-        pass
-    # 不再次抛出，防止触发外部 crash 报告
-sys.excepthook = _safe_excepthook
-
-# 增强的异常处理装饰器，用于捕获函数内部异常并防止CrashSender错误
-def safe_crash_handler(func_name: str = ""):
-    """装饰器：捕获函数内部所有异常，防止触发CrashSender.exe错误"""
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                logging.error(f"函数 {func_name or func.__name__} 发生异常: {e}")
-                logging.error(traceback.format_exc())
-                try:
-                    notify(f"操作失败: {func_name or func.__name__}", level="error")
-                except Exception:
-                    pass
-                # 特别处理CrashSender相关错误
-                if "CrashSender" in str(e) or "crash" in str(e).lower():
-                    logging.error("检测到CrashSender相关错误，已安全忽略")
-                    return None
-                return None
-        return wrapper
-    return decorator
-
 # 统一版本来源
 try:
     from version_info import get_version_string
     BANBEN = f"V{get_version_string()}"
 except Exception:
     BANBEN = "V未知版本"
-REPO_OWNER = "chen6019"
+REPO_OWNER = "Spacjoy"
 REPO_NAME = "Remote-Controls"
 GITHUB_RELEASES_LATEST_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
@@ -402,7 +364,6 @@ def _update_menu_after_version_check():
             logging.error(f"更新托盘菜单失败: {e}")
 
 # 版本菜单点击：打开项目主页，同时在后台检查更新并提示结果
-@safe_crash_handler("on_version_click")
 def on_version_click(icon=None, item=None):
     try:
         _open_url("https://github.com/chen6019/Remote-Controls")
@@ -445,7 +406,6 @@ def on_version_click(icon=None, item=None):
         threading.Thread(target=_bg_check, daemon=True).start()
 
 
-@safe_crash_handler("_open_random_egg_image")
 def _open_random_egg_image() -> None:
     """异步、安全地打开随机图片 URL，减少浏览器启动偶发触发 CrashSender 的概率。
 
