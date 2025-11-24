@@ -447,15 +447,14 @@ def on_version_click(icon=None, item=None):
 
 
 def _open_random_egg_image() -> None:
-    """异步、安全地打开随机图片 URL，减少浏览器启动偶发触发 CrashSender 的概率。
+    """异步、安全地打开随机图片 URL
 
     策略：
     - 使用 ShellExecuteW 打开 URL（更接近用户双击行为，较 webbrowser.open 更少包装层）。
     - 失败时回退 webbrowser.open。
     - 加 1 秒节流，防止快速连点产生竞态。
-    - 增强错误处理，防止CrashSender.exe错误导致程序崩溃。
     """
-    remote_url = "https://eo-rad.ysy.spacjoy.top/bz"
+    remote_url = "https://rad.ysy.spacjoy.top/bz"
     global _LAST_RANDOM_OPEN_TS
     now = time.time()
     if globals().get('_LAST_RANDOM_OPEN_TS') and now - _LAST_RANDOM_OPEN_TS < 1.0:
