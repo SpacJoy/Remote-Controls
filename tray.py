@@ -406,7 +406,7 @@ def _update_menu_after_version_check():
 # 版本菜单点击：打开项目主页，同时在后台检查更新并提示结果
 def on_version_click(icon=None, item=None):
     try:
-        _open_url("https://github.com/chen6019/Remote-Controls")
+        _open_url("https://github.com/spacjoy/Remote-Controls")
     finally:
         def _bg_check():
             global _version_check_cache
