@@ -2,7 +2,7 @@
 
 让 Windows 电脑接入智能家居：通过 MQTT 控制开关、脚本、媒体/亮度/音量、热键等，一键配置、托盘管理、支持 EXE 打包与自启。
 
-[快速开始](#快速开始) • [使用教程](#使用教程) • [项目结构](#项目结构) • [更新日志](CHANGELOG.md) • [贡献指南](CONTRIBUTING.md)
+[快速开始](#快速开始) • [使用教程](#使用教程) • [图文教程](https://blog.spacjoy.top/posts/remote-control-tutorial) • [项目结构](#项目结构) • [更新日志](CHANGELOG.md) • [贡献指南](CONTRIBUTING.md)
 
 提醒与声明：仅供学习交流，请勿用于非法用途。
 
@@ -15,13 +15,12 @@
 - 打包与发布：一键构建（github actions），安装器自动注入版本
 - Windows Toast 通知，可开关；异常保护与弱网自动重连
 
-# ![Star History Chart](https://api.star-history.com/svg?repos=spacjoy/Remote-Controls&type=Date)
 
 ## 快速开始
 
 1. 下载或构建
 
-- 到 Releases 下载 RC-main/GUI/tray 可执行文件 或 安装包：Remote-Controls-Installer-2.3.7.exe 或在本地构建：
+- 到 Releases 下载 `RC-main/GUI/tray` 可执行文件 **或 安装包**：`Remote-Controls-Installer-x.x.x.exe` 或在本地构建：
 
 ```powershell
 python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
@@ -57,6 +56,10 @@ python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.
 - 命令：默认显示 PowerShell 测试按钮；打开与关闭各自支持预设，中断(`CTRL+BREAK`)为默认关闭方式，切换到自定义时可测试代码片段。
 - 按键(Hotkey)：可录制或手动输入键盘组合，支持设置按键类型（不执行/键盘组合）和字符间隔，保存时会提示全角字符风险。
 
+## [图文教程（宝宝巴士版）](https://blog.spacjoy.top/posts/remote-control-tutorial)
+
+## [详细教程](https://github.com/SpacJoy/Remote-Controls/blob/main/md/Detailed-introduction.md)
+
 ## 项目结构
 
 ```text
@@ -71,13 +74,14 @@ Remote-Controls/
 └─ scripts/        # 清理等辅助脚本
 ```
 
-### 详细教程：<https://github.com/SpacJoy/Remote-Controls/blob/main/md/Detailed-introduction.md>
 
 ## 托盘与权限
 
 - 推荐以管理员权限运行 `RC-tray.exe`；未运行独立托盘时，主程序会启用“内置托盘”
 - 托盘菜单：打开配置、启动/重启/关闭主程序、查看版本与权限状态
 - 提权与自启：GUI 一键设置/移除开机自启；需要服务控制等操作时请以管理员运行主程序
+
+![Star History Chart](https://api.star-history.com/svg?repos=spacjoy/Remote-Controls&type=Date)
 
 ## 安装与构建
 
