@@ -8,7 +8,7 @@ pyinstaller -F -n RC-GUI --noconsole --icon=res\\icon_GUI.ico --add-data "res\\i
 """
 import os
 import tkinter as tk
-from tkinter import messagebox, filedialog
+from tkinter import messagebox, filedialog, simpledialog
 import tkinter.ttk as ttk
 import tkinter.font as tkfont
 import json
@@ -286,6 +286,57 @@ def _apply_font_readability_and_scaling(root: tk.Tk) -> None:
     """
     统一设置更易读的字体族，并根据系统缩放设置 Tk scaling。
     """
+    body_min_size = 9
+    heading_min_size = 10
+
+    # 收集多种 DPI 信息，取最高的缩放值应用到 Tk
+    scaling_candidates: list[float] = []
+    try:
+        scale_pct = ctypes.c_uint()
+        ctypes.windll.shcore.GetScaleFactorForDevice(0, ctypes.byref(scale_pct))
+        if scale_pct.value:
+            dpi = 96 * (scale_pct.value / 100.0)
+            scaling_candidates.append(dpi / 72.0)
+    except Exception:
+        pass
+    try:
+        user32 = ctypes.windll.user32
+        dpi_val = None
+        try:
+            hwnd = root.winfo_id()
+            if hwnd and hasattr(user32, "GetDpiForWindow"):
+                dpi_val = user32.GetDpiForWindow(ctypes.c_void_p(hwnd))
+        except Exception:
+            dpi_val = None
+        if dpi_val is None:
+            try:
+                dpi_val = user32.GetDpiForSystem()
+            except Exception:
+                dpi_val = None
+        if dpi_val:
+            scaling_candidates.append(float(dpi_val) / 72.0)
+    except Exception:
+        pass
+    try:
+        px_per_inch = root.winfo_fpixels("1i")
+        if px_per_inch:
+            scaling_candidates.append(float(px_per_inch) / 72.0)
+    except Exception:
+        pass
+
+    scaling_to_apply = None
+    if scaling_candidates:
+        try:
+            scaling_to_apply = max(scaling_candidates)
+            if scaling_to_apply and scaling_to_apply > 0:
+                root.tk.call("tk", "scaling", scaling_to_apply)
+        except Exception:
+            scaling_to_apply = None
+
+    if scaling_to_apply and scaling_to_apply >= 1.5:
+        body_min_size = 10
+        heading_min_size = 11
+
     # 优选中文/中英皆宜的清晰字体
     preferred_ui = ("Microsoft YaHei UI", "Segoe UI", "Microsoft YaHei")
     preferred_fixed = ("Consolas", "Cascadia Mono", "Courier New")
@@ -304,33 +355,15 @@ def _apply_font_readability_and_scaling(root: tk.Tk) -> None:
         except Exception:
             pass
 
-    _set_font("TkDefaultFont", preferred_ui)
-    _set_font("TkTextFont", preferred_ui)
-    _set_font("TkMenuFont", preferred_ui)
-    _set_font("TkHeadingFont", preferred_ui, min_size=10)
-    _set_font("TkCaptionFont", preferred_ui)
-    _set_font("TkSmallCaptionFont", preferred_ui)
-    _set_font("TkIconFont", preferred_ui)
-    _set_font("TkTooltipFont", preferred_ui)
-    _set_font("TkFixedFont", preferred_fixed)
-
-    # 按系统缩放设置 Tk scaling（像素/pt，pt=1/72英寸）
-    try:
-        scale_pct = None
-        try:
-            # Windows 8.1+ 可用，返回 100/125/150...
-            scale_pct = ctypes.c_uint()
-            ctypes.windll.shcore.GetScaleFactorForDevice(0, ctypes.byref(scale_pct))
-            scale_pct = scale_pct.value
-        except Exception:
-            scale_pct = None
-
-        if scale_pct:
-            dpi = 96 * (scale_pct / 100.0)
-            scaling = dpi / 72.0
-            root.tk.call("tk", "scaling", scaling)
-    except Exception:
-        pass
+    _set_font("TkDefaultFont", preferred_ui, min_size=body_min_size)
+    _set_font("TkTextFont", preferred_ui, min_size=body_min_size)
+    _set_font("TkMenuFont", preferred_ui, min_size=body_min_size)
+    _set_font("TkHeadingFont", preferred_ui, min_size=heading_min_size)
+    _set_font("TkCaptionFont", preferred_ui, min_size=body_min_size)
+    _set_font("TkSmallCaptionFont", preferred_ui, min_size=body_min_size)
+    _set_font("TkIconFont", preferred_ui, min_size=body_min_size)
+    _set_font("TkTooltipFont", preferred_ui, min_size=body_min_size)
+    _set_font("TkFixedFont", preferred_fixed, min_size=body_min_size)
 
 def _apply_ttk_ui_fonts(root: tk.Tk) -> None:
     """
@@ -379,7 +412,14 @@ def _apply_ttk_ui_fonts(root: tk.Tk) -> None:
         # 行高根据字体行距微调，避免文字被裁剪
         try:
             linespace = default_font.metrics("linespace")
-            row_h = max(22, int(linespace + 10))
+            extra = 10
+            try:
+                _scaling = float(root.tk.call("tk", "scaling"))
+                if _scaling >= 1.5:
+                    extra = 14
+            except Exception:
+                pass
+            row_h = max(22, int(linespace + extra))
             style.configure("Treeview", rowheight=row_h)
         except Exception:
             pass
@@ -923,6 +963,7 @@ def show_detail_window():
 
 命令：
     “打开(on)”为 PowerShell 片段，可随时点击测试按钮；
+    支持 on#数字(0-100)，命令中使用 {value} 占位符获取参数。
     关闭预设默认“中断”(CTRL+BREAK)，可改为强制结束或自定义并独立测试。
 
 按键(Hotkey)：
@@ -989,7 +1030,7 @@ def modify_custom_theme() -> None:
     theme_window.title("修改自定义主题")
     # 增加默认高度
     try:
-        theme_window.geometry("780x310")
+        theme_window.geometry("780x360")
     except Exception:
         pass
     # 允许窗口大小调整，并设置网格权重使输入控件随窗口拉伸
@@ -1199,6 +1240,11 @@ def modify_custom_theme() -> None:
         if not cmd:
             messagebox.showwarning("提示", "请先在“值”中输入要测试的命令")
             return
+        if "{value}" in cmd:
+            val = simpledialog.askstring("输入参数", "请输入 {value} 的值，例如 50：", initialvalue="50", parent=theme_window)
+            if val is None:
+                return
+            cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
         # 在 PowerShell 中显示命令，等待用户按回车后再执行
         ps_script = (
@@ -1246,6 +1292,11 @@ def modify_custom_theme() -> None:
         if not cmd:
             messagebox.showwarning("提示", "请先在“关闭(off)”中输入要测试的命令")
             return
+        if "{value}" in cmd:
+            val = simpledialog.askstring("输入参数", "请输入 {value} 的值，例如 50：", initialvalue="50", parent=theme_window)
+            if val is None:
+                return
+            cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
         ps_script = (
             "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
@@ -1463,7 +1514,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     theme_window.title("添加自定义主题")
     # 增加默认高度
     try:
-        theme_window.geometry("780x310")
+        theme_window.geometry("780x360")
     except Exception:
         pass
     # 允许窗口大小调整，并设置网格权重使输入控件随窗口拉伸
@@ -1644,6 +1695,11 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         if not cmd:
             messagebox.showwarning("提示", "请先在“值”中输入要测试的命令")
             return
+        if "{value}" in cmd:
+            val = simpledialog.askstring("输入参数", "请输入 {value} 的值，例如 50：", initialvalue="50", parent=theme_window)
+            if val is None:
+                return
+            cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
         ps_script = (
             "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
@@ -1690,6 +1746,11 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         if not cmd:
             messagebox.showwarning("提示", "请先在“关闭(off)”中输入要测试的命令")
             return
+        if "{value}" in cmd:
+            val = simpledialog.askstring("输入参数", "请输入 {value} 的值，例如 50：", initialvalue="50", parent=theme_window)
+            if val is None:
+                return
+            cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
         ps_script = (
             "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
@@ -2174,9 +2235,6 @@ except Exception as e:
     # logging.error(f"检查程序管理员权限时出错: {e}")
     IS_GUI_ADMIN = False
 
-# 启动时检查管理员权限并请求提权
-check_and_request_uac()
-
 # 配置文件和目录改为当前工作目录
 appdata_dir: str = os.path.abspath(os.path.dirname(sys.argv[0]))
 
@@ -2214,6 +2272,8 @@ if os.path.exists(config_file_path):
 # 创建主窗口前启用 DPI 感知
 _enable_dpi_awareness()
 
+# 启动时检查管理员权限并请求提权（已启用 DPI/字体，避免提示窗模糊）
+check_and_request_uac()
 # 创建主窗口
 root = tk.Tk()
 root.title(f"远程控制-{BANBEN}")

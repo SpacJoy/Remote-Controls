@@ -245,6 +245,16 @@ def _normalize_command_for_powershell(cmd: str) -> str:
         return cmd
 
 
+def _apply_command_parameter(cmd: str, percent_value):
+    """将 on#/off# 中的 0-100 参数填充到命令模板的 {value} 占位符。"""
+    try:
+        if cmd is None or percent_value is None:
+            return cmd
+        return cmd.replace("{value}", str(percent_value))
+    except Exception:
+        return cmd
+
+
 """
 MQTT订阅成功时的回调函数。
 
@@ -908,7 +918,22 @@ def process_command(command: str, topic: str) -> None:
     # 命令类型（统一通过 PowerShell 执行）
     for cmd_topic, cmd_text in commands:
         if topic == cmd_topic:
-            if command == "on":
+            base_command = command
+            percent_value = None
+            if command.startswith(("on#", "off#")):
+                base_command, _, raw_val = command.partition("#")
+                try:
+                    percent_value = int(raw_val)
+                except Exception:
+                    logging.error(f"命令参数无效（需 0-100 整数）：{raw_val}")
+                    notify_in_thread(f"命令参数无效: {raw_val}")
+                    return
+                if percent_value < 0 or percent_value > 100:
+                    logging.error(f"命令参数超出范围 0-100：{percent_value}")
+                    notify_in_thread(f"命令参数需在 0-100 之间: {percent_value}")
+                    return
+
+            if base_command == "on":
                 try:
                     # 始终使用 PowerShell 执行命令
                     creationflags = 0x00000200  # CREATE_NEW_PROCESS_GROUP（用于后续CTRL_BREAK）
@@ -947,6 +972,7 @@ def process_command(command: str, topic: str) -> None:
                         logging.error(f"命令为空，无法执行: {cmd_topic}")
                         notify_in_thread(f"命令为空: {cmd_topic}")
                         return
+                    on_cmd = _apply_command_parameter(on_cmd, percent_value)
                     # 规范化命令，解决 curl 被 PowerShell 映射为 Invoke-WebRequest 导致提示 Uri 的问题
                     cmd_text_norm = _normalize_command_for_powershell(on_cmd)
 
@@ -981,7 +1007,7 @@ def process_command(command: str, topic: str) -> None:
                 except Exception as e:
                     logging.error(f"执行命令失败[{cmd_topic}]: {e}")
                     notify_in_thread(f"执行命令失败: {cmd_topic}")
-            elif command == "off":
+            elif base_command == "off":
                 # 若配置了 off_value，则直接执行；否则按预设 interrupt/kill/none 处理
                 off_cmd = None
                 off_preset = "kill"
@@ -1008,6 +1034,7 @@ def process_command(command: str, topic: str) -> None:
                             "-NoProfile",
                             "-ExecutionPolicy", "Bypass",
                         ]
+                        off_cmd = _apply_command_parameter(off_cmd, percent_value)
                         off_cmd_norm = _normalize_command_for_powershell(off_cmd)
                         if window_mode == "hide":
                             startupinfo = subprocess.STARTUPINFO()
