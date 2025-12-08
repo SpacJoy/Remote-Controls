@@ -440,6 +440,20 @@ def center_window(window: Union[tk.Tk, tk.Toplevel]) -> None:
     window.geometry(f"{width}x{height}+{x}+{y}")
 
 
+def _scaled_size(widget: tk.Misc, width: int, height: int) -> tuple[int, int]:
+    """按照 Tk 当前 scaling 进行尺寸缩放（兼容高 DPI）。"""
+    try:
+        scale = float(widget.tk.call("tk", "scaling"))
+        if scale <= 0:
+            scale = 1.0
+    except Exception:
+        scale = 1.0
+    try:
+        return max(100, int(width * scale)), max(80, int(height * scale))
+    except Exception:
+        return width, height
+
+
 # 检查任务计划是否存在
 def check_task_exists(task_name: str) -> bool:
     """
@@ -464,7 +478,8 @@ def open_keyboard_recorder(parent: Union[tk.Tk, tk.Toplevel], target_var: tk.Str
     """
     rec = tk.Toplevel(parent)
     rec.title("录制键盘组合")
-    rec.geometry("580x360")
+    w, h = _scaled_size(rec, 580, 360)
+    rec.geometry(f"{w}x{h}")
     msg = ttk.Label(
         rec,
         text=(
@@ -874,7 +889,8 @@ def show_detail_window():
                 except Exception:
                         pass
         else:
-                win.geometry("760x640")
+                w, h = _scaled_size(win, 760, 640)
+                win.geometry(f"{w}x{h}")
 
         def _on_close():
                 nonlocal win
@@ -1030,9 +1046,12 @@ def modify_custom_theme() -> None:
     theme_window.title("修改自定义主题")
     # 增加默认高度
     try:
-        theme_window.geometry("780x360")
+        w, h = _scaled_size(theme_window, 780, 360)
+        theme_window.geometry(f"{w}x{h}")
     except Exception:
         pass
+    PADX = 10
+    PADY = 6
     # 允许窗口大小调整，并设置网格权重使输入控件随窗口拉伸
     theme_window.resizable(True, True)
     try:
@@ -1043,7 +1062,7 @@ def modify_custom_theme() -> None:
     except Exception:
         pass
 
-    ttk.Label(theme_window, text="类型：").grid(row=0, column=0, sticky="e")
+    ttk.Label(theme_window, text="类型：").grid(row=0, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_type_var = tk.StringVar(value=theme["type"])
     # 创建 Combobox
     theme_type_combobox = ttk.Combobox(
@@ -1052,7 +1071,7 @@ def modify_custom_theme() -> None:
         values=["程序或脚本", "服务(需管理员权限)", "命令", "按键(Hotkey)"],
         state="readonly"
     )
-    theme_type_combobox.grid(row=0, column=1, sticky="we")
+    theme_type_combobox.grid(row=0, column=1, sticky="we", padx=(0, PADX), pady=PADY)
     _type_options = ["程序或脚本", "服务(需管理员权限)", "命令", "按键(Hotkey)"]
     try:
         type_index = _type_options.index(theme["type"])
@@ -1060,30 +1079,30 @@ def modify_custom_theme() -> None:
         type_index = 0
     theme_type_combobox.current(type_index)
 
-    ttk.Label(theme_window, text="服务时主程序").grid(row=0, column=2, sticky="w")
-    ttk.Label(theme_window, text="需管理员权限").grid(row=1, column=2, sticky="w")
+    ttk.Label(theme_window, text="服务时主程序").grid(row=0, column=2, sticky="w", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text="需管理员权限").grid(row=1, column=2, sticky="w", padx=PADX, pady=PADY)
 
-    ttk.Label(theme_window, text="状态：").grid(row=1, column=0, sticky="e")
+    ttk.Label(theme_window, text="状态：").grid(row=1, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_checked_var = tk.IntVar(value=theme["checked"])
     ttk.Checkbutton(theme_window, variable=theme_checked_var).grid(
-        row=1, column=1, sticky="w"
+        row=1, column=1, sticky="w", padx=(0, PADX), pady=PADY
     )
 
-    ttk.Label(theme_window, text="昵称：").grid(row=2, column=0, sticky="e")
+    ttk.Label(theme_window, text="昵称：").grid(row=2, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_nickname_entry = ttk.Entry(theme_window)
     theme_nickname_entry.insert(0, theme["nickname"])
-    theme_nickname_entry.grid(row=2, column=1, sticky="we")
+    theme_nickname_entry.grid(row=2, column=1, sticky="we", padx=(0, PADX), pady=PADY)
 
-    ttk.Label(theme_window, text="主题：").grid(row=3, column=0, sticky="e")
+    ttk.Label(theme_window, text="主题：").grid(row=3, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_name_entry = ttk.Entry(theme_window)
     theme_name_entry.insert(0, theme["name"])
-    theme_name_entry.grid(row=3, column=1, sticky="we")
+    theme_name_entry.grid(row=3, column=1, sticky="we", padx=(0, PADX), pady=PADY)
 
     # 新: 程序/命令类型拆分 ON/OFF 与关闭预设；Hotkey 保持原样
     on_label_mod = ttk.Label(theme_window, text="打开(on)：")
-    on_label_mod.grid(row=4, column=0, sticky="e")
+    on_label_mod.grid(row=4, column=0, sticky="e", padx=PADX, pady=PADY)
     on_frame_mod = ttk.Frame(theme_window)
-    on_frame_mod.grid(row=4, column=1, sticky="nsew")
+    on_frame_mod.grid(row=4, column=1, sticky="nsew", padx=(0, PADX), pady=PADY)
     try:
         theme_window.rowconfigure(4, weight=2)
     except Exception:
@@ -1101,9 +1120,9 @@ def modify_custom_theme() -> None:
         pass
 
     off_label_mod = ttk.Label(theme_window, text="关闭(off)：")
-    off_label_mod.grid(row=5, column=0, sticky="e")
+    off_label_mod.grid(row=5, column=0, sticky="e", padx=PADX, pady=PADY)
     off_frame_mod = ttk.Frame(theme_window)
-    off_frame_mod.grid(row=5, column=1, sticky="nsew")
+    off_frame_mod.grid(row=5, column=1, sticky="nsew", padx=(0, PADX), pady=PADY)
     off_value_text = tk.Text(off_frame_mod, height=3, wrap="word")
     off_value_text.insert("1.0", theme.get("off_value", ""))
     off_value_text.grid(row=0, column=0, sticky="nsew")
@@ -1117,7 +1136,7 @@ def modify_custom_theme() -> None:
         pass
 
     off_preset_label_mod = ttk.Label(theme_window, text="关闭预设：")
-    off_preset_label_mod.grid(row=6, column=0, sticky="e")
+    off_preset_label_mod.grid(row=6, column=0, sticky="e", padx=PADX, pady=PADY)
     # 中文选项: 忽略(=none) / 强制结束(=kill) / 中断(=interrupt) / 停止服务(=stop) / 自定义(=custom)
     if theme["type"] == "命令":
         preset_internal_default = theme.get("off_preset", "interrupt")
@@ -1147,7 +1166,7 @@ def modify_custom_theme() -> None:
         state="readonly",
         values=_build_preset_values_mod(theme.get("type", "程序或脚本"))
     )
-    off_preset_combo_mod.grid(row=6, column=1, sticky="w")
+    off_preset_combo_mod.grid(row=6, column=1, sticky="w", padx=(0, PADX), pady=PADY)
 
     # 记录自定义内容以便在预设与自定义切换时还原
     previous_custom_off_value_mod = theme.get("off_value", "")
@@ -1264,7 +1283,7 @@ def modify_custom_theme() -> None:
             messagebox.showerror("错误", f"无法启动 PowerShell: {e}")
 
     select_file_btn_mod = ttk.Button(theme_window, text="选择文件", command=select_file)
-    select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=15)
+    select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=PADX, pady=PADY)
     def select_off_file():
         nonlocal previous_custom_off_value_mod
         file_path = filedialog.askopenfilename()
@@ -1315,7 +1334,7 @@ def modify_custom_theme() -> None:
             messagebox.showerror("错误", f"无法启动 PowerShell: {e}")
 
     off_action_btn_mod = ttk.Button(theme_window, text="选择文件", command=select_off_file)
-    off_action_btn_mod.grid(row=5, column=2, sticky="w", padx=15)
+    off_action_btn_mod.grid(row=5, column=2, sticky="w", padx=PADX, pady=PADY)
     _update_off_editability_mod()
 
     # 垂直方向自适应：占位扩展区，推开底部按钮
@@ -1496,10 +1515,10 @@ def modify_custom_theme() -> None:
             theme_window.lift()
 
     ttk.Button(theme_window, text="保存", command=save_theme).grid(
-        row=8, column=0, pady=15, padx=15
+        row=8, column=0, pady=PADY + 6, padx=PADX
     )
-    ttk.Button(theme_window, text="删除", command=delete_theme).grid(row=8, column=1)
-    ttk.Button(theme_window, text="取消", command=lambda:theme_window.destroy()).grid(row=8, column=2)
+    ttk.Button(theme_window, text="删除", command=delete_theme).grid(row=8, column=1, pady=PADY + 6, padx=PADX)
+    ttk.Button(theme_window, text="取消", command=lambda:theme_window.destroy()).grid(row=8, column=2, pady=PADY + 6, padx=PADX)
 
     center_window(theme_window)
 
@@ -1514,9 +1533,12 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     theme_window.title("添加自定义主题")
     # 增加默认高度
     try:
-        theme_window.geometry("780x360")
+        w, h = _scaled_size(theme_window, 780, 360)
+        theme_window.geometry(f"{w}x{h}")
     except Exception:
         pass
+    PADX = 10
+    PADY = 6
     # 允许窗口大小调整，并设置网格权重使输入控件随窗口拉伸
     theme_window.resizable(True, True)
     try:
@@ -1527,7 +1549,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     except Exception:
         pass
 
-    ttk.Label(theme_window, text="类型：").grid(row=0, column=0, sticky="e")
+    ttk.Label(theme_window, text="类型：").grid(row=0, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_type_var = tk.StringVar(value="程序或脚本")
     theme_type_combobox = ttk.Combobox(
         theme_window, 
@@ -1535,31 +1557,31 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         values=["程序或脚本", "服务(需管理员权限)", "命令", "按键(Hotkey)"],
         state="readonly"
     )
-    theme_type_combobox.grid(row=0, column=1, sticky="we")
+    theme_type_combobox.grid(row=0, column=1, sticky="we", padx=(0, PADX), pady=PADY)
 
 
-    ttk.Label(theme_window, text="服务时主程序").grid(row=0, column=2, sticky="w")
-    ttk.Label(theme_window, text="需管理员权限").grid(row=1, column=2, sticky="w")
+    ttk.Label(theme_window, text="服务时主程序").grid(row=0, column=2, sticky="w", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text="需管理员权限").grid(row=1, column=2, sticky="w", padx=PADX, pady=PADY)
 
-    ttk.Label(theme_window, text="状态：").grid(row=1, column=0, sticky="e")
+    ttk.Label(theme_window, text="状态：").grid(row=1, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_checked_var = tk.IntVar()
     ttk.Checkbutton(theme_window, variable=theme_checked_var).grid(
-        row=1, column=1, sticky="w"
+        row=1, column=1, sticky="w", padx=(0, PADX), pady=PADY
     )
 
-    ttk.Label(theme_window, text="昵称：").grid(row=2, column=0, sticky="e")
+    ttk.Label(theme_window, text="昵称：").grid(row=2, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_nickname_entry = ttk.Entry(theme_window)
-    theme_nickname_entry.grid(row=2, column=1, sticky="we")
+    theme_nickname_entry.grid(row=2, column=1, sticky="we", padx=(0, PADX), pady=PADY)
 
-    ttk.Label(theme_window, text="主题：").grid(row=3, column=0, sticky="e")
+    ttk.Label(theme_window, text="主题：").grid(row=3, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_name_entry = ttk.Entry(theme_window)
-    theme_name_entry.grid(row=3, column=1, sticky="we")
+    theme_name_entry.grid(row=3, column=1, sticky="we", padx=(0, PADX), pady=PADY)
 
     # 新：程序/命令类型拆分 ON/OFF 与关闭预设；Hotkey 保持原样
     on_label_add = ttk.Label(theme_window, text="打开(on)：")
-    on_label_add.grid(row=4, column=0, sticky="e")
+    on_label_add.grid(row=4, column=0, sticky="e", padx=PADX, pady=PADY)
     on_frame_add = ttk.Frame(theme_window)
-    on_frame_add.grid(row=4, column=1, sticky="nsew")
+    on_frame_add.grid(row=4, column=1, sticky="nsew", padx=(0, PADX), pady=PADY)
     try:
         theme_window.rowconfigure(4, weight=2)
     except Exception:
@@ -1576,9 +1598,9 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         pass
 
     off_label_add = ttk.Label(theme_window, text="关闭(off)：")
-    off_label_add.grid(row=5, column=0, sticky="e")
+    off_label_add.grid(row=5, column=0, sticky="e", padx=PADX, pady=PADY)
     off_frame_add = ttk.Frame(theme_window)
-    off_frame_add.grid(row=5, column=1, sticky="nsew")
+    off_frame_add.grid(row=5, column=1, sticky="nsew", padx=(0, PADX), pady=PADY)
     off_value_text_add = tk.Text(off_frame_add, height=3, wrap="word")
     off_value_text_add.grid(row=0, column=0, sticky="nsew")
     off_scroll_y_add = ttk.Scrollbar(off_frame_add, orient="vertical", command=off_value_text_add.yview)
@@ -1591,7 +1613,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         pass
 
     off_preset_label_add = ttk.Label(theme_window, text="关闭预设：")
-    off_preset_label_add.grid(row=6, column=0, sticky="e")
+    off_preset_label_add.grid(row=6, column=0, sticky="e", padx=PADX, pady=PADY)
     preset_display_map_add = {"none": "忽略", "kill": "强制结束", "interrupt": "中断", "stop": "停止服务", "custom": "自定义"}
     preset_reverse_map_add = {v: k for k, v in preset_display_map_add.items()}
     off_preset_var_add = tk.StringVar(value="强制结束")
@@ -1605,7 +1627,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         else:
             return ("忽略",)
     off_preset_combo_add = ttk.Combobox(theme_window, textvariable=off_preset_var_add, state="readonly", values=_build_preset_values_add("程序或脚本"))
-    off_preset_combo_add.grid(row=6, column=1, sticky="w")
+    off_preset_combo_add.grid(row=6, column=1, sticky="w", padx=(0, PADX), pady=PADY)
 
     previous_custom_off_value_add = ""
     def _preview_text_for_add(code: str, t_type: str, service_name: str = "") -> str:
@@ -1718,7 +1740,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             messagebox.showerror("错误", f"无法启动 PowerShell: {e}")
 
     select_file_btn_add = ttk.Button(theme_window, text="选择文件", command=select_file)
-    select_file_btn_add.grid(row=4, column=2, sticky="w", padx=15)
+    select_file_btn_add.grid(row=4, column=2, sticky="w", padx=PADX, pady=PADY)
     def select_off_file_add():
         nonlocal previous_custom_off_value_add
         file_path = filedialog.askopenfilename()
@@ -1769,7 +1791,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             messagebox.showerror("错误", f"无法启动 PowerShell: {e}")
 
     off_action_btn_add = ttk.Button(theme_window, text="选择文件", command=select_off_file_add)
-    off_action_btn_add.grid(row=5, column=2, sticky="w", padx=15)
+    off_action_btn_add.grid(row=5, column=2, sticky="w", padx=PADX, pady=PADY)
     _update_off_editability_add()
 
     # Hotkey 专用设置区（默认隐藏，选中“按键(Hotkey)”时显示）
@@ -1937,9 +1959,9 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         theme_window.destroy()
 
     ttk.Button(theme_window, text="保存", command=save_theme).grid(
-        row=8, column=0, pady=15, padx=15
+        row=8, column=0, pady=PADY + 6, padx=PADX
     )
-    ttk.Button(theme_window, text="取消", command=theme_window.destroy).grid(row=8, column=2)
+    ttk.Button(theme_window, text="取消", command=theme_window.destroy).grid(row=8, column=2, pady=PADY + 6, padx=PADX)
 
     center_window(theme_window)
 
@@ -2308,31 +2330,35 @@ root.rowconfigure(1, weight=1)
 root.rowconfigure(2, weight=0)
 root.columnconfigure(0, weight=1)
 
+# 主界面统一内边距
+PADX = 10
+PADY = 6
+
 # 系统配置部分
 system_frame = ttk.LabelFrame(root, text="系统配置")
-system_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
+system_frame.grid(row=0, column=0, padx=PADX, pady=PADY, sticky="nsew")
 for i in range(3):
     system_frame.rowconfigure(i, weight=1)
 for j in range(3):
     system_frame.columnconfigure(j, weight=1)
 
-ttk.Label(system_frame, text="网站：").grid(row=0, column=0, sticky="e")
+ttk.Label(system_frame, text="网站：").grid(row=0, column=0, sticky="e", padx=PADX, pady=PADY)
 website_entry = ttk.Entry(system_frame)
-website_entry.grid(row=0, column=1, sticky="ew")
+website_entry.grid(row=0, column=1, sticky="ew", padx=PADX, pady=PADY)
 website_entry.insert(0, config.get("broker", ""))
 
-ttk.Label(system_frame, text="端口：").grid(row=1, column=0, sticky="e")
+ttk.Label(system_frame, text="端口：").grid(row=1, column=0, sticky="e", padx=PADX, pady=PADY)
 port_entry = ttk.Entry(system_frame)
-port_entry.grid(row=1, column=1, sticky="ew")
+port_entry.grid(row=1, column=1, sticky="ew", padx=PADX, pady=PADY)
 port_entry.insert(0, str(config.get("port", "")))
 
 # MQTT认证模式选择
-ttk.Label(system_frame, text="认证模式：").grid(row=2, column=0, sticky="e")
+ttk.Label(system_frame, text="认证模式：").grid(row=2, column=0, sticky="e", padx=PADX, pady=PADY)
 auth_mode_var = tk.StringVar(value=config.get("auth_mode", "private_key"))
 auth_mode_combo = ttk.Combobox(system_frame, 
                                values=["私钥模式", "账密模式"], 
                                state="readonly", width=15)
-auth_mode_combo.grid(row=2, column=1, sticky="w")
+auth_mode_combo.grid(row=2, column=1, sticky="w", padx=PADX, pady=PADY)
 
 # 设置下拉框显示文本
 def update_auth_mode_display():
@@ -2355,57 +2381,57 @@ update_auth_mode_display()
 
 test_var = tk.IntVar(value=config.get("test", 0))
 test_check = ttk.Checkbutton(system_frame, text="test模式", variable=test_var)
-test_check.grid(row=3, column=0, sticky="n")
+test_check.grid(row=3, column=0, sticky="n", padx=PADX, pady=PADY)
 
 # 通知开关（控制主程序是否发送 toast 通知），位于 test 模式开关右侧
 notify_var = tk.IntVar(value=config.get("notify", 1))
 notify_check = ttk.Checkbutton(system_frame, text="通知提示", variable=notify_var)
-notify_check.grid(row=3, column=1, sticky="n")
+notify_check.grid(row=3, column=1, sticky="n", padx=PADX, pady=PADY)
 
 #添加打开任务计划按钮
 task_button = ttk.Button(system_frame, text="点击打开任务计划", command=lambda:os.startfile("taskschd.msc"))
-task_button.grid(row=3, column=2, sticky="n", padx=15)
+task_button.grid(row=3, column=2, sticky="n", padx=PADX, pady=PADY)
 
 # 添加设置开机自启动按钮上面的提示
 auto_start_label = ttk.Label(
     system_frame,
     text="需要管理员权限才能设置",
 )
-auto_start_label.grid(row=0, column=2, sticky="n")
+auto_start_label.grid(row=0, column=2, sticky="n", padx=PADX, pady=PADY)
 auto_start_label1 = ttk.Label(
     system_frame,
     text="开机自启/启用睡眠(休眠)功能",
 )
-auto_start_label1.grid(row=1, column=2, sticky="n")
+auto_start_label1.grid(row=1, column=2, sticky="n", padx=PADX, pady=PADY)
 
 # 添加设置开机自启动按钮
 auto_start_button = ttk.Button(system_frame, text="", command=set_auto_start)
-auto_start_button.grid(row=2, column=2,  sticky="n")
+auto_start_button.grid(row=2, column=2,  sticky="n", padx=PADX, pady=PADY)
 
 # MQTT认证配置部分
 auth_frame = ttk.LabelFrame(root, text="MQTT认证配置")
-auth_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
+auth_frame.grid(row=1, column=0, padx=PADX, pady=PADY, sticky="nsew")
 for i in range(3):
     auth_frame.rowconfigure(i, weight=1)
 for j in range(3):
     auth_frame.columnconfigure(j, weight=1)
 
 # 用户名配置
-ttk.Label(auth_frame, text="用户名：").grid(row=0, column=0, sticky="e")
+ttk.Label(auth_frame, text="用户名：").grid(row=0, column=0, sticky="e", padx=PADX, pady=PADY)
 mqtt_username_entry = ttk.Entry(auth_frame)
-mqtt_username_entry.grid(row=0, column=1, sticky="ew")
+mqtt_username_entry.grid(row=0, column=1, sticky="ew", padx=PADX, pady=PADY)
 mqtt_username_entry.insert(0, config.get("mqtt_username", ""))
 
 # 密码配置
-ttk.Label(auth_frame, text="密码：").grid(row=1, column=0, sticky="e")
+ttk.Label(auth_frame, text="密码：").grid(row=1, column=0, sticky="e", padx=PADX, pady=PADY)
 mqtt_password_entry = ttk.Entry(auth_frame, show="*")
-mqtt_password_entry.grid(row=1, column=1, sticky="ew")
+mqtt_password_entry.grid(row=1, column=1, sticky="ew", padx=PADX, pady=PADY)
 mqtt_password_entry.insert(0, config.get("mqtt_password", ""))
 
 # 客户端ID配置
-ttk.Label(auth_frame, text="客户端ID：").grid(row=2, column=0, sticky="e")
+ttk.Label(auth_frame, text="客户端ID：").grid(row=2, column=0, sticky="e", padx=PADX, pady=PADY)
 client_id_entry = ttk.Entry(auth_frame)
-client_id_entry.grid(row=2, column=1, sticky="ew")
+client_id_entry.grid(row=2, column=1, sticky="ew", padx=PADX, pady=PADY)
 # 读取client_id配置
 client_id_value = config.get("client_id", "")
 client_id_entry.insert(0, client_id_value)
@@ -2416,7 +2442,7 @@ auth_info_label = ttk.Label(
     text="私钥模式：\n        使用客户端ID作为私钥\n账密模式：\n        兼容大多数IoT平台",
     justify="left"
 )
-auth_info_label.grid(row=0, column=2, rowspan=3, sticky="n")
+auth_info_label.grid(row=0, column=2, rowspan=3, sticky="n", padx=PADX, pady=PADY)
 
 def toggle_auth_mode(*args):
     """根据MQTT认证模式切换界面显示"""
@@ -2446,7 +2472,7 @@ else:
 
 # 主题配置部分
 theme_frame = ttk.LabelFrame(root, text="主题配置")
-theme_frame.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+theme_frame.grid(row=2, column=0, padx=PADX, pady=PADY, sticky="nsew")
 for i in range(6):
     theme_frame.rowconfigure(i, weight=1)
 for j in range(4):
@@ -2486,7 +2512,7 @@ builtin_themes: List[Dict[str, Any]] = [
     },
 ]
 
-ttk.Label(theme_frame, text="内置").grid(row=0, column=0, sticky="w")
+ttk.Label(theme_frame, text="内置").grid(row=0, column=0, sticky="w", padx=PADX, pady=PADY)
 
 # 更多：打开内置主题设置
 def open_builtin_settings():
@@ -2670,10 +2696,10 @@ def open_builtin_settings():
         pass
 
 
-ttk.Button(theme_frame, text="详情", command=show_detail_window).grid(row=0, column=2, sticky="e", columnspan=2)
-ttk.Label(theme_frame, text="主题：").grid(row=0, column=2, sticky="w")
+ttk.Button(theme_frame, text="详情", command=show_detail_window).grid(row=0, column=2, sticky="e", columnspan=2, padx=PADX, pady=PADY)
+ttk.Label(theme_frame, text="主题：").grid(row=0, column=2, sticky="w", padx=PADX, pady=PADY)
 ttk.Label(theme_frame, text="自定义：").grid(
-    row=0, column=3, sticky="w"
+    row=0, column=3, sticky="w", padx=PADX, pady=PADY
 )
 
 sleep_disabled = False
@@ -2692,31 +2718,31 @@ for idx, theme in enumerate(builtin_themes):
         theme["name_var"].set("")
         cb = ttk.Checkbutton(theme_frame, text=theme["nickname"], variable=theme["checked"])
         cb.state(["disabled"])
-        cb.grid(row=idx + 1, column=0, sticky="w", columnspan=2)
+        cb.grid(row=idx + 1, column=0, sticky="w", columnspan=2, padx=PADX, pady=PADY)
         entry = ttk.Entry(theme_frame, textvariable=theme["name_var"])
         entry.config(state="disabled")
-        entry.grid(row=idx + 1, column=2, sticky="ew")
+        entry.grid(row=idx + 1, column=2, sticky="ew", padx=PADX, pady=PADY)
         # 改为不可点击提示
         sleep_tip = ttk.Label(theme_frame, text="休眠/睡眠不可用\n系统未启用休眠功能")
-        sleep_tip.grid(row=idx + 1, column=2, sticky="w")
+        sleep_tip.grid(row=idx + 1, column=2, sticky="w", padx=PADX, pady=PADY)
     elif theme_key == "screen" and brightness_disabled:
         theme["checked"].set(0)
         theme["name_var"].set("")
         cb = ttk.Checkbutton(theme_frame, text=theme["nickname"], variable=theme["checked"])
         cb.state(["disabled"])
-        cb.grid(row=idx + 1, column=0, sticky="w", columnspan=2)
+        cb.grid(row=idx + 1, column=0, sticky="w", columnspan=2, padx=PADX, pady=PADY)
         entry = ttk.Entry(theme_frame, textvariable=theme["name_var"])
         entry.config(state="disabled")
-        entry.grid(row=idx + 1, column=2, sticky="ew")
+        entry.grid(row=idx + 1, column=2, sticky="ew", padx=PADX, pady=PADY)
         # 改为不可点击提示
         brightness_tip = ttk.Label(theme_frame, text="亮度调节不可用\n系统不支持此功能")
-        brightness_tip.grid(row=idx + 1, column=2, sticky="w")
+        brightness_tip.grid(row=idx + 1, column=2, sticky="w", padx=PADX, pady=PADY)
     else:
         ttk.Checkbutton(theme_frame, text=theme["nickname"], variable=theme["checked"]).grid(
-            row=idx + 1, column=0, sticky="w", columnspan=2
+            row=idx + 1, column=0, sticky="w", columnspan=2, padx=PADX, pady=PADY
         )
         ttk.Entry(theme_frame, textvariable=theme["name_var"]).grid(
-            row=idx + 1, column=2, sticky="ew"
+            row=idx + 1, column=2, sticky="ew", padx=PADX, pady=PADY
         )
 
 # 自定义主题列表
@@ -2725,20 +2751,20 @@ custom_themes: List[Dict[str, Any]] = []
 # 自定义主题列表组件
 custom_theme_tree = ttk.Treeview(theme_frame, columns=("theme",), show="headings")
 custom_theme_tree.heading("theme", text="双击即可修改")
-custom_theme_tree.grid(row=1, column=3, rowspan=5, pady=10, padx=15, sticky="nsew")
+custom_theme_tree.grid(row=1, column=3, rowspan=5, pady=PADY, padx=PADX, sticky="nsew")
 
 # 刷新主题配置按钮
 ttk.Button(theme_frame, text="刷新", command=refresh_custom_themes).grid(
-    row=6, pady=10, column=0, sticky="w"
+    row=6, pady=PADY, padx=PADX, column=0, sticky="w"
 )
-ttk.Button(theme_frame, text="更多", command=open_builtin_settings).grid(row=6, column=2, pady=10, sticky="n")
+ttk.Button(theme_frame, text="更多", command=open_builtin_settings).grid(row=6, column=2, pady=PADY, padx=PADX, sticky="n")
 
 # 添加和修改按钮
 ttk.Button(theme_frame, text="添加", command=lambda: add_custom_theme(config)).grid(
-    row=6, pady=10, column=3, sticky="w"
+    row=6, pady=PADY, padx=PADX, column=3, sticky="w"
 )
 ttk.Button(theme_frame, text="修改", command=lambda: modify_custom_theme()).grid(
-    row=6, pady=10, column=3, sticky="e"
+    row=6, pady=PADY, padx=PADX, column=3, sticky="e"
 )
 
 # 绑定鼠标双击事件到自定义主题列表
@@ -2746,19 +2772,20 @@ custom_theme_tree.bind("<Double-Button-1>", on_double_click)
 
 # 添加按钮到框架中
 button_frame = tk.Frame(root)
-button_frame.grid(row=3, column=0, pady=15, sticky="ew")
+button_frame.grid(row=3, column=0, pady=PADY * 2, padx=PADX, sticky="ew")
 button_frame.grid_rowconfigure(0, weight=1)
 button_frame.grid_columnconfigure(0, weight=1)
 button_frame.grid_columnconfigure(1, weight=1)
+button_frame.grid_columnconfigure(2, weight=1)
 
 ttk.Button(button_frame, text="打开配置文件夹", command=lambda:os.startfile(appdata_dir)).grid(
-    row=0, column=0, padx=20, sticky="e"
+    row=0, column=0, padx=PADX, pady=PADY, sticky="e"
 )
 ttk.Button(button_frame, text="保存配置文件", command=generate_config).grid(
-    row=0, column=1, padx=20, sticky="w"
+    row=0, column=1, padx=PADX, pady=PADY, sticky="w"
 )
 ttk.Button(button_frame, text="取消", command=lambda:root.destroy()).grid(
-    row=0, column=2, padx=20, sticky="w"
+    row=0, column=2, padx=PADX, pady=PADY, sticky="w"
 )
 
 # 设置窗口在窗口大小变化时，框架自动扩展
