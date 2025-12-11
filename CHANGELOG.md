@@ -4,6 +4,24 @@
 
 ---
 
+# V2.4.0 (2025-12-11)
+
+**Twinkle Tray 亮度控制可选方案**  
+Full Changelog (相对于 2.3.10): <https://github.com/chen6019/Remote-Controls/compare/V2.3.10...V2.4.0>
+
+## ✨ 新增与优化
+
+- 屏幕亮度新增 **Twinkle Tray 命令行控制** 选项，可在 GUI「内置主题设置→屏幕亮度控制方案」切换 WMI / Twinkle Tray，适配外接显示器。
+- GUI 支持选择 Twinkle Tray 可执行路径、目标显示器 (MonitorNum/MonitorID/All) 与 Overlay 开关；未找到 WMI 接口时仍可继续使用屏幕主题。
+- 主程序亮度控制按配置自动选择 Twinkle Tray，失败回退系统接口；百分比输入自动夹紧 0-100。
+
+## 📖 文档与配置
+
+- README 说明亮度可选 Twinkle Tray，并补充外接显示器提示。
+- 默认配置新增亮度控制模式与 Twinkle Tray 相关键，便于直接填写路径和目标。
+
+---
+
 # V2.3.10 (2025-12-08)
 
 **界面间隙优化、命令参数增强与彩蛋修复**
