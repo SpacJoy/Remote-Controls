@@ -28,7 +28,6 @@ import threading
 import subprocess
 import time
 import ctypes
-import socket
 from comtypes import CLSCTX_ALL
 import signal
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume

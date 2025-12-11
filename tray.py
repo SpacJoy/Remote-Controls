@@ -19,17 +19,15 @@ import contextlib
 import logging
 from logging.handlers import RotatingFileHandler
 import traceback
-from tkinter import N, messagebox
+from tkinter import messagebox
 import pystray
 from win11toast import notify as toast, clear_toast
 from PIL import Image
 import psutil
 import webbrowser
-import random
 import urllib.request
 import json
 import re
-import threading as _threading_for_hook
 from ctypes import wintypes
 
 # 统一版本来源
