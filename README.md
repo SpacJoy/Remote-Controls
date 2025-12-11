@@ -9,13 +9,12 @@
 ## 特性一览
 
 - MQTT 控制：支持“私钥客户端ID（巴法云等）”与“用户名/密码”两种认证
-- 设备动作：锁屏/关机/重启；亮度；音量与媒体控制；热键发送
+- 设备动作：锁屏/关机/重启；亮度（系统接口或 Twinkle Tray）；音量与媒体控制；热键发送
 - 自定义主题：支持程序/脚本、服务、命令、热键四类，开关动作可分别配置
 - 参数化命令：on#/off# 0-100 + `{value}` 占位符，GUI 测试会询问参数
 - 托盘管理：一键启动/重启/关闭主程序，显示权限与运行模式
 - 打包与发布：一键构建（github actions），安装器自动注入版本
 - Windows Toast 通知，可开关；异常保护与弱网自动重连
-
 
 ## 快速开始
 
@@ -44,7 +43,7 @@ python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.
 - 巴法云接入与小爱同学（官方文档）：<https://cloud.bemfa.com/docs/src/speaker_mi.html>
 - 主题速查（内置 + 自定义）：
   - 电脑（开关）：lock/restart/shutdown 等，支持延时
-  - 屏幕（灯）：on=100，off=0，`on#数字` 设亮度
+  - 屏幕（灯）：on=100，off=0，`on#数字` 设亮度；在“更多”中可切换 Twinkle Tray 命令行模式以适配外接显示器
   - 音量（窗帘）：on=100，off=0，`on#数字` 设音量；pause=静音
   - 媒体（窗帘）：上一曲/下一曲/播放暂停；`on#百分比` 映射三段操作
   - 睡眠（开关）：sleep/hibernate/display_off/display_on/lock

@@ -11,6 +11,7 @@ pyinstaller -F -n RC-main --windowed --icon=res\\icon.ico --add-data "res\\icon.
 
 #导入各种必要的模块
 import io
+import shutil
 import paho.mqtt.client as mqtt
 import os
 import psutil
@@ -311,18 +312,127 @@ def on_unsubscribe(client, userdata: list, mid: int, reason_code_list: list, pro
 """
 
 
+def _get_config_value(key: str, default=None):
+    """Safe config lookup before config is loaded."""
+    try:
+        cfg = globals().get("config", {}) or {}
+        return cfg.get(key, default)
+    except Exception:
+        return default
+
+
+def _clamp_percent(value: int) -> int:
+    try:
+        v = int(value)
+    except Exception:
+        v = 0
+    return max(0, min(100, v))
+
+
+def _set_brightness_wmi(value: int) -> bool:
+    try:
+        logging.info(f"设置亮度(WMI): {value}")
+        wmi.WMI(namespace="wmi").WmiMonitorBrightnessMethods()[0].WmiSetBrightness(
+            value, 0
+        )
+        return True
+    except Exception as e:
+        logging.error(f"无法通过 WMI 设置亮度: {e}")
+        return False
+
+
+def _resolve_twinkle_tray_path() -> str | None:
+    """Return a usable Twinkle Tray executable path if present."""
+    candidates: list[str] = []
+    try:
+        custom = (_get_config_value("twinkle_tray_path", "") or "").strip()
+        if custom:
+            candidates.append(os.path.expandvars(os.path.expanduser(custom)))
+    except Exception:
+        pass
+
+    # 常见安装位置与别名
+    candidates.extend(
+        [
+            os.path.expandvars(r"%LocalAppData%\Programs\twinkle-tray\Twinkle Tray.exe"),
+            os.path.expandvars(r"%LocalAppData%\Microsoft\WindowsApps\Twinkle-Tray.exe"),
+        ]
+    )
+    for alias in ("Twinkle-Tray.exe", "Twinkle Tray.exe", "twinkle-tray.exe"):
+        p = shutil.which(alias)
+        if p:
+            candidates.append(p)
+
+    seen: set[str] = set()
+    for path in candidates:
+        if not path:
+            continue
+        norm = os.path.normpath(path)
+        if norm in seen:
+            continue
+        seen.add(norm)
+        if os.path.isfile(norm):
+            return norm
+    return None
+
+
+def _build_twinkle_tray_command(value: int) -> list[str] | None:
+    exe_path = _resolve_twinkle_tray_path()
+    if not exe_path:
+        logging.error("Twinkle Tray 未找到，请在配置中指定 twinkle_tray_path 或安装应用后重试")
+        return None
+
+    target_mode = (_get_config_value("twinkle_tray_target_mode", "monitor_num") or "monitor_num").lower()
+    target_value = str(_get_config_value("twinkle_tray_target_value", "1") or "").strip()
+    overlay_enabled = str(_get_config_value("twinkle_tray_overlay", 1)).lower() not in ("0", "false", "off", "no")
+
+    args: list[str] = [exe_path]
+    if target_mode == "monitor_id":
+        if not target_value:
+            logging.error("Twinkle Tray MonitorID 未配置")
+            return None
+        args.append(f"--MonitorID={target_value}")
+    elif target_mode == "all":
+        args.append("--All")
+    else:
+        args.append(f"--MonitorNum={target_value or '1'}")
+
+    args.append(f"--Set={value}")
+    if overlay_enabled:
+        args.append("--Overlay")
+    return args
+
+
+def _set_brightness_twinkle_tray(value: int) -> bool:
+    try:
+        cmd = _build_twinkle_tray_command(value)
+        if not cmd:
+            return False
+        logging.info("设置亮度(Twinkle Tray): %s", value)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            logging.error("Twinkle Tray 调节亮度失败: %s", (result.stderr or result.stdout).strip())
+            return False
+        return True
+    except Exception as e:
+        logging.error(f"调用 Twinkle Tray 失败: {e}")
+        return False
+
+
 def set_brightness(value: int) -> None:
     """
     English: Sets the screen brightness to the specified value (0-100)
     中文: 设置屏幕亮度，取值范围为 0-100
     """
-    try:
-        logging.info(f"设置亮度: {value}")
-        wmi.WMI(namespace="wmi").WmiMonitorBrightnessMethods()[0].WmiSetBrightness(
-            value, 0
-        )
-    except Exception as e:
-        logging.error(f"无法设置亮度: {e}")
+    percent = _clamp_percent(value)
+    mode = (_get_config_value("brightness_mode", "wmi") or "wmi").lower()
+
+    if mode == "twinkle_tray":
+        if _set_brightness_twinkle_tray(percent):
+            return
+        logging.warning("Twinkle Tray 亮度调节失败，回退到系统接口")
+
+    _set_brightness_wmi(percent)
 
 
 """

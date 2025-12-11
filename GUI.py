@@ -19,6 +19,7 @@ import psutil
 import subprocess
 import win32com.client
 import re
+import shutil
 from typing import Any, Dict, List, Union
 
 def _normalize_command_for_powershell(cmd: str) -> str:
@@ -2153,22 +2154,63 @@ def sleep():
     else:
         sleep_status_message = "test模式已开启，未检测系统休眠/睡眠支持。"
 
+def _resolve_twinkle_tray_path_for_gui() -> str | None:
+    candidates: list[str] = []
+    try:
+        custom = (config.get("twinkle_tray_path", "") or "").strip()
+        if custom:
+            candidates.append(os.path.expandvars(os.path.expanduser(custom)))
+    except Exception:
+        pass
+    candidates.extend(
+        [
+            os.path.expandvars(r"%LocalAppData%\Programs\twinkle-tray\Twinkle Tray.exe"),
+            os.path.expandvars(r"%LocalAppData%\Microsoft\WindowsApps\Twinkle-Tray.exe"),
+        ]
+    )
+    for alias in ("Twinkle-Tray.exe", "Twinkle Tray.exe", "twinkle-tray.exe"):
+        p = shutil.which(alias)
+        if p:
+            candidates.append(p)
+    seen: set[str] = set()
+    for p in candidates:
+        if not p:
+            continue
+        norm = os.path.normpath(p)
+        if norm in seen:
+            continue
+        seen.add(norm)
+        if os.path.isfile(norm):
+            return norm
+    return None
+
+
 def check_brightness_support():
     # 检查系统亮度调节支持（test模式开启时跳过检测）
     global brightness_disabled, brightness_status_message
+    brightness_disabled = False
+    brightness_status_message = ""
+
+    mode = (config.get("brightness_mode", "wmi") or "wmi").lower()
+
+    if mode == "twinkle_tray":
+        path = _resolve_twinkle_tray_path_for_gui()
+        if path:
+            brightness_status_message = f"使用 Twinkle Tray 控制亮度: {path}"
+        else:
+            brightness_status_message = "Twinkle Tray 模式：未找到可执行文件，请在“更多”中设置路径或安装应用。"
+        return
+
     if not ("config" in globals() and config.get("test", 0) == 1):
         try:
-            # 尝试使用WMI获取亮度控制接口
             import wmi
+
             brightness_controllers = wmi.WMI(namespace="wmi").WmiMonitorBrightnessMethods()
             if not brightness_controllers:
-                brightness_disabled = True
-                brightness_status_message = "系统不支持亮度调节功能，未找到亮度控制接口。"
+                brightness_status_message = "系统未暴露 WMI 亮度接口，若需调节请在“更多”中切换到 Twinkle Tray。"
             else:
-                brightness_disabled = False
-                brightness_status_message = "系统支持亮度调节功能。"
+                brightness_status_message = "系统支持亮度调节(WMI)。"
         except Exception as e:
-            brightness_disabled = True
             brightness_status_message = f"检测亮度控制接口失败: {e}"
     else:
         brightness_status_message = "test模式已开启，未检测系统亮度调节支持。"
@@ -2566,6 +2608,88 @@ def open_builtin_settings():
     tip.grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
     row_i += 1
 
+    # 亮度控制方案
+    ttk.Label(win, text="屏幕亮度控制方案").grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
+    row_i += 1
+
+    brightness_modes = [
+        ("wmi", "系统接口(WMI)"),
+        ("twinkle_tray", "Twinkle Tray (命令行)")
+    ]
+    bm_key_to_label = {k: v for k, v in brightness_modes}
+    bm_label_to_key = {v: k for k, v in brightness_modes}
+    cur_bm_key = config.get("brightness_mode", "wmi")
+    brightness_mode_var = tk.StringVar(value=bm_key_to_label.get(cur_bm_key, "系统接口(WMI)"))
+
+    ttk.Label(win, text="控制方式：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    brightness_mode_combo = ttk.Combobox(win, values=[label for _, label in brightness_modes], textvariable=brightness_mode_var, state="readonly", width=22)
+    brightness_mode_combo.grid(row=row_i, column=1, sticky="w")
+
+    twinkle_overlay_var = tk.IntVar(value=int(config.get("twinkle_tray_overlay", 1) or 0))
+    overlay_cb = ttk.Checkbutton(win, text="显示叠加层(Overlay)", variable=twinkle_overlay_var)
+    overlay_cb.grid(row=row_i, column=2, columnspan=2, sticky="w")
+    row_i += 1
+
+    ttk.Label(win, text="Twinkle Tray 路径：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    twinkle_path_var = tk.StringVar(value=config.get("twinkle_tray_path", ""))
+    twinkle_path_entry = ttk.Entry(win, textvariable=twinkle_path_var, width=36)
+    twinkle_path_entry.grid(row=row_i, column=1, columnspan=2, sticky="ew")
+
+    def browse_twinkle_path():
+        try:
+            path = filedialog.askopenfilename(
+                title="选择 Twinkle Tray 可执行文件",
+                filetypes=[("可执行文件", "*.exe"), ("所有文件", "*.*")],
+            )
+            if path:
+                twinkle_path_var.set(path)
+        except Exception as e:
+            messagebox.showerror("错误", f"选择文件失败: {e}")
+
+    ttk.Button(win, text="浏览", command=browse_twinkle_path).grid(row=row_i, column=3, sticky="w", padx=6)
+    row_i += 1
+
+    ttk.Label(win, text="目标显示器：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    target_modes = [
+        ("monitor_num", "按编号(MonitorNum)"),
+        ("monitor_id", "按ID(MonitorID)"),
+        ("all", "全部显示器(All)")
+    ]
+    tm_key_to_label = {k: v for k, v in target_modes}
+    tm_label_to_key = {v: k for k, v in target_modes}
+    twinkle_target_mode_var = tk.StringVar(value=tm_key_to_label.get(config.get("twinkle_tray_target_mode", "monitor_num"), "按编号(MonitorNum)"))
+    twinkle_target_value_var = tk.StringVar(value=str(config.get("twinkle_tray_target_value", "1") or ""))
+
+    twinkle_target_mode_combo = ttk.Combobox(win, values=[label for _, label in target_modes], textvariable=twinkle_target_mode_var, state="readonly", width=22)
+    twinkle_target_mode_combo.grid(row=row_i, column=1, sticky="w")
+
+    twinkle_target_entry = ttk.Entry(win, textvariable=twinkle_target_value_var, width=18)
+    twinkle_target_entry.grid(row=row_i, column=2, sticky="w")
+    row_i += 1
+
+    def _toggle_twinkle_fields(*_args):
+        mode_key = bm_label_to_key.get(brightness_mode_var.get(), "wmi")
+        use_twinkle = mode_key == "twinkle_tray"
+        state = "normal" if use_twinkle else "disabled"
+        for w in (twinkle_path_entry, twinkle_target_mode_combo, twinkle_target_entry, overlay_cb):
+            try:
+                w.state(["!disabled"] if use_twinkle else ["disabled"])
+            except Exception:
+                try:
+                    w.config(state=state)
+                except Exception:
+                    pass
+
+        target_mode_key = tm_label_to_key.get(twinkle_target_mode_var.get(), "monitor_num")
+        if use_twinkle and target_mode_key == "all":
+            twinkle_target_entry.state(["disabled"])
+        elif use_twinkle:
+            twinkle_target_entry.state(["!disabled"])
+
+    brightness_mode_var.trace("w", _toggle_twinkle_fields)
+    twinkle_target_mode_var.trace("w", _toggle_twinkle_fields)
+    _toggle_twinkle_fields()
+
     # 分隔线
     ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
     row_i += 1
@@ -2676,6 +2800,13 @@ def open_builtin_settings():
             except Exception:
                 config["sleep_off_delay"] = 0
 
+            bm_key = bm_label_to_key.get(brightness_mode_var.get(), "wmi")
+            config["brightness_mode"] = bm_key
+            config["twinkle_tray_path"] = twinkle_path_var.get().strip()
+            config["twinkle_tray_target_mode"] = tm_label_to_key.get(twinkle_target_mode_var.get(), "monitor_num")
+            config["twinkle_tray_target_value"] = twinkle_target_value_var.get().strip()
+            config["twinkle_tray_overlay"] = 1 if twinkle_overlay_var.get() else 0
+
             # Hotkey 不在内置设置中保存
 
             # 统一通过 generate_config 保存并刷新
@@ -2726,17 +2857,12 @@ for idx, theme in enumerate(builtin_themes):
         sleep_tip = ttk.Label(theme_frame, text="休眠/睡眠不可用\n系统未启用休眠功能")
         sleep_tip.grid(row=idx + 1, column=2, sticky="w", padx=PADX, pady=PADY)
     elif theme_key == "screen" and brightness_disabled:
-        theme["checked"].set(0)
-        theme["name_var"].set("")
-        cb = ttk.Checkbutton(theme_frame, text=theme["nickname"], variable=theme["checked"])
-        cb.state(["disabled"])
-        cb.grid(row=idx + 1, column=0, sticky="w", columnspan=2, padx=PADX, pady=PADY)
-        entry = ttk.Entry(theme_frame, textvariable=theme["name_var"])
-        entry.config(state="disabled")
-        entry.grid(row=idx + 1, column=2, sticky="ew", padx=PADX, pady=PADY)
-        # 改为不可点击提示
-        brightness_tip = ttk.Label(theme_frame, text="亮度调节不可用\n系统不支持此功能")
-        brightness_tip.grid(row=idx + 1, column=2, sticky="w", padx=PADX, pady=PADY)
+        ttk.Checkbutton(theme_frame, text=theme["nickname"], variable=theme["checked"]).grid(
+            row=idx + 1, column=0, sticky="w", columnspan=2, padx=PADX, pady=PADY
+        )
+        ttk.Entry(theme_frame, textvariable=theme["name_var"]).grid(
+            row=idx + 1, column=2, sticky="ew", padx=PADX, pady=PADY
+        )
     else:
         ttk.Checkbutton(theme_frame, text=theme["nickname"], variable=theme["checked"]).grid(
             row=idx + 1, column=0, sticky="w", columnspan=2, padx=PADX, pady=PADY
