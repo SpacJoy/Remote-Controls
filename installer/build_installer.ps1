@@ -70,6 +70,75 @@ Set-Location $Root
 $LogDir = Join-Path $Root 'logs'
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
+function Get-LogSummary {
+    param(
+        [Parameter(Mandatory = $true)][string]$LogPath
+    )
+    $summary = [ordered]@{
+        Path = $LogPath
+        ErrorCount = 0
+        WarningCount = 0
+        FirstError = $null
+        FirstWarning = $null
+    }
+
+    if (-not (Test-Path -LiteralPath $LogPath)) {
+        return [pscustomobject]$summary
+    }
+
+    # 注意：这些关键字匹配主要用于“统计与摘要”，不会修改英文原文日志。
+    # 尽量避免宽泛关键字（如“exception”）造成误报，优先匹配工具常见错误标记。
+    $errorPatterns = @(
+        '(?im)Traceback \(most recent call last\):',
+        '(?im)^\s*\d+\s+ERROR:',
+        '(?im)^\s*ERROR:',
+        '(?im)\bfatal error\b',
+        '(?im)(^|\s)error:'
+    )
+    $warningPatterns = @(
+        '(?im)^\s*\d+\s+WARNING:',
+        '(?im)^\s*WARNING:',
+        '(?im)(^|\s)warning:',
+        '(?im)deprecated'
+    )
+
+    try {
+        foreach ($p in $errorPatterns) {
+            $m = Select-String -LiteralPath $LogPath -Pattern $p -AllMatches -ErrorAction SilentlyContinue
+            if ($m) {
+                $summary.ErrorCount += @($m).Count
+                if (-not $summary.FirstError) { $summary.FirstError = @($m)[0].Line }
+            }
+        }
+        foreach ($p in $warningPatterns) {
+            $m = Select-String -LiteralPath $LogPath -Pattern $p -AllMatches -ErrorAction SilentlyContinue
+            if ($m) {
+                $summary.WarningCount += @($m).Count
+                if (-not $summary.FirstWarning) { $summary.FirstWarning = @($m)[0].Line }
+            }
+        }
+    } catch {
+        # 统计失败不应影响构建
+    }
+
+    return [pscustomobject]$summary
+}
+
+function Write-ToolLogSummary {
+    param(
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$LogPath
+    )
+    $s = Get-LogSummary -LogPath $LogPath
+    $leaf = Split-Path -Leaf $LogPath
+    Write-Host ("  摘要（{0}）：错误 {1} 条，警告 {2} 条。详见 logs\\{3}" -f $Title, $s.ErrorCount, $s.WarningCount, $leaf) -ForegroundColor DarkCyan
+    if ($s.FirstError) {
+        Write-Host ("  首条错误（英文原文摘录）：{0}" -f $s.FirstError) -ForegroundColor DarkYellow
+    } elseif ($s.FirstWarning) {
+        Write-Host ("  首条警告（英文原文摘录）：{0}" -f $s.FirstWarning) -ForegroundColor DarkYellow
+    }
+}
+
 # 兼容：优先使用 pwsh（PowerShell 7+），否则回退到当前会话直接调用
 $Pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
 function Invoke-ChildBuildScript {
@@ -188,6 +257,7 @@ if ($LASTEXITCODE -ne 0) {
     Pause-IfNeeded
     exit 1
 }
+Write-ToolLogSummary -Title 'C 主程序构建' -LogPath $MainBuildLog
 
 $BuiltMainExe = (Join-Path $Root 'bin\RC-main.exe')
 if (-not (Test-Path $BuiltMainExe)) {
@@ -217,6 +287,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-Host "  GUI 打包完成" -ForegroundColor Green
+Write-ToolLogSummary -Title 'PyInstaller' -LogPath $PyInstallerLog
 
 # 构建 C 版托盘（RC-tray.exe）
 Write-Host ""
@@ -233,6 +304,7 @@ if ($LASTEXITCODE -ne 0) {
     Pause-IfNeeded
     exit 1
 }
+Write-ToolLogSummary -Title 'C 托盘构建' -LogPath $TrayBuildLog
 
 $BuiltTrayExe = (Join-Path $Root 'bin\RC-tray.exe')
 if (-not (Test-Path $BuiltTrayExe)) {
@@ -304,6 +376,7 @@ $InnoLog = Join-Path $LogDir 'inno_setup.log'
 Write-Host "  详细日志：logs\inno_setup.log" -ForegroundColor Cyan
 & $InnoPath $TempIssPath *>&1 | Out-File -FilePath $InnoLog -Encoding utf8
 $ExitCode = $LASTEXITCODE
+Write-ToolLogSummary -Title 'Inno Setup' -LogPath $InnoLog
 
 # 清理临时文件
 if (Test-Path $TempIssPath) {

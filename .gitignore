@@ -35,3 +35,4 @@ logs/admin_status.txt
 test.py
 logs/Remote Controls Tray.xml
 installer/dist
+logs
