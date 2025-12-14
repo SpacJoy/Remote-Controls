@@ -10,6 +10,7 @@ config.json
 *.back
 # up.md
 test.*
+*.o
 /__pycache__
 .gitignore
 RC-main.exe
