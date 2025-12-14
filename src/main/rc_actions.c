@@ -132,7 +132,7 @@ void RC_ActionPerformComputer(const char *action, int delaySeconds)
 
     if (_stricmp(act, "lock") == 0)
     {
-        RC_LogInfo("Computer action: lock");
+        RC_LogInfo("电脑动作：锁屏");
         // LockWorkStation：锁定当前会话，不需要管理员权限。
         LockWorkStation();
         return;
@@ -140,7 +140,7 @@ void RC_ActionPerformComputer(const char *action, int delaySeconds)
 
     if (_stricmp(act, "shutdown") == 0)
     {
-        RC_LogInfo("Computer action: shutdown (delay=%d)", d);
+        RC_LogInfo("电脑动作：关机 (delay=%d)", d);
         // shutdown.exe 参数：
         // -s 关机；-t 延迟秒数；-f 强制关闭程序（更适配锁屏/无人值守场景）。
         STARTUPINFOW si;
@@ -153,7 +153,7 @@ void RC_ActionPerformComputer(const char *action, int delaySeconds)
         if (!CreateProcessW(NULL, cmdline, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
         {
             // 常见失败：权限不足/UAC、系统策略限制、路径解析异常等。
-            RC_LogError("shutdown CreateProcess failed: %lu", GetLastError());
+            RC_LogError("关机 CreateProcess 失败：%lu", GetLastError());
             return;
         }
         CloseHandle(pi.hThread);
@@ -163,7 +163,7 @@ void RC_ActionPerformComputer(const char *action, int delaySeconds)
 
     if (_stricmp(act, "restart") == 0)
     {
-        RC_LogInfo("Computer action: restart (delay=%d)", d);
+        RC_LogInfo("电脑动作：重启 (delay=%d)", d);
         // shutdown.exe 参数：-r 重启；-t 延迟；-f 强制关闭程序。
         STARTUPINFOW si;
         PROCESS_INFORMATION pi;
@@ -174,7 +174,7 @@ void RC_ActionPerformComputer(const char *action, int delaySeconds)
         _snwprintf(cmdline, (int)(sizeof(cmdline) / sizeof(cmdline[0])), L"cmd.exe /c shutdown -r -f -t %d", d);
         if (!CreateProcessW(NULL, cmdline, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
         {
-            RC_LogError("restart CreateProcess failed: %lu", GetLastError());
+            RC_LogError("重启 CreateProcess 失败：%lu", GetLastError());
             return;
         }
         CloseHandle(pi.hThread);
@@ -184,7 +184,7 @@ void RC_ActionPerformComputer(const char *action, int delaySeconds)
 
     if (_stricmp(act, "logoff") == 0)
     {
-        RC_LogInfo("Computer action: logoff");
+        RC_LogInfo("电脑动作：注销");
         STARTUPINFOW si;
         PROCESS_INFORMATION pi;
         ZeroMemory(&si, sizeof(si));
@@ -200,7 +200,7 @@ void RC_ActionPerformComputer(const char *action, int delaySeconds)
         return;
     }
 
-    RC_LogWarn("Unknown computer action: %s", act);
+    RC_LogWarn("未知电脑动作：%s", act);
 }
 
 void RC_ActionSetDisplayPower(bool on)
@@ -222,7 +222,7 @@ void RC_ActionPerformSleep(const char *action)
 
     if (_stricmp(act, "sleep") == 0)
     {
-        RC_LogInfo("Sleep action: sleep");
+        RC_LogInfo("睡眠动作：睡眠");
         // 通过 powrprof.dll 的 SetSuspendState 进入睡眠：
         // rundll32.exe powrprof.dll,SetSuspendState <Hibernate>,<ForceCritical>,<DisableWakeEvent>
         // 这里使用 0,1,0：尝试睡眠，并尽量强制进入。
@@ -242,7 +242,7 @@ void RC_ActionPerformSleep(const char *action)
 
     if (_stricmp(act, "hibernate") == 0)
     {
-        RC_LogInfo("Sleep action: hibernate");
+        RC_LogInfo("睡眠动作：休眠");
         // 休眠：调用 shutdown /h。
         STARTUPINFOW si;
         PROCESS_INFORMATION pi;
@@ -260,7 +260,7 @@ void RC_ActionPerformSleep(const char *action)
 
     if (_stricmp(act, "display_off") == 0)
     {
-        RC_LogInfo("Sleep action: display_off");
+        RC_LogInfo("睡眠动作：关闭显示器");
         // 仅关闭显示器，不影响系统运行。
         RC_ActionSetDisplayPower(false);
         return;
@@ -268,20 +268,20 @@ void RC_ActionPerformSleep(const char *action)
 
     if (_stricmp(act, "display_on") == 0)
     {
-        RC_LogInfo("Sleep action: display_on");
+        RC_LogInfo("睡眠动作：开启显示器");
         RC_ActionSetDisplayPower(true);
         return;
     }
 
     if (_stricmp(act, "lock") == 0)
     {
-        RC_LogInfo("Sleep action: lock");
+        RC_LogInfo("睡眠动作：锁屏");
         // 仅锁屏，不睡眠。
         LockWorkStation();
         return;
     }
 
-    RC_LogWarn("Unknown sleep action: %s", act);
+    RC_LogWarn("未知睡眠动作：%s", act);
 }
 
 static void send_vk(WORD vk)
@@ -345,7 +345,7 @@ void RC_ActionMediaCommand(const char *command)
         return;
     }
 
-    RC_LogWarn("Unknown media command: %s", cmd);
+    RC_LogWarn("未知媒体指令：%s", cmd);
 }
 
 typedef struct
@@ -410,7 +410,7 @@ bool RC_ActionSetBrightnessPercent(int percent0to100)
 
     EnumDisplayMonitors(NULL, NULL, enum_monitors_set_brightness, (LPARAM)&ctx);
     if (!ctx.ok)
-        RC_LogWarn("SetBrightness failed or unsupported (percent=%d)", v);
+        RC_LogWarn("设置亮度失败或不支持 (percent=%d)", v);
     return ctx.ok;
 }
 
@@ -471,7 +471,7 @@ done:
         pEnum->lpVtbl->Release(pEnum);
     if (coInit)
         CoUninitialize();
-    RC_LogError("SetVolume failed (percent=%d)", v);
+    RC_LogError("设置音量失败 (percent=%d)", v);
     return false;
 }
 
@@ -628,7 +628,7 @@ static bool create_process_ex(const wchar_t *exe, const wchar_t *args, bool hide
 
     if (!ok)
     {
-        RC_LogError("CreateProcess failed (exe=%ls, args=%ls, err=%lu)", exe ? exe : L"", (args && *args) ? args : L"", (unsigned long)err);
+        RC_LogError("CreateProcess 失败 (exe=%ls, args=%ls, err=%lu)", exe ? exe : L"", (args && *args) ? args : L"", (unsigned long)err);
         return false;
     }
 
@@ -821,7 +821,7 @@ static bool create_process_capture_output(const wchar_t *exe,
 
     if (!ok)
     {
-        RC_LogError("CreateProcess(capture) failed (exe=%ls, args=%ls, err=%lu)", exe ? exe : L"", (args && *args) ? args : L"", (unsigned long)err);
+        RC_LogError("CreateProcess(捕获输出) 失败 (exe=%ls, args=%ls, err=%lu)", exe ? exe : L"", (args && *args) ? args : L"", (unsigned long)err);
         CloseHandle(outRead);
         CloseHandle(errRead);
         return false;
@@ -848,7 +848,7 @@ static bool create_process_capture_output(const wchar_t *exe,
             ULONGLONG elapsed = GetTickCount64() - start;
             if (elapsed >= timeoutMs)
             {
-                RC_LogWarn("Process timeout (capture) exe=%ls pid=%lu timeoutMs=%lu", exe ? exe : L"", (unsigned long)pi.dwProcessId,
+                RC_LogWarn("进程超时(捕获输出) exe=%ls pid=%lu timeoutMs=%lu", exe ? exe : L"", (unsigned long)pi.dwProcessId,
                            (unsigned long)timeoutMs);
                 break;
             }
@@ -970,7 +970,7 @@ bool RC_ActionSetBrightnessTwinkleTrayPercentUtf8(int percent0to100,
     {
         if (!tval || !*tval)
         {
-            RC_LogWarn("Twinkle Tray: target_value is empty for monitor_id");
+            RC_LogWarn("Twinkle Tray：monitor_id 模式下 target_value 为空");
             free(exeW);
             return false;
         }
@@ -1017,18 +1017,18 @@ bool RC_ActionSetBrightnessTwinkleTrayPercentUtf8(int percent0to100,
     DWORD exitCode = 0;
     char *outTxt = NULL;
     char *errTxt = NULL;
-    RC_LogInfo("Twinkle Tray brightness: %d", v);
+    RC_LogInfo("Twinkle Tray 亮度：%d", v);
     bool ok = create_process_capture_output(exeW, argsW, 15000, &exitCode, &outTxt, &errTxt);
 
     if (ok)
-        RC_LogInfo("Twinkle Tray OK (exit=%lu)", (unsigned long)exitCode);
+        RC_LogInfo("Twinkle Tray 成功 (exit=%lu)", (unsigned long)exitCode);
     else
-        RC_LogWarn("Twinkle Tray failed (exit=%lu)", (unsigned long)exitCode);
+        RC_LogWarn("Twinkle Tray 失败 (exit=%lu)", (unsigned long)exitCode);
 
     if (outTxt && *outTxt)
-        RC_LogInfo("Twinkle Tray stdout: %s", outTxt);
+        RC_LogInfo("Twinkle Tray 标准输出：%s", outTxt);
     if (errTxt && *errTxt)
-        RC_LogWarn("Twinkle Tray stderr: %s", errTxt);
+        RC_LogWarn("Twinkle Tray 错误输出：%s", errTxt);
 
     free(outTxt);
     free(errTxt);
@@ -1127,7 +1127,7 @@ bool RC_ActionRunPowershellCommandUtf8(const char *commandUtf8, bool hideWindow,
 
     DWORD pid = 0;
     bool ok = create_process_ex(L"powershell.exe", args, hideWindow, newConsole, true, &pid);
-    RC_LogInfo("PowerShell started (pid=%lu)", (unsigned long)pid);
+    RC_LogInfo("PowerShell 已启动 (pid=%lu)", (unsigned long)pid);
 
     free(escaped);
     free(wcmd);
@@ -1184,7 +1184,7 @@ bool RC_ActionRunPowershellCommandUtf8Ex(const char *commandUtf8, bool hideWindo
     bool ok = create_process_ex(L"powershell.exe", args, hideWindow, newConsole, true, &pid);
     if (outPid)
         *outPid = (unsigned long)pid;
-    RC_LogInfo("PowerShell started (pid=%lu)", (unsigned long)pid);
+    RC_LogInfo("PowerShell 已启动 (pid=%lu)", (unsigned long)pid);
 
     free(escaped);
     free(wcmd);
@@ -1230,7 +1230,7 @@ bool RC_ActionKillByPathUtf8(const char *pathUtf8)
     _snwprintf(args, (int)(sizeof(args) / sizeof(args[0])), L"/F /IM \"%s\"", wbase);
     DWORD pid = 0;
     bool ok = create_process_ex(L"taskkill.exe", args, true, false, false, &pid);
-    RC_LogInfo("taskkill started (pid=%lu) for %s", (unsigned long)pid, base);
+    RC_LogInfo("taskkill 已启动 (pid=%lu) 目标=%s", (unsigned long)pid, base);
 
     free(wbase);
     free(tmp);
@@ -1266,13 +1266,13 @@ bool RC_ActionTaskkillPidTree(unsigned long pid)
     char *errTxt = NULL;
     bool ok = create_process_capture_output(L"taskkill.exe", args, 15000, &exitCode, &outTxt, &errTxt);
     if (ok)
-        RC_LogInfo("taskkill /F /T OK (pid=%lu)", pid);
+        RC_LogInfo("taskkill /F /T 成功 (pid=%lu)", pid);
     else
-        RC_LogWarn("taskkill /F /T failed (pid=%lu, exit=%lu)", pid, (unsigned long)exitCode);
+        RC_LogWarn("taskkill /F /T 失败 (pid=%lu, exit=%lu)", pid, (unsigned long)exitCode);
     if (outTxt && *outTxt)
-        RC_LogInfo("taskkill stdout: %s", outTxt);
+        RC_LogInfo("taskkill 标准输出：%s", outTxt);
     if (errTxt && *errTxt)
-        RC_LogWarn("taskkill stderr: %s", errTxt);
+        RC_LogWarn("taskkill 错误输出：%s", errTxt);
     free(outTxt);
     free(errTxt);
     return ok;
@@ -1290,13 +1290,13 @@ bool RC_ActionTaskkillPid(unsigned long pid)
     char *errTxt = NULL;
     bool ok = create_process_capture_output(L"taskkill.exe", args, 15000, &exitCode, &outTxt, &errTxt);
     if (ok)
-        RC_LogInfo("taskkill OK (pid=%lu)", pid);
+        RC_LogInfo("taskkill 成功 (pid=%lu)", pid);
     else
-        RC_LogWarn("taskkill failed (pid=%lu, exit=%lu)", pid, (unsigned long)exitCode);
+        RC_LogWarn("taskkill 失败 (pid=%lu, exit=%lu)", pid, (unsigned long)exitCode);
     if (outTxt && *outTxt)
-        RC_LogInfo("taskkill stdout: %s", outTxt);
+        RC_LogInfo("taskkill 标准输出：%s", outTxt);
     if (errTxt && *errTxt)
-        RC_LogWarn("taskkill stderr: %s", errTxt);
+        RC_LogWarn("taskkill 错误输出：%s", errTxt);
     free(outTxt);
     free(errTxt);
     return ok;
@@ -1314,13 +1314,13 @@ bool RC_ActionTaskkillPidForce(unsigned long pid)
     char *errTxt = NULL;
     bool ok = create_process_capture_output(L"taskkill.exe", args, 15000, &exitCode, &outTxt, &errTxt);
     if (ok)
-        RC_LogInfo("taskkill /F OK (pid=%lu)", pid);
+        RC_LogInfo("taskkill /F 成功 (pid=%lu)", pid);
     else
-        RC_LogWarn("taskkill /F failed (pid=%lu, exit=%lu)", pid, (unsigned long)exitCode);
+        RC_LogWarn("taskkill /F 失败 (pid=%lu, exit=%lu)", pid, (unsigned long)exitCode);
     if (outTxt && *outTxt)
-        RC_LogInfo("taskkill stdout: %s", outTxt);
+        RC_LogInfo("taskkill 标准输出：%s", outTxt);
     if (errTxt && *errTxt)
-        RC_LogWarn("taskkill stderr: %s", errTxt);
+        RC_LogWarn("taskkill 错误输出：%s", errTxt);
     free(outTxt);
     free(errTxt);
     return ok;
@@ -1338,12 +1338,12 @@ bool RC_ActionTerminatePid(unsigned long pid)
     HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, (DWORD)pid);
     if (!h)
     {
-        RC_LogWarn("OpenProcess(PROCESS_TERMINATE) failed pid=%lu err=%lu", pid, GetLastError());
+        RC_LogWarn("OpenProcess(PROCESS_TERMINATE) 失败 pid=%lu err=%lu", pid, GetLastError());
         return false;
     }
     BOOL ok = TerminateProcess(h, 1);
     if (!ok)
-        RC_LogWarn("TerminateProcess failed pid=%lu err=%lu", pid, GetLastError());
+        RC_LogWarn("TerminateProcess 失败 pid=%lu err=%lu", pid, GetLastError());
     CloseHandle(h);
     return ok ? true : false;
 }
@@ -1369,7 +1369,7 @@ bool RC_ActionSendCtrlBreak(unsigned long pid)
 
     if (!AttachConsole((DWORD)pid))
     {
-        RC_LogWarn("AttachConsole failed pid=%lu err=%lu", pid, GetLastError());
+        RC_LogWarn("AttachConsole 失败 pid=%lu err=%lu", pid, GetLastError());
         return false;
     }
 
@@ -1378,7 +1378,7 @@ bool RC_ActionSendCtrlBreak(unsigned long pid)
 
     BOOL ok = GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, (DWORD)pid);
     if (!ok)
-        RC_LogWarn("GenerateConsoleCtrlEvent failed pid=%lu err=%lu", pid, GetLastError());
+        RC_LogWarn("GenerateConsoleCtrlEvent 失败 pid=%lu err=%lu", pid, GetLastError());
 
     Sleep(200);
     FreeConsole();
@@ -1403,7 +1403,7 @@ bool RC_ActionSendCtrlBreakNoAttach(unsigned long pid)
 
     BOOL ok = GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, (DWORD)pid);
     if (!ok)
-        RC_LogWarn("GenerateConsoleCtrlEvent(no-attach) failed pid=%lu err=%lu", pid, GetLastError());
+        RC_LogWarn("GenerateConsoleCtrlEvent(不附加控制台) 失败 pid=%lu err=%lu", pid, GetLastError());
 
     Sleep(200);
     FreeConsole();
@@ -1420,7 +1420,7 @@ bool RC_ActionServiceStartUtf8(const char *serviceNameUtf8)
         free(w);
         return false;
     }
-    RC_LogInfo("Service start: %S", serviceNameUtf8);
+    RC_LogInfo("服务启动：%S", serviceNameUtf8);
     bool ok = run_sc_command(L"start", w);
     free(w);
     return ok;
@@ -1435,7 +1435,7 @@ bool RC_ActionServiceStopUtf8(const char *serviceNameUtf8)
         free(w);
         return false;
     }
-    RC_LogInfo("Service stop: %S", serviceNameUtf8);
+    RC_LogInfo("服务停止：%S", serviceNameUtf8);
     bool ok = run_sc_command(L"stop", w);
     free(w);
     return ok;
@@ -1580,7 +1580,7 @@ bool RC_ActionHotkey(const char *actionType, const char *actionValue, int charDe
         return true;
     if (_stricmp(t, "keyboard") != 0)
     {
-        RC_LogWarn("Hotkey unsupported type: %s", t);
+        RC_LogWarn("热键不支持的类型：%s", t);
         return false;
     }
 

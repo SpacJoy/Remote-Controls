@@ -899,7 +899,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
 
     if (!is_on_off_payload(payloadUtf8))
     {
-        RC_LogWarn("Ignored payload: %s (topic=%s)", payloadUtf8, topicUtf8);
+        RC_LogWarn("已忽略 payload：%s (topic=%s)", payloadUtf8, topicUtf8);
         return;
     }
 
@@ -908,7 +908,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
     bool hasValue = false;
     if (!parse_percent_payload_strict(payloadUtf8, &base, &value, &hasValue))
     {
-        RC_LogWarn("Invalid payload format: %s (topic=%s)", payloadUtf8, topicUtf8);
+        RC_LogWarn("payload 格式无效：%s (topic=%s)", payloadUtf8, topicUtf8);
         return;
     }
 
@@ -921,14 +921,14 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
 
         if (_stricmp(base, "on") == 0)
         {
-            RC_LogInfo("App on: %s => %s", a->topic, a->onPath);
+            RC_LogInfo("应用开启：%s => %s", a->topic, a->onPath);
             RC_ActionRunProgramUtf8(a->onPath);
         }
         else if (_stricmp(base, "off") == 0)
         {
             if (a->offPath && *a->offPath)
             {
-                RC_LogInfo("App off(custom): %s => %s", a->topic, a->offPath);
+                RC_LogInfo("应用关闭(自定义)：%s => %s", a->topic, a->offPath);
                 RC_ActionRunProgramUtf8(a->offPath);
             }
             else
@@ -936,11 +936,11 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                 const char *preset = (a->offPreset && *a->offPreset) ? a->offPreset : "kill";
                 if (_stricmp(preset, "none") == 0 || _stricmp(preset, "custom") == 0)
                 {
-                    RC_LogInfo("App off preset=none: %s", a->topic);
+                    RC_LogInfo("应用关闭预设=none：%s", a->topic);
                 }
                 else
                 {
-                    RC_LogInfo("App off(kill): %s => %s", a->topic, a->onPath);
+                    RC_LogInfo("应用关闭(kill)：%s => %s", a->topic, a->onPath);
                     RC_ActionKillByPathUtf8(a->onPath);
                 }
             }
@@ -948,7 +948,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         else
         {
             // For matched app topics, ignore unknown payloads.
-            RC_LogInfo("Ignored app payload: %s (topic=%s)", payloadUtf8, a->topic);
+            RC_LogInfo("已忽略应用 payload：%s (topic=%s)", payloadUtf8, a->topic);
         }
         return;
     }
@@ -971,14 +971,14 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         {
             if (hasValue && (value < 0 || value > 100))
             {
-                RC_LogWarn("Command percent out of range 0-100: %d (topic=%s)", value, c->topic);
+                RC_LogWarn("命令百分比超出范围 0-100：%d (topic=%s)", value, c->topic);
                 return;
             }
             // 命令选择优先级：on_value 优先，其次 fallback 到 legacy value。
             const char *raw = (c->onValue && *c->onValue) ? c->onValue : c->value;
             char *applied = apply_value_placeholder(raw, hasValue, value);
             char *norm = normalize_powershell_command(applied);
-            RC_LogInfo("Command on: %s (window=%s)", c->topic, window);
+            RC_LogInfo("命令开启：%s (window=%s)", c->topic, window);
             unsigned long pid = 0;
             bool ok = RC_ActionRunPowershellCommandUtf8Ex(norm, hide, keep, &pid);
             if (ok && pid != 0)
@@ -996,14 +996,14 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         {
             if (hasValue && (value < 0 || value > 100))
             {
-                RC_LogWarn("Command percent out of range 0-100: %d (topic=%s)", value, c->topic);
+                RC_LogWarn("命令百分比超出范围 0-100：%d (topic=%s)", value, c->topic);
                 return;
             }
             if (c->offValue && *c->offValue)
             {
                 char *applied = apply_value_placeholder(c->offValue, hasValue, value);
                 char *norm = normalize_powershell_command(applied);
-                RC_LogInfo("Command off(custom): %s (window=%s)", c->topic, window);
+                RC_LogInfo("命令关闭(自定义)：%s (window=%s)", c->topic, window);
                 unsigned long pid = 0;
                 bool ok = RC_ActionRunPowershellCommandUtf8Ex(norm, hide, keep, &pid);
                 if (ok && pid != 0)
@@ -1025,18 +1025,18 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
 
                 if (_stricmp(preset, "none") == 0)
                 {
-                    RC_LogInfo("Command off preset=none: %s", c->topic);
+                    RC_LogInfo("命令关闭预设=none：%s", c->topic);
                 }
                 else if (_stricmp(preset, "custom") == 0)
                 {
-                    RC_LogWarn("Command off preset=custom but empty off_value: %s", c->topic);
+                    RC_LogWarn("命令关闭预设=custom 但 off_value 为空：%s", c->topic);
                 }
                 else
                 {
                     RcCmdProc *p = cmd_proc_get_or_create(r, c->topic);
                     if (!p)
                     {
-                        RC_LogWarn("Command off preset=%s but no registered pid: %s", preset, c->topic);
+                        RC_LogWarn("命令关闭预设=%s 但没有已登记的 PID：%s", preset, c->topic);
                     }
                     else
                     {
@@ -1045,13 +1045,13 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                         cmd_proc_cleanup_dead(p);
                         if (p->count == 0)
                         {
-                            RC_LogInfo("Command[%s] all recorded PIDs already exited", c->topic);
+                            RC_LogInfo("命令[%s] 记录的所有 PID 都已退出", c->topic);
                         }
                         else if (_stricmp(preset, "interrupt") == 0)
                         {
                             // Python: interrupt only the latest alive pid.
                             unsigned long targetPid = p->pids[p->count - 1];
-                            RC_LogInfo("Command[%s] interrupt latest PID=%lu", c->topic, targetPid);
+                            RC_LogInfo("命令[%s] 中断最新 PID=%lu", c->topic, targetPid);
 
                             bool sent = RC_ActionSendCtrlBreak(targetPid);
                             if (!sent)
@@ -1072,19 +1072,19 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                         else
                         {
                             // Default: kill all recorded pids.
-                            RC_LogInfo("Command off kill: %s (pids=%d)", c->topic, p->count);
+                            RC_LogInfo("命令关闭(kill)：%s (pids=%d)", c->topic, p->count);
                             for (int k = 0; k < p->count; k++)
                             {
                                 unsigned long pid = p->pids[k];
-                                RC_LogInfo("Command[%s] kill PID=%lu", c->topic, pid);
+                                RC_LogInfo("命令[%s] kill PID=%lu", c->topic, pid);
                                 if (RC_ActionTerminatePid(pid))
                                 {
-                                    RC_LogInfo("Command[%s] terminate OK PID=%lu", c->topic, pid);
+                                    RC_LogInfo("命令[%s] 终止成功 PID=%lu", c->topic, pid);
                                 }
                                 else
                                 {
                                     bool ok = RC_ActionTaskkillPidForce(pid);
-                                    RC_LogInfo("Command[%s] taskkill /F %s PID=%lu", c->topic, ok ? "OK" : "FAILED", pid);
+                                    RC_LogInfo("命令[%s] taskkill /F %s PID=%lu", c->topic, ok ? "成功" : "失败", pid);
                                 }
                             }
                             // kill 分支执行完毕后清空表：避免下一次 off 误处理旧 pid。
@@ -1096,7 +1096,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         }
         else
         {
-            RC_LogInfo("Ignored command payload: %s (topic=%s)", payloadUtf8, c->topic);
+            RC_LogInfo("已忽略命令 payload：%s (topic=%s)", payloadUtf8, c->topic);
         }
         return;
     }
@@ -1110,7 +1110,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
 
         if (_stricmp(base, "on") == 0)
         {
-            RC_LogInfo("Service start: %s => %s", s->topic, s->serviceName);
+            RC_LogInfo("服务启动：%s => %s", s->topic, s->serviceName);
             RC_ActionServiceStartUtf8(s->serviceName);
         }
         else if (_stricmp(base, "off") == 0)
@@ -1118,7 +1118,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
             const char *preset = (s->offPreset && *s->offPreset) ? s->offPreset : "stop";
             if (_stricmp(preset, "none") == 0)
             {
-                RC_LogInfo("Service off preset=none: %s", s->topic);
+                RC_LogInfo("服务关闭预设=none：%s", s->topic);
             }
             else if (_stricmp(preset, "custom") == 0)
             {
@@ -1126,25 +1126,25 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                 {
                     char *applied = apply_value_placeholder(s->offValue, hasValue, value);
                     char *norm = normalize_powershell_command(applied);
-                    RC_LogInfo("Service off custom command: %s", s->topic);
+                    RC_LogInfo("服务关闭：执行自定义命令：%s", s->topic);
                     RC_ActionRunPowershellCommandUtf8(norm, false, true);
                     free(norm);
                     free(applied);
                 }
                 else
                 {
-                    RC_LogWarn("Service off preset=custom but empty: %s", s->topic);
+                    RC_LogWarn("服务关闭预设=custom 但命令为空：%s", s->topic);
                 }
             }
             else
             {
-                RC_LogInfo("Service stop: %s => %s", s->topic, s->serviceName);
+                RC_LogInfo("服务停止：%s => %s", s->topic, s->serviceName);
                 RC_ActionServiceStopUtf8(s->serviceName);
             }
         }
         else
         {
-            RC_LogInfo("Ignored service payload: %s (topic=%s)", payloadUtf8, s->topic);
+            RC_LogInfo("已忽略服务 payload：%s (topic=%s)", payloadUtf8, s->topic);
         }
         return;
     }
@@ -1166,7 +1166,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         else if (_stricmp(base, "off") == 0)
             RC_ActionPerformComputer(offAction ? offAction : "none", offDelay);
         else
-            RC_LogWarn("Unknown Computer command: %s", payloadUtf8);
+            RC_LogWarn("未知电脑指令：%s", payloadUtf8);
         return;
     }
 
@@ -1185,7 +1185,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                 bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
                 if (RC_ActionSetBrightnessTwinkleTrayPercentUtf8(0, path, tmode, tval, overlay, panel))
                     return;
-                RC_LogWarn("Twinkle Tray brightness failed; fallback to DDC/CI");
+                RC_LogWarn("Twinkle Tray 亮度调整失败；回退到 DDC/CI");
             }
             RC_ActionSetBrightnessPercent(0);
         }
@@ -1195,7 +1195,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
             {
                 if (value < 0 || value > 100)
                 {
-                    RC_LogWarn("Brightness percent out of range 0-100: %d (topic=%s)", value, r->topicScreen);
+                    RC_LogWarn("亮度百分比超出范围 0-100：%d (topic=%s)", value, r->topicScreen);
                     return;
                 }
 
@@ -1208,7 +1208,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                     bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
                     if (RC_ActionSetBrightnessTwinkleTrayPercentUtf8(value, path, tmode, tval, overlay, panel))
                         return;
-                    RC_LogWarn("Twinkle Tray brightness failed; fallback to DDC/CI");
+                    RC_LogWarn("Twinkle Tray 亮度调整失败；回退到 DDC/CI");
                 }
 
                 RC_ActionSetBrightnessPercent(value);
@@ -1224,14 +1224,14 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                     bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
                     if (RC_ActionSetBrightnessTwinkleTrayPercentUtf8(100, path, tmode, tval, overlay, panel))
                         return;
-                    RC_LogWarn("Twinkle Tray brightness failed; fallback to DDC/CI");
+                    RC_LogWarn("Twinkle Tray 亮度调整失败；回退到 DDC/CI");
                 }
 
                 RC_ActionSetBrightnessPercent(100);
             }
         }
         else
-            RC_LogWarn("Unknown screen command: %s", payloadUtf8);
+            RC_LogWarn("未知屏幕指令：%s", payloadUtf8);
         return;
     }
 
@@ -1245,7 +1245,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
             {
                 if (value < 0 || value > 100)
                 {
-                    RC_LogWarn("Volume percent out of range 0-100: %d (topic=%s)", value, r->topicVolume);
+                    RC_LogWarn("音量百分比超出范围 0-100：%d (topic=%s)", value, r->topicVolume);
                     return;
                 }
                 RC_ActionSetVolumePercent(value);
@@ -1256,7 +1256,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         else if (_stricmp(base, "pause") == 0)
             RC_ActionSetVolumePercent(0);
         else
-            RC_LogWarn("Unknown volume command: %s", payloadUtf8);
+            RC_LogWarn("未知音量指令：%s", payloadUtf8);
         return;
     }
 
@@ -1282,7 +1282,7 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                 RC_ActionPerformSleep(offAction ? offAction : "none");
         }
         else
-            RC_LogWarn("Unknown sleep command: %s", payloadUtf8);
+            RC_LogWarn("未知睡眠指令：%s", payloadUtf8);
         return;
     }
 
@@ -1304,9 +1304,9 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         else if (_stricmp(base, "off") == 0)
             RC_ActionHotkey(h->offType, h->offValue, h->charDelayMs);
         else
-            RC_LogInfo("Ignored hotkey payload: %s (topic=%s)", payloadUtf8, h->topic);
+            RC_LogInfo("已忽略热键 payload：%s (topic=%s)", payloadUtf8, h->topic);
         return;
     }
 
-    RC_LogWarn("Unknown topic: %s", topicUtf8);
+    RC_LogWarn("未知主题：%s", topicUtf8);
 }

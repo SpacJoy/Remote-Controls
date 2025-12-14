@@ -277,7 +277,7 @@ static unsigned __stdcall main_tray_thread(void *arg)
 
     if (is_process_running_w(L"RC-tray.exe"))
     {
-        RC_LogInfo("RC-tray.exe detected; skip fallback main tray");
+        RC_LogInfo("检测到 RC-tray.exe；跳过主程序自带托盘");
         free(p);
         return 0;
     }
@@ -291,7 +291,7 @@ static unsigned __stdcall main_tray_thread(void *arg)
 
     if (!RegisterClassExW(&wc))
     {
-        RC_LogWarn("RegisterClassExW failed for main fallback tray");
+        RC_LogWarn("主程序自带托盘 RegisterClassExW 失败");
         free(p);
         return 0;
     }
@@ -319,7 +319,7 @@ static unsigned __stdcall main_tray_thread(void *arg)
 
     if (!hWnd)
     {
-        RC_LogWarn("CreateWindowExW failed for main fallback tray");
+        RC_LogWarn("主程序自带托盘 CreateWindowExW 失败");
         free(p);
         return 0;
     }

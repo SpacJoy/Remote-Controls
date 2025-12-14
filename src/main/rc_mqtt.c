@@ -104,7 +104,7 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
     int rc = MQTTClient_create(&client, address, clientId, MQTTCLIENT_PERSISTENCE_NONE, NULL);
     if (rc != MQTTCLIENT_SUCCESS)
     {
-        RC_LogError("Paho MQTTClient_create failed rc=%d", rc);
+        RC_LogError("Paho MQTTClient_create 失败 rc=%d", rc);
         return;
     }
 
@@ -131,14 +131,14 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
      */
     while (!shouldStop || !*shouldStop)
     {
-        RC_LogInfo("MQTT(Paho) connecting to %s", address);
+        RC_LogInfo("MQTT(Paho) 正在连接 %s", address);
         rc = MQTTClient_connect(client, &conn_opts);
         if (rc != MQTTCLIENT_SUCCESS)
         {
-            RC_LogWarn("MQTT(Paho) connect failed rc=%d. retry in %ds", rc, backoff);
+            RC_LogWarn("MQTT(Paho) 连接失败 rc=%d，%d 秒后重试", rc, backoff);
             if (is_fatal_auth_failure(rc))
             {
-                RC_LogError("MQTT(Paho) auth failure rc=%d", rc);
+                RC_LogError("MQTT(Paho) 鉴权失败 rc=%d", rc);
                 break;
             }
             // 退避策略：指数增长并封顶（避免快速重连导致刷屏/资源浪费）。
@@ -160,9 +160,9 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
                 continue;
             int subrc = MQTTClient_subscribe(client, topics[i], 0);
             if (subrc == MQTTCLIENT_SUCCESS)
-                RC_LogInfo("MQTT(Paho) subscribe: %s", topics[i]);
+                RC_LogInfo("MQTT(Paho) 订阅：%s", topics[i]);
             else
-                RC_LogWarn("MQTT(Paho) subscribe failed rc=%d topic=%s", subrc, topics[i]);
+                RC_LogWarn("MQTT(Paho) 订阅失败 rc=%d topic=%s", subrc, topics[i]);
         }
 
         /*
@@ -179,7 +179,7 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
 #ifdef MQTTClient_isConnected
             if (!MQTTClient_isConnected(client))
             {
-                RC_LogWarn("MQTT(Paho) disconnected");
+                RC_LogWarn("MQTT(Paho) 已断开连接");
                 break;
             }
 #endif
@@ -191,7 +191,7 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
             int rcvrc = MQTTClient_receive(client, &topicName, &topicLen, &message, 1000);
             if (rcvrc != MQTTCLIENT_SUCCESS)
             {
-                RC_LogWarn("MQTT(Paho) receive failed rc=%d", rcvrc);
+                RC_LogWarn("MQTT(Paho) 接收失败 rc=%d", rcvrc);
                 break;
             }
 
@@ -209,7 +209,7 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
                 break;
             }
 
-            RC_LogInfo("MQTT recv topic='%s' payload='%s'", topicName ? topicName : "", payload);
+            RC_LogInfo("收到 MQTT 消息 topic='%s' payload='%s'", topicName ? topicName : "", payload);
             RC_RouterHandle(router, topicName ? topicName : "", payload);
 
             free(payload);
@@ -700,7 +700,7 @@ static bool mqtt_process_one_packet(MqttConn *c, RC_Router *router)
             return false;
         }
 
-        RC_LogInfo("MQTT recv topic='%s' payload='%s'", topic, payload);
+        RC_LogInfo("收到 MQTT 消息 topic='%s' payload='%s'", topic, payload);
         RC_RouterHandle(router, topic, payload);
 
         free(payload);
@@ -743,7 +743,7 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
     {
-        RC_LogError("WSAStartup failed");
+        RC_LogError("WSAStartup 初始化失败");
         return;
     }
 
@@ -758,12 +758,12 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
      */
     while (!shouldStop || !*shouldStop)
     {
-        RC_LogInfo("MQTT connecting to %s:%d...", cfg->brokerHost ? cfg->brokerHost : "", cfg->port);
+        RC_LogInfo("MQTT 正在连接到 %s:%d...", cfg->brokerHost ? cfg->brokerHost : "", cfg->port);
 
         SOCKET s = tcp_connect_utf8(cfg->brokerHost, cfg->port);
         if (s == INVALID_SOCKET)
         {
-            RC_LogWarn("MQTT connect failed. retry in %ds", backoff);
+            RC_LogWarn("MQTT 连接失败，%d 秒后重试", backoff);
             Sleep((DWORD)backoff * 1000);
             if (backoff < backoffMax)
                 backoff = (backoff < backoffMax / 2) ? backoff * 2 : backoffMax;
@@ -782,7 +782,7 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
 
         if (!mqtt_send_connect(&c, cfg))
         {
-            RC_LogWarn("MQTT CONNECT send failed");
+            RC_LogWarn("MQTT CONNECT 发送失败");
             closesocket_safe(&s);
             continue;
         }
@@ -790,14 +790,14 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
         int rc = -1;
         if (!mqtt_wait_connack(&c, &rc))
         {
-            RC_LogWarn("MQTT CONNACK failed");
+            RC_LogWarn("MQTT CONNACK 失败");
             closesocket_safe(&s);
             continue;
         }
 
         if (rc != 0)
         {
-            RC_LogError("MQTT connect refused (code=%d)", rc);
+            RC_LogError("MQTT 连接被拒绝 (code=%d)", rc);
             // Match python behavior: auth failure => stop retrying.
             if (rc == 5)
             {
@@ -816,7 +816,7 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
             if (!topics[i] || !*topics[i])
                 continue;
             mqtt_send_subscribe_one(&c, topics[i]);
-            RC_LogInfo("MQTT subscribe: %s", topics[i]);
+            RC_LogInfo("MQTT 订阅：%s", topics[i]);
         }
 
         // Main receive loop
@@ -838,7 +838,7 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
             {
                 if (!mqtt_send_pingreq(&c))
                 {
-                    RC_LogWarn("MQTT ping failed");
+                    RC_LogWarn("MQTT 心跳(PING)失败");
                     break;
                 }
             }
@@ -851,13 +851,13 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
 
             if (!mqtt_process_one_packet(&c, router))
             {
-                RC_LogWarn("MQTT recv failed");
+                RC_LogWarn("MQTT 接收失败");
                 break;
             }
         }
 
         closesocket_safe(&s);
-        RC_LogWarn("MQTT disconnected. reconnecting...");
+        RC_LogWarn("MQTT 已断开，正在重连...");
     }
 
     WSACleanup();

@@ -202,7 +202,7 @@ static bool OpenGuiIfExists(const wchar_t *appDir)
         HINSTANCE h = ShellExecuteW(NULL, L"open", guiPath, NULL, appDir, SW_SHOWNORMAL);
         if ((INT_PTR)h <= 32)
         {
-            RC_LogError("Failed to open RC-GUI.exe (ShellExecuteW rc=%ld)", (long)(INT_PTR)h);
+            RC_LogError("启动 RC-GUI.exe 失败 (ShellExecuteW rc=%ld)", (long)(INT_PTR)h);
             return false;
         }
         return true;
@@ -274,7 +274,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     SetCurrentDirectoryW(appDir);
 
     RC_LogInit(appDir);
-    RC_LogInfo("RC-main starting (%s)", RC_MAIN_VERSION);
+    RC_LogInfo("RC-main 启动 (%s)", RC_MAIN_VERSION);
 
     wchar_t logsDir[MAX_PATH] = {0};
     BuildPathW(logsDir, MAX_PATH, appDir, L"logs");
@@ -373,7 +373,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     int subCount = 0;
     const char *const *subs = RC_RouterGetTopics(router, &subCount);
     (void)subs;
-    RC_LogInfo("Router ready. topics=%d", subCount);
+    RC_LogInfo("路由已就绪。主题数=%d", subCount);
 
     if (subCount <= 0 && testMode != 1)
     {
@@ -398,7 +398,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     mc.reconnectMinSeconds = 2;
     mc.reconnectMaxSeconds = 30;
 
-    RC_LogInfo("MQTT start: broker=%s port=%d auth_mode=%s", broker, port, authMode);
+    RC_LogInfo("MQTT 启动：broker=%s port=%d auth_mode=%s", broker, port, authMode);
 
     volatile bool stopFlag = false;
 
