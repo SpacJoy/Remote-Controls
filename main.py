@@ -591,7 +591,7 @@ def perform_computer_action(action: str, delay: int = 0) -> None:
         if act == "shutdown":
             d = max(0, int(delay or 0))
             logging.info(f"执行关机操作，延时: {d}s")
-            execute_command(f"shutdown -s -t {d}")
+            execute_command(f"shutdown -s -f -t {d}")
             if d > 0:
                 notify_in_thread(f"电脑将在{d}秒后关机")
             else:
