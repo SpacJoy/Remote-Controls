@@ -64,13 +64,16 @@ python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.
 
 ```text
 Remote-Controls/
-├─ main.py         # 主程序：MQTT、主题执行、权限/自启、内置托盘
-├─ GUI.py          # 图形配置：MQTT/主题/热键/自启
-├─ tray.py         # 托盘程序：管理主程序与状态
+├─ build_main.ps1  # 构建 C 版主程序（输出 bin/RC-main.exe）
+├─ build_tray.ps1  # 构建 C 版托盘（输出 bin/RC-tray.exe）
 ├─ config.json     # 运行配置（GUI 首次保存生成）
 ├─ dome_config.json# 配置示例
 ├─ installer/      # 构建与安装脚本（PyInstaller/Nuitka）
 ├─ res/            # 资源（图标等）
+├─ src/
+│  ├─ main/        # C 版主程序源码
+│  ├─ tray/        # C 版托盘源码
+│  └─ python/      # Python 版源码（当前保留 GUI）
 └─ scripts/        # 清理等辅助脚本
 ```
 

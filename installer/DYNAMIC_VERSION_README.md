@@ -19,7 +19,7 @@
 -   **版本读取逻辑**:
 
     1. 优先使用命令行参数指定的版本号
-    2. 如无参数，自动从 `version_info.py` 读取版本
+    2. 如无参数，自动从 `src/python/version_info.py` 读取版本
     3. 备用默认版本 "0.0.0"
 
 -   **文件处理**:
@@ -50,7 +50,7 @@ pwsh -File installer/build_installer.ps1 "2.2.14"
 
 ```powershell
 pwsh -File installer/build_installer.ps1
-# 将自动从 version_info.py 读取当前版本
+# 将自动从 src/python/version_info.py 读取当前版本
 ```
 
 ## 技术实现

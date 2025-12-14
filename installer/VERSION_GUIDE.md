@@ -10,7 +10,7 @@
 
 ```
 Remote-Controls/
-├── version_info.py          # 版本信息配置文件
+├── src/python/version_info.py          # 版本信息配置文件
 ├── update_version.py        # 版本更新工具
 ├── version_example.py       # 使用示例
 ├── build_installer_new.bat  # 新的打包脚本（批处理）
@@ -49,7 +49,7 @@ Remote-Controls/
 #### 方式三：使用当前版本
 
 ```cmd
-# 直接按回车，使用 version_info.py 中的当前版本
+# 直接按回车，使用 src/python/version_info.py 中的当前版本
 .\build_installer_new.bat
 # 版本号: [直接按回车]
 ```
@@ -149,11 +149,11 @@ GitHub: {program_info['github_url']}
 
 ## 安装包版本
 
-安装脚本 `installer/Remote-Controls.iss` 现在会自动从 `version_info.py` 读取版本号，生成的安装包文件名将包含正确的版本号。
+安装脚本 `installer/Remote-Controls.iss` 现在会自动从 `src/python/version_info.py` 读取版本号，生成的安装包文件名将包含正确的版本号。
 
 ## 注意事项
 
-1. **版本文件**: `version_info.py` 是自动生成的，不要手动编辑
+1. **版本文件**: `src/python/version_info.py` 是自动生成的，不要手动编辑
 2. **兼容性**: 程序中的版本导入使用 try-except，确保在版本文件不存在时也能正常运行
 3. **构建顺序**: 必须先运行版本更新，再进行打包
 4. **文件编码**: 所有版本相关文件使用 UTF-8 编码

@@ -43,6 +43,7 @@ Name: "autostart_tray"; Description: "用户登录时运行托盘（当前用户
 Source: "dist\RC-GUI.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\RC-main.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\RC-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\res\icon.ico"; DestDir: "{app}\res"; Flags: ignoreversion
 ; Optional: ship default config, but do not overwrite user changes
 ; Source: "..\config.json"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
 

@@ -8,8 +8,16 @@ Remote Controls 项目打包脚本 (PowerShell)
 #>
 
 param(
-    [string]$Version = ""
+    [string]$Version = "",
+    [switch]$NoPause
 )
+
+function Pause-IfNeeded {
+    param([string]$Message = '按Enter键退出')
+    if (-not $NoPause) {
+        Read-Host $Message
+    }
+}
 
 Write-Host "========================================"
 Write-Host "Remote Controls 项目打包脚本"
@@ -37,16 +45,35 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $InstallerDir = $ScriptDir
 $Root = (Resolve-Path (Join-Path $ScriptDir '..')).Path
 
-# 检查项目根目录
-if (-not (Test-Path (Join-Path $Root 'main.py'))) {
-    Write-Host "错误：未找到项目根目录或 main.py" -ForegroundColor Red
-    Write-Host "请从任意位置运行：pwsh -File installer/build_installer.ps1 [版本号]" -ForegroundColor Yellow
-    Read-Host "按Enter键退出"
+# 检查项目根目录（C 版主程序/托盘）
+$BuildMainPs1 = (Join-Path $Root 'build_main.ps1')
+$BuildTrayPs1 = (Join-Path $Root 'build_tray.ps1')
+if (-not (Test-Path $BuildMainPs1) -or -not (Test-Path $BuildTrayPs1)) {
+    Write-Host "错误：未找到 C 版构建脚本 build_main.ps1/build_tray.ps1" -ForegroundColor Red
+    Write-Host "请在项目根目录包含 build_main.ps1 与 build_tray.ps1" -ForegroundColor Yellow
+    Pause-IfNeeded
     exit 1
 }
 
 # 切换到项目根目录
 Set-Location $Root
+
+# 兼容：优先使用 pwsh（PowerShell 7+），否则回退到当前会话直接调用
+$Pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+function Invoke-ChildBuildScript {
+    param(
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [Parameter(Mandatory = $false)][string]$CVersion = ""
+    )
+
+    if ($Pwsh) {
+        if ($CVersion) { & $Pwsh.Path -NoProfile -ExecutionPolicy Bypass -File $ScriptPath -Version $CVersion }
+        else { & $Pwsh.Path -NoProfile -ExecutionPolicy Bypass -File $ScriptPath }
+    } else {
+        if ($CVersion) { & $ScriptPath -Version $CVersion }
+        else { & $ScriptPath }
+    }
+}
 
 # 资源绝对路径（避免 --specpath 导致的相对路径解析到 installer/）
 $ResDir   = Join-Path $Root 'res'
@@ -55,8 +82,8 @@ $IconGUI  = Join-Path $ResDir 'icon_GUI.ico'
 $TopIco   = Join-Path $ResDir 'top.ico'
 # 旧版彩蛋图片 (cd1~cd5) 已不再需要打包，托盘改为仅访问远程随机图片接口。
 
-# 检查Python环境
-Write-Host "[1/7] 检查Python环境..." -ForegroundColor Yellow
+# 检查Python环境（仅用于：更新版本信息 + 打包 GUI）
+Write-Host "[1/7] 检查Python环境（仅 GUI/版本脚本）..." -ForegroundColor Yellow
 
 # 优先检查虚拟环境
 $PythonCmd = "python"
@@ -81,7 +108,7 @@ try {
     & $PythonCmd --version | Out-Null
 } catch {
     Write-Host "错误：未找到Python，请确保Python已安装并添加到PATH，或创建虚拟环境" -ForegroundColor Red
-    Read-Host "按Enter键退出"
+    Pause-IfNeeded
     exit 1
 }
 
@@ -90,7 +117,7 @@ try {
     & $PythonCmd -c "import PyInstaller" 2>$null
 } catch {
     Write-Host "错误：PyInstaller未安装，请运行: $PythonCmd -m pip install pyinstaller" -ForegroundColor Red
-    Read-Host "按Enter键退出"
+    Pause-IfNeeded
     exit 1
 }
 Write-Host "Python环境检查完成" -ForegroundColor Green
@@ -102,7 +129,7 @@ if ($Version) {
     & $PythonCmd (Join-Path $InstallerDir 'update_version.py') $Version
     if ($LASTEXITCODE -ne 0) {
         Write-Host "错误：版本信息更新失败" -ForegroundColor Red
-        Read-Host "按Enter键退出"
+        Pause-IfNeeded
         exit 1
     }
     Write-Host "版本已更新为: $Version" -ForegroundColor Green
@@ -117,22 +144,44 @@ if (Test-Path (Join-Path $InstallerDir 'dist')) { Remove-Item -Path (Join-Path $
 if (Test-Path (Join-Path $InstallerDir 'build')) { Remove-Item -Path (Join-Path $InstallerDir 'build') -Recurse -Force }
 Write-Host "完成清理" -ForegroundColor Green
 
-# 打包主程序
+# 为 dist 准备目录
+$DistDir = (Join-Path $InstallerDir 'dist')
+New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $DistDir 'res') | Out-Null
+Copy-Item -LiteralPath $IconIco -Destination (Join-Path $DistDir 'res\icon.ico') -Force
+
+# 构建 C 版主程序（RC-main.exe）
 Write-Host ""
-Write-Host "[4/8] 打包主程序 RC-main.exe..." -ForegroundColor Yellow
-& $PythonCmd -m PyInstaller `
-    -F -n RC-main --windowed --noconfirm `
-    --specpath $InstallerDir `
-    --icon=$IconIco `
-    --add-data "$IconIco;." `
-    --distpath (Join-Path $InstallerDir 'dist') `
-    --workpath (Join-Path $InstallerDir 'build') `
-    main.py
+Write-Host "[4/8] 构建 C 版主程序 RC-main.exe..." -ForegroundColor Yellow
+
+# 统一给 C 构建脚本传入形如 V1.2.3 的版本字符串
+$CVersion = ""
+if ($Version) { $CVersion = $Version } else { $CVersion = "" }
+if (-not $CVersion) {
+    # 与后续 FinalVersion 一致：如果用户未指定版本，则稍后会从 version_info 解析；
+    # 这里先占位，让 build_main/build_tray 自己提示。
+    $CVersion = ""
+}
+if ($CVersion -and -not $CVersion.StartsWith('V')) { $CVersion = "V$CVersion" }
+
+if ($CVersion) {
+    Invoke-ChildBuildScript -ScriptPath $BuildMainPs1 -CVersion $CVersion
+} else {
+    Invoke-ChildBuildScript -ScriptPath $BuildMainPs1
+}
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "错误：主程序打包失败" -ForegroundColor Red
-    Read-Host "按Enter键退出"
+    Write-Host "错误：C 版主程序构建失败" -ForegroundColor Red
+    Pause-IfNeeded
     exit 1
 }
+
+$BuiltMainExe = (Join-Path $Root 'bin\RC-main.exe')
+if (-not (Test-Path $BuiltMainExe)) {
+    Write-Host "错误：未找到构建产物 $BuiltMainExe" -ForegroundColor Red
+    Pause-IfNeeded
+    exit 1
+}
+Copy-Item -LiteralPath $BuiltMainExe -Destination (Join-Path $DistDir 'RC-main.exe') -Force
 
 # 打包GUI程序
 Write-Host ""
@@ -145,29 +194,34 @@ Write-Host "[5/8] 打包GUI程序 RC-GUI.exe..." -ForegroundColor Yellow
     --add-data "$TopIco;res" `
     --distpath (Join-Path $InstallerDir 'dist') `
     --workpath (Join-Path $InstallerDir 'build') `
-    GUI.py
+    src\python\GUI.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：GUI程序打包失败" -ForegroundColor Red
-    Read-Host "按Enter键退出"
+    Pause-IfNeeded
     exit 1
 }
 
-# 打包托盘程序
+# 构建 C 版托盘（RC-tray.exe）
 Write-Host ""
-Write-Host "[6/8] 打包托盘程序 RC-tray.exe..." -ForegroundColor Yellow
-# 托盘现仅使用 icon.ico 与远程随机图片接口，不再打包本地 cdX.* 彩蛋
-& $PythonCmd -m PyInstaller `
-    -F -n RC-tray --windowed --noconfirm `
-    --icon=$IconIco `
-    --add-data "$IconIco;." `
-    --distpath (Join-Path $InstallerDir 'dist') `
-    --workpath (Join-Path $InstallerDir 'build') `
-    tray.py
+Write-Host "[6/8] 构建 C 版托盘程序 RC-tray.exe..." -ForegroundColor Yellow
+if ($CVersion) {
+    Invoke-ChildBuildScript -ScriptPath $BuildTrayPs1 -CVersion $CVersion
+} else {
+    Invoke-ChildBuildScript -ScriptPath $BuildTrayPs1
+}
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "错误：托盘程序打包失败" -ForegroundColor Red
-    Read-Host "按Enter键退出"
+    Write-Host "错误：C 版托盘程序构建失败" -ForegroundColor Red
+    Pause-IfNeeded
     exit 1
 }
+
+$BuiltTrayExe = (Join-Path $Root 'bin\RC-tray.exe')
+if (-not (Test-Path $BuiltTrayExe)) {
+    Write-Host "错误：未找到构建产物 $BuiltTrayExe" -ForegroundColor Red
+    Pause-IfNeeded
+    exit 1
+}
+Copy-Item -LiteralPath $BuiltTrayExe -Destination (Join-Path $DistDir 'RC-tray.exe') -Force
 
 # 检查Inno Setup是否安装
 Write-Host ""
@@ -179,8 +233,8 @@ if ($Version) {
     $FinalVersion = $Version
     Write-Host "  使用指定版本：$FinalVersion" -ForegroundColor Cyan
 } else {
-    # 如果没有指定版本，尝试从 version_info.py 读取
-    $VersionInfoFile = (Join-Path $Root 'version_info.py')
+    # 如果没有指定版本，尝试从 src/python/version_info.py 读取
+    $VersionInfoFile = (Join-Path $Root 'src\python\version_info.py')
     if (Test-Path $VersionInfoFile) {
         $VersionInfoContent = Get-Content -Path $VersionInfoFile -Raw
 
@@ -192,14 +246,14 @@ VERSION\s*=\s*(['"])([^'"']+)\1
         if ($VersionInfoContent -match $regex) {
             # 正则中第2个捕获组为实际版本号
             $FinalVersion = $matches[2]
-            Write-Host "  从 version_info.py 检测到版本：$FinalVersion" -ForegroundColor Cyan
+            Write-Host "  从 src/python/version_info.py 检测到版本：$FinalVersion" -ForegroundColor Cyan
         } else {
             $FinalVersion = "0.0.0"
-            Write-Host "  警告：无法从 version_info.py 解析版本号，使用默认版本：$FinalVersion" -ForegroundColor Yellow
+            Write-Host "  警告：无法从 src/python/version_info.py 解析版本号，使用默认版本：$FinalVersion" -ForegroundColor Yellow
         }
     } else {
         $FinalVersion = "0.0.0"
-        Write-Host "  警告：未找到 version_info.py，使用默认版本：$FinalVersion" -ForegroundColor Yellow
+        Write-Host "  警告：未找到 src/python/version_info.py，使用默认版本：$FinalVersion" -ForegroundColor Yellow
     }
 }
 
@@ -212,7 +266,7 @@ $InnoPath = "C:\Program Files (x86)\Inno Setup 6\iscc.exe"
 if (-not (Test-Path $InnoPath)) {
     Write-Host "错误：未找到 Inno Setup 6，请确保已安装到默认路径" -ForegroundColor Red
     Write-Host "或手动运行：& '$InnoPath' 'installer\Remote-Controls.iss'" -ForegroundColor Yellow
-    Read-Host "按Enter键退出"
+    Pause-IfNeeded
     exit 1
 }
 
@@ -240,7 +294,7 @@ if (Test-Path $VersionTmpFile) {
 
 if ($ExitCode -ne 0) {
     Write-Host "错误：安装包生成失败" -ForegroundColor Red
-    Read-Host "按Enter键退出"
+    Pause-IfNeeded
     exit 1
 }
 
@@ -259,4 +313,4 @@ Write-Host "EXE 文件位置：installer\dist\" -ForegroundColor Cyan
 Write-Host "安装包位置：installer\dist\installer\" -ForegroundColor Cyan
 Write-Host "构建版本：$FinalVersion" -ForegroundColor Green
 Write-Host ""
-Read-Host "按Enter键退出"
+Pause-IfNeeded

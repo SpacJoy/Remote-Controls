@@ -30,12 +30,30 @@ $DistDir      = Join-Path $InstallerDir 'dist'
 $BuildDir     = Join-Path $InstallerDir 'build-nuitka'
 
 # 校验根目录
-if (-not (Test-Path (Join-Path $Root 'main.py'))) {
-  Write-Host "错误：未找到项目根目录或 main.py" -ForegroundColor Red
+$BuildMainPs1 = (Join-Path $Root 'build_main.ps1')
+$BuildTrayPs1 = (Join-Path $Root 'build_tray.ps1')
+if (-not (Test-Path $BuildMainPs1) -or -not (Test-Path $BuildTrayPs1)) {
+  Write-Host "错误：未找到 C 版构建脚本 build_main.ps1/build_tray.ps1" -ForegroundColor Red
   Read-Host "按Enter键退出"
   exit 1
 }
 Set-Location $Root
+
+# 兼容：优先 pwsh（PowerShell 7+），否则回退当前 PowerShell
+$Pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+function Invoke-ChildBuildScript {
+  param(
+    [Parameter(Mandatory = $true)][string]$ScriptPath,
+    [Parameter(Mandatory = $false)][string]$CVersion = ""
+  )
+  if ($Pwsh) {
+    if ($CVersion) { & $Pwsh.Path -NoProfile -ExecutionPolicy Bypass -File $ScriptPath -Version $CVersion }
+    else { & $Pwsh.Path -NoProfile -ExecutionPolicy Bypass -File $ScriptPath }
+  } else {
+    if ($CVersion) { & $ScriptPath -Version $CVersion }
+    else { & $ScriptPath }
+  }
+}
 
 # 选择 Python 解释器（优先已激活的虚拟环境）
 $PythonCmd = "python"
@@ -92,9 +110,9 @@ Write-Host "[3/7] 准备输出目录..." -ForegroundColor Yellow
 if (-not (Test-Path $DistDir)) { New-Item -ItemType Directory -Path $DistDir | Out-Null }
 if (-not (Test-Path $BuildDir)) { New-Item -ItemType Directory -Path $BuildDir | Out-Null }
 
-# 通用 Nuitka 选项
+# 通用 Nuitka 选项（仅用于 GUI）
 # 提取版本号为纯字符串，避免数组展开导致参数断裂
-$verFile = Join-Path $Root 'version_info.py'
+$verFile = Join-Path $Root 'src\python\version_info.py'
 $verRaw  = if (Test-Path $verFile) { Get-Content -Path $verFile -Raw } else { '' }
 $verMatch = [regex]::Match($verRaw, 'VERSION\s*=\s*"([^"]+)"')
 [string]$FileVersion = if ($verMatch.Success) { $verMatch.Groups[1].Value } else { '1.0.0' }
@@ -121,15 +139,35 @@ function Invoke-Nuitka {
   }
 }
 
-# [4/7] RC-main
-Write-Host "[4/7] 打包 RC-main.exe..." -ForegroundColor Yellow
-$MainArgs = $Common + @(
-  '--windows-console-mode=disable',
-  '--windows-icon-from-ico=res\\icon.ico',
-  '--include-data-files=res\\icon.ico=icon.ico',
-  '--output-filename=RC-main.exe'
-)
-Invoke-Nuitka -Entry 'main.py' -Opts $MainArgs
+# [4/7] 构建 C 版 RC-main / RC-tray
+Write-Host "[4/7] 构建 C 版 RC-main.exe / RC-tray.exe..." -ForegroundColor Yellow
+
+$CVersion = ""
+if ($Version) { $CVersion = $Version }
+if ($CVersion -and -not $CVersion.StartsWith('V')) { $CVersion = "V$CVersion" }
+
+if ($CVersion) {
+  Invoke-ChildBuildScript -ScriptPath $BuildMainPs1 -CVersion $CVersion
+} else {
+  Invoke-ChildBuildScript -ScriptPath $BuildMainPs1
+}
+if ($LASTEXITCODE -ne 0) { Write-Host "RC-main C 构建失败" -ForegroundColor Red; Read-Host "按Enter键退出"; exit 1 }
+
+if ($CVersion) {
+  Invoke-ChildBuildScript -ScriptPath $BuildTrayPs1 -CVersion $CVersion
+} else {
+  Invoke-ChildBuildScript -ScriptPath $BuildTrayPs1
+}
+if ($LASTEXITCODE -ne 0) { Write-Host "RC-tray C 构建失败" -ForegroundColor Red; Read-Host "按Enter键退出"; exit 1 }
+
+# 复制 C 构建产物到 dist
+if (-not (Test-Path $DistDir)) { New-Item -ItemType Directory -Path $DistDir | Out-Null }
+Copy-Item -LiteralPath (Join-Path $Root 'bin\RC-main.exe') -Destination (Join-Path $DistDir 'RC-main.exe') -Force
+Copy-Item -LiteralPath (Join-Path $Root 'bin\RC-tray.exe') -Destination (Join-Path $DistDir 'RC-tray.exe') -Force
+
+# 同步 res\icon.ico（C 版主程序/托盘会用到）
+New-Item -ItemType Directory -Force -Path (Join-Path $DistDir 'res') | Out-Null
+Copy-Item -LiteralPath (Join-Path $Root 'res\icon.ico') -Destination (Join-Path $DistDir 'res\icon.ico') -Force
 
 # [5/7] RC-GUI
 Write-Host "[5/7] 打包 RC-GUI.exe..." -ForegroundColor Yellow
@@ -141,22 +179,11 @@ $GuiArgs = $Common + @(
   '--include-data-files=res\\top.ico=res\\top.ico',
   '--output-filename=RC-GUI.exe'
 )
-Invoke-Nuitka -Entry 'GUI.py' -Opts $GuiArgs
+Invoke-Nuitka -Entry 'src\\python\\GUI.py' -Opts $GuiArgs
 
-# [6/7] RC-tray (不再包含本地彩蛋图片，仅 icon.ico)
-Write-Host "[6/7] 打包 RC-tray.exe..." -ForegroundColor Yellow
-$TrayArgs = $Common + @(
-  '--follow-imports',
-  '--windows-console-mode=disable',
-  '--windows-icon-from-ico=res\\icon.ico',
-  '--include-data-files=res\\icon.ico=icon.ico',
-  '--output-filename=RC-tray.exe'
-)
-Invoke-Nuitka -Entry 'tray.py' -Opts $TrayArgs
-
-# 将生成的 EXE 从 build-nuitka 移动到 dist
-Write-Host "[7/7] 整理输出（移动 EXE 到 dist）..." -ForegroundColor Yellow
-$exeMap = @('RC-main.exe','RC-GUI.exe','RC-tray.exe')
+# 将生成的 GUI EXE 从 build-nuitka 移动到 dist
+Write-Host "[6/7] 整理输出（移动 RC-GUI.exe 到 dist）..." -ForegroundColor Yellow
+$exeMap = @('RC-GUI.exe')
 foreach ($name in $exeMap) {
   $src = Join-Path $BuildDir $name
   $dst = Join-Path $DistDir $name
@@ -169,7 +196,7 @@ foreach ($name in $exeMap) {
 }
 
 # [7/7] 生成安装包
-Write-Host "生成安装包..." -ForegroundColor Yellow
+Write-Host "[7/7] 生成安装包..." -ForegroundColor Yellow
 $InnoPath = 'C:\\Program Files (x86)\\Inno Setup 6\\iscc.exe'
 if (-not (Test-Path $InnoPath)) {
   Write-Host "警告：未找到 Inno Setup，已跳过安装包生成。EXE 已在 $DistDir" -ForegroundColor Yellow

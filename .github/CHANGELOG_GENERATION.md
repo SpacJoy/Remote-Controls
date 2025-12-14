@@ -84,7 +84,7 @@
   uses: conventional-changelog/conventional-changelog-action@v3
   with:
       github-token: ${{ secrets.GITHUB_TOKEN }}
-      version-file: version_info.py
+    version-file: src/python/version_info.py
 ```
 
 ## 🎯 定制化选项

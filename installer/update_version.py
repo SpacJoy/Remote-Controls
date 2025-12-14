@@ -151,7 +151,11 @@ if __name__ == "__main__":
 
     # 写入文件
     try:
-        with open('version_info.py', 'w', encoding='utf-8') as f:
+        # Python 代码已迁移到 src/python
+        out_dir = os.path.join('src', 'python')
+        os.makedirs(out_dir, exist_ok=True)
+        out_version_info = os.path.join(out_dir, 'version_info.py')
+        with open(out_version_info, 'w', encoding='utf-8') as f:
             f.write(content)
         
         # 同时创建一个简单的版本文件供 Inno Setup 使用
@@ -159,9 +163,9 @@ if __name__ == "__main__":
         with open('version.txt', 'w', encoding='utf-8') as f:
             f.write(simple_version_content)
         
-        # 额外保障：同步更新 GUI.py / tray.py / main.py 中的 BANBEN 硬编码（如仍存在）
+        # 额外保障：同步更新 GUI.py 中的 BANBEN 硬编码（如仍存在）
         try:
-            targets = ['GUI.py', 'tray.py', 'main.py']
+            targets = [os.path.join('src', 'python', 'GUI.py')]
             for p in targets:
                 if not os.path.exists(p):
                     continue
