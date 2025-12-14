@@ -4,29 +4,54 @@
     python scripts/cleanup.py
 
 将删除常见的构建产物、缓存与临时文件（不会删除源码）。
+说明：当前仅保留 PyInstaller 打包流程（已移除 Nuitka 打包）。
 """
-import shutil
+
+from __future__ import annotations
+
 import os
+import shutil
+from pathlib import Path
 
-ROOT = os.path.dirname(os.path.dirname(__file__))
 
-paths = [
-    # os.path.join(ROOT, '.venv'),
-    os.path.join(ROOT, 'build'),
-    os.path.join(ROOT, 'dist'),
-    os.path.join(ROOT, '__pycache__'),
-    os.path.join(ROOT, 'installer', 'build'),
-    os.path.join(ROOT, 'installer', 'dist'),
-    os.path.join(ROOT, 'installer', 'build-nuitka'),
-    os.path.join(ROOT, 'installer', 'dist-nuitka'),
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _remove_path(p: Path) -> None:
+    if not p.exists():
+        return
+    try:
+        if p.is_dir():
+            print("删除目录：", p)
+            shutil.rmtree(p)
+        else:
+            print("删除文件：", p)
+            p.unlink()
+    except Exception as e:
+        print("删除失败：", p, e)
+
+
+dirs_to_remove = [
+    ROOT / "build",
+    ROOT / "dist",
+    ROOT / "bin",  # C 构建输出
+    ROOT / "__pycache__",
+    ROOT / "logs",
+    ROOT / "installer" / "build",
+    ROOT / "installer" / "dist",
+    ROOT / "installer" / "__pycache__",
+    ROOT / "src" / "python" / "__pycache__",
 ]
 
-for p in paths:
-    if os.path.exists(p):
-        try:
-            print('Removing', p)
-            shutil.rmtree(p)
-        except Exception as e:
-            print('Failed to remove', p, e)
+files_to_remove = [
+    ROOT / "installer" / "version.tmp",
+    ROOT / "installer" / "Remote-Controls-temp.iss",
+]
 
-print('Cleanup finished')
+for p in dirs_to_remove:
+    _remove_path(p)
+
+for p in files_to_remove:
+    _remove_path(p)
+
+print("清理完成")

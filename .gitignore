@@ -1,5 +1,4 @@
 installer/build
-installer/build-nuitka
 /build
 /dist
 *.spec

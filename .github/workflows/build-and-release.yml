@@ -119,33 +119,16 @@ jobs:
                   # 首先尝试从requirements.txt安装
                   pip install -r requirements.txt --force-reinstall
 
-                  # 如果requirements.txt安装失败，手动安装关键依赖
-                  echo "=== 确保关键依赖已安装 ==="
-                  pip install paho-mqtt>=2.1.0 --upgrade
-                  pip install pystray>=0.19.5 --upgrade  
-                  pip install pywin32>=310 --upgrade
-                  pip install psutil>=7.0.0 --upgrade
-                  pip install pillow>=11.2.1 --upgrade
-                  pip install win11toast>=0.35 --upgrade
-                  pip install pyautogui>=0.9.54 --upgrade
-                  pip install wmi>=1.5.1 --upgrade
-                  pip install comtypes>=1.4.10 --upgrade
-                  pip install pycaw>=20240210 --upgrade
-
-                  pip install pyinstaller>=6.13.0
-                  # pip install nuitka>=2.7.12 zstandard>=0.24.0  # 已禁用Nuitka构建
-
                   # 验证关键依赖是否正确安装
                   echo "=== 验证依赖安装 ==="
-                  python -c "import pystray; print('pystray version:', pystray.__version__)"
-                  python -c "import paho.mqtt.client as mqtt; print('paho-mqtt: OK')"
                   python -c "import win32com.client; print('pywin32: OK')"
                   python -c "import tkinter; print('tkinter: OK')"
                   python -c "import psutil; print('psutil: OK')"
-                  python -c "import PIL; print('Pillow: OK')"
+                  python -c "import wmi; print('wmi: OK')"
+                  python -c "import PyInstaller; print('pyinstaller: OK')"
 
                   echo "=== 已安装的包 ==="
-                  pip list | Select-String -Pattern "pystray|paho|pywin32|pillow|psutil|win11toast"
+                  pip list | Select-String -Pattern "pyinstaller|pywin32|psutil|wmi"
 
             - name: Update version files
               if: ${{ github.event.inputs.update_version_files == 'true' || github.event_name == 'push' }}
@@ -261,34 +244,6 @@ jobs:
                   } else {
                     echo "❌ 构建输出目录不存在"
                     exit 1
-                  }
-
-            - name: Build with Nuitka (backup)
-              if: false # 禁用Nuitka构建，仅使用PyInstaller
-              shell: pwsh
-              env:
-                  PYTHONIOENCODING: utf-8
-                  PYTHONUTF8: 1
-                  LC_ALL: en_US.UTF-8
-                  LANG: en_US.UTF-8
-              run: |
-                  # 设置PowerShell输出编码为UTF-8
-                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-
-                  # 显式设置Python环境变量
-                  $env:PYTHONIOENCODING = "utf-8"
-                  $env:PYTHONUTF8 = "1"
-
-                  .\.venv\Scripts\Activate.ps1
-                  $version = "${{ steps.version.outputs.version }}"
-
-                  # 运行Nuitka构建脚本（作为备用）
-                  try {
-                    pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_nuitka.ps1 $version
-                    echo "Nuitka构建完成"
-                  } catch {
-                    echo "Nuitka构建失败，继续使用PyInstaller版本: $_"
                   }
 
             - name: List build artifacts

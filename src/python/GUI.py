@@ -49,7 +49,7 @@ TASK_NAME_MAIN = "Remote Controls Main Service"
 TASK_NAME_TRAY = "Remote Controls Tray"
 # 资源路径（兼容 PyInstaller _MEIPASS）
 def resource_path(relative_path: str) -> str:
-    """返回资源文件的实际路径（兼容 PyInstaller 与 Nuitka）。"""
+    """返回资源文件的实际路径（兼容 PyInstaller）。"""
     bases: list[str] = []
     if hasattr(sys, "_MEIPASS"):
         try:

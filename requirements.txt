@@ -1,11 +1,5 @@
-paho-mqtt>=2.1.0
-wmi>=1.5.1
-pillow>=11.2.1
-pystray>=0.19.5
-setuptools>=80.1.0
-pywin32>=310
+pyinstaller>=6.13.0
 psutil>=7.0.0
-comtypes>=1.4.10
-pycaw>=20240210
-win11toast>=0.35
-pyautogui>=0.9.54
+pywin32>=310
+setuptools>=80.1.0
+wmi>=1.5.1

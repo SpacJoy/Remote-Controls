@@ -68,7 +68,7 @@ Remote-Controls/
 ├─ build_tray.ps1  # 构建 C 版托盘（输出 bin/RC-tray.exe）
 ├─ config.json     # 运行配置（GUI 首次保存生成）
 ├─ dome_config.json# 配置示例
-├─ installer/      # 构建与安装脚本（PyInstaller/Nuitka）
+├─ installer/      # 构建与安装脚本（PyInstaller）
 ├─ res/            # 资源（图标等）
 ├─ src/
 │  ├─ main/        # C 版主程序源码
@@ -111,7 +111,7 @@ python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.
 - 休眠不可用：以管理员运行并启用休眠 `powercfg /hibernate on`
 - 托盘找不到主程序：以管理员运行托盘；或直接运行 `RC-main.exe`
 - 脚本执行策略：PowerShell 需允许脚本 `Set-ExecutionPolicy RemoteSigned`
-- 打包异常：优先使用 `build.ps1`（PyInstaller）；Nuitka 作为备用
+- 打包异常：优先使用 `build.ps1`（PyInstaller）
 
 ---
 

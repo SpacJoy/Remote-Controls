@@ -44,7 +44,7 @@ git push origin V2.2.8
 
 -   **操作系统**: Windows (windows-latest)
 -   **Python 版本**: 3.12.10
--   **打包工具**: PyInstaller (主要) + Nuitka (备用)
+-   **打包工具**: PyInstaller
 -   **依赖管理**: 虚拟环境 + requirements.txt
 
 ## ⚡ 快速测试
