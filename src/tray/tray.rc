@@ -1,0 +1,43 @@
+#include <windows.h>
+
+// -----------------------------------------------------------------------------
+// 远程控制托盘程序 - 资源定义（中文版本）
+//
+// 说明（方案B）：
+// - 本文件包含托盘程序的图标资源与版本信息（VS_VERSION_INFO）。
+// - `StringFileInfo/VarFileInfo` 的语言与代码页需要与目标版本一致；
+//   这里使用简体中文语言 ID（0x0804）以及对应的 Translation 配置。
+// - tray.c 会在运行时加载图标资源（优先外部 ico，其次资源内置）。
+// -----------------------------------------------------------------------------
+
+// 图标资源
+#define IDI_TRAYICON 101
+IDI_TRAYICON ICON "../../res/icon.ico"
+
+// 版本信息
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     2,1,0,0
+PRODUCTVERSION  2,1,0,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404B0" // 中文语言代码
+        BEGIN
+            VALUE "CompanyName",      "Remote Controls"
+            VALUE "FileDescription",  "远程控制托盘程序"
+            VALUE "FileVersion",      "2.1.0.0"
+            VALUE "InternalName",     "RC-tray"
+            VALUE "LegalCopyright",   "Copyright (C) 2025"
+            VALUE "OriginalFilename", "RC-tray.exe"
+            VALUE "ProductName",      "远程控制"
+            VALUE "ProductVersion",   "2.1.0.0"
+        END
+    END    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200 // 中文简体，代码页1252
+    END
+END

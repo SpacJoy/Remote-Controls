@@ -1,14 +1,8 @@
 installer/build
 installer/build-nuitka
-/.vscode
-installer/dist
-installer/dist-nuitka
 /build
-/.vscode
 /dist
 *.spec
-*.gitignore
-*.txt
 *.gitignore
 *.txt
 *.log
@@ -39,3 +33,4 @@ installer/EXE/close_RC_tray.bat
 logs/admin_status.txt
 test.py
 logs/Remote Controls Tray.xml
+installer/dist

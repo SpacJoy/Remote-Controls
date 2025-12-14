@@ -1,0 +1,43 @@
+#include <windows.h>
+
+// -----------------------------------------------------------------------------
+// 远程控制托盘程序 - 资源定义（统一/中性版本）
+//
+// 说明（方案B）：
+// - 用于在不区分语言资源文件时提供一个“中性语言”的版本信息。
+// - Translation 使用 0x0000（Neutral），代码页 1200。
+// -----------------------------------------------------------------------------
+
+// 图标资源 / Icon resource
+#define IDI_TRAYICON 101
+IDI_TRAYICON ICON "../../res/icon.ico"
+
+// 版本信息 / Version information
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     2,1,0,0
+PRODUCTVERSION  2,1,0,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "000004B0" // Neutral language code
+        BEGIN
+            VALUE "CompanyName",      "Remote Controls"
+            VALUE "FileDescription",  "Remote Control Tray Program"
+            VALUE "FileVersion",      "2.1.0.0"
+            VALUE "InternalName",     "RC-tray"
+            VALUE "LegalCopyright",   "Copyright (C) 2025"
+            VALUE "OriginalFilename", "RC-tray.exe"
+            VALUE "ProductName",      "Remote Control"
+            VALUE "ProductVersion",   "2.1.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0000, 1200 // Neutral, code page 1200
+    END
+END

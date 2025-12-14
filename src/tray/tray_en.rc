@@ -1,0 +1,44 @@
+#include <windows.h>
+
+// -----------------------------------------------------------------------------
+// Remote Control Tray - Resource Definitions (English version)
+//
+// Notes (B-level):
+// - Contains the icon resource and Windows version metadata (VS_VERSION_INFO).
+// - The StringFileInfo/VarFileInfo blocks use English language ID (0x0409)
+//   and code page 1252 as the Translation entry.
+// -----------------------------------------------------------------------------
+
+// Icon resource
+#define IDI_TRAYICON 101
+IDI_TRAYICON ICON "../../res/icon.ico"
+
+// Version information
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     2,1,0,0
+PRODUCTVERSION  2,1,0,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0" // English language code (0x0409)
+        BEGIN
+            VALUE "CompanyName",      "Remote Controls"
+            VALUE "FileDescription",  "Remote Control Tray Program"
+            VALUE "FileVersion",      "2.1.0.0"
+            VALUE "InternalName",     "RC-tray"
+            VALUE "LegalCopyright",   "Copyright (C) 2025"
+            VALUE "OriginalFilename", "RC-tray-en.exe"
+            VALUE "ProductName",      "Remote Control"
+            VALUE "ProductVersion",   "2.1.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1252 // English, code page 1252
+    END
+END
