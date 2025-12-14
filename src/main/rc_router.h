@@ -50,6 +50,13 @@ extern "C"
      */
     void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf8);
 
+    /*
+     * 主程序通知（气泡/Toast）：
+     * - 复用与“执行动作通知”一致的通知通道。
+     * - 内部会尊重 config.json 的 notify 开关（RC-GUI 写入）。
+     */
+    void RC_RouterNotifyUtf8(RC_Router *r, const char *titleUtf8, const char *messageUtf8);
+
 #ifdef __cplusplus
 }
 #endif

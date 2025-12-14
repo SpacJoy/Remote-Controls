@@ -137,9 +137,17 @@ static void notify_show_utf8(const char *titleUtf8, const char *messageUtf8)
     Shell_NotifyIconW(NIM_MODIFY, &g_notifyNid);
 }
 
+void RC_RouterNotifyUtf8(RC_Router *r, const char *titleUtf8, const char *messageUtf8)
+{
+    if (!r || !r->notifyEnabled)
+        return;
+    notify_show_utf8(titleUtf8 ? titleUtf8 : "", messageUtf8 ? messageUtf8 : "");
+}
+
 typedef struct
 {
     char *topic;
+    char *displayName; // optional: applicationN_name
     char *onPath;
     char *offPath;
     char *offPreset; // kill/none/custom
@@ -148,7 +156,8 @@ typedef struct
 typedef struct
 {
     char *topic;
-    char *value; // legacy value
+    char *displayName; // optional: commandN_name
+    char *value;       // legacy value
     char *onValue;
     char *offValue;
     char *offPreset; // interrupt/kill/none/custom
@@ -158,6 +167,7 @@ typedef struct
 typedef struct
 {
     char *topic;
+    char *displayName; // optional: serveN_name
     char *serviceName;
     char *offPreset; // stop/none/custom
     char *offValue;
@@ -166,6 +176,7 @@ typedef struct
 typedef struct
 {
     char *topic;
+    char *displayName; // optional: hotkeyN_name
     char *onType;
     char *onValue;
     char *offType;
@@ -323,6 +334,7 @@ static void free_apps(RcApp *arr, int n)
     for (int i = 0; i < n; i++)
     {
         free(arr[i].topic);
+        free(arr[i].displayName);
         free(arr[i].onPath);
         free(arr[i].offPath);
         free(arr[i].offPreset);
@@ -335,6 +347,7 @@ static void free_cmds(RcCommand *arr, int n)
     for (int i = 0; i < n; i++)
     {
         free(arr[i].topic);
+        free(arr[i].displayName);
         free(arr[i].value);
         free(arr[i].onValue);
         free(arr[i].offValue);
@@ -349,6 +362,7 @@ static void free_serves(RcServe *arr, int n)
     for (int i = 0; i < n; i++)
     {
         free(arr[i].topic);
+        free(arr[i].displayName);
         free(arr[i].serviceName);
         free(arr[i].offPreset);
         free(arr[i].offValue);
@@ -361,6 +375,7 @@ static void free_hotkeys(RcHotkey *arr, int n)
     for (int i = 0; i < n; i++)
     {
         free(arr[i].topic);
+        free(arr[i].displayName);
         free(arr[i].onType);
         free(arr[i].onValue);
         free(arr[i].offType);
@@ -647,19 +662,23 @@ static void load_applications(RC_Router *r)
         char offKey[96];
         char offPresetKey[96];
         char dirKey[96];
+        char nameKey[96];
         _snprintf(onKey, sizeof(onKey), "%s_on_value", key);
         _snprintf(offKey, sizeof(offKey), "%s_off_value", key);
         _snprintf(offPresetKey, sizeof(offPresetKey), "%s_off_preset", key);
         _snprintf(dirKey, sizeof(dirKey), "%s_directory%d", key, i); // legacy per-GUI naming
+        _snprintf(nameKey, sizeof(nameKey), "%s_name", key);
 
         const char *onPath = cfg_str(r->config, onKey);
         const char *offPath = cfg_str(r->config, offKey);
         const char *offPreset = cfg_str(r->config, offPresetKey);
         const char *dirLegacy = cfg_str(r->config, dirKey);
+        const char *dispName = cfg_str(r->config, nameKey);
 
         RcApp item;
         ZeroMemory(&item, sizeof(item));
         item.topic = dupstr0(topic);
+        item.displayName = dupstr0(dispName);
         item.onPath = dupstr0((onPath && *onPath) ? onPath : (dirLegacy ? dirLegacy : ""));
         item.offPath = dupstr0(offPath);
         item.offPreset = dupstr0((offPreset && *offPreset) ? offPreset : "kill");
@@ -668,6 +687,7 @@ static void load_applications(RC_Router *r)
         if (!narr)
         {
             free(item.topic);
+            free(item.displayName);
             free(item.onPath);
             free(item.offPath);
             free(item.offPreset);
@@ -707,15 +727,18 @@ static void load_commands(RC_Router *r)
         char offKey[96];
         char offPresetKey[96];
         char windowKey[96];
+        char nameKey[96];
         _snprintf(valueKey, sizeof(valueKey), "%s_value", key);
         _snprintf(onKey, sizeof(onKey), "%s_on_value", key);
         _snprintf(offKey, sizeof(offKey), "%s_off_value", key);
         _snprintf(offPresetKey, sizeof(offPresetKey), "%s_off_preset", key);
         _snprintf(windowKey, sizeof(windowKey), "%s_window", key);
+        _snprintf(nameKey, sizeof(nameKey), "%s_name", key);
 
         RcCommand item;
         ZeroMemory(&item, sizeof(item));
         item.topic = dupstr0(topic);
+        item.displayName = dupstr0(cfg_str(r->config, nameKey));
         item.value = dupstr0(cfg_str(r->config, valueKey));
         item.onValue = dupstr0(cfg_str(r->config, onKey));
         item.offValue = dupstr0(cfg_str(r->config, offKey));
@@ -736,6 +759,7 @@ static void load_commands(RC_Router *r)
         if (!narr)
         {
             free(item.topic);
+            free(item.displayName);
             free(item.value);
             free(item.onValue);
             free(item.offValue);
@@ -774,13 +798,16 @@ static void load_serves(RC_Router *r)
         char valueKey[96];
         char offPresetKey[96];
         char offValueKey[96];
+        char nameKey[96];
         _snprintf(valueKey, sizeof(valueKey), "%s_value", key);
         _snprintf(offPresetKey, sizeof(offPresetKey), "%s_off_preset", key);
         _snprintf(offValueKey, sizeof(offValueKey), "%s_off_value", key);
+        _snprintf(nameKey, sizeof(nameKey), "%s_name", key);
 
         RcServe item;
         ZeroMemory(&item, sizeof(item));
         item.topic = dupstr0(topic);
+        item.displayName = dupstr0(cfg_str(r->config, nameKey));
         item.serviceName = dupstr0(cfg_str(r->config, valueKey));
         item.offPreset = dupstr0(cfg_str(r->config, offPresetKey));
         item.offValue = dupstr0(cfg_str(r->config, offValueKey));
@@ -794,6 +821,7 @@ static void load_serves(RC_Router *r)
         if (!narr)
         {
             free(item.topic);
+            free(item.displayName);
             free(item.serviceName);
             free(item.offPreset);
             free(item.offValue);
@@ -832,15 +860,18 @@ static void load_hotkeys(RC_Router *r)
         char offTypeKey[96];
         char offValueKey[96];
         char delayKey[96];
+        char nameKey[96];
         _snprintf(onTypeKey, sizeof(onTypeKey), "%s_on_type", key);
         _snprintf(onValueKey, sizeof(onValueKey), "%s_on_value", key);
         _snprintf(offTypeKey, sizeof(offTypeKey), "%s_off_type", key);
         _snprintf(offValueKey, sizeof(offValueKey), "%s_off_value", key);
         _snprintf(delayKey, sizeof(delayKey), "%s_char_delay_ms", key);
+        _snprintf(nameKey, sizeof(nameKey), "%s_name", key);
 
         RcHotkey item;
         ZeroMemory(&item, sizeof(item));
         item.topic = dupstr0(topic);
+        item.displayName = dupstr0(cfg_str(r->config, nameKey));
         item.onType = dupstr0(cfg_str(r->config, onTypeKey));
         item.onValue = dupstr0(cfg_str(r->config, onValueKey));
         item.offType = dupstr0(cfg_str(r->config, offTypeKey));
@@ -862,6 +893,7 @@ static void load_hotkeys(RC_Router *r)
         if (!narr)
         {
             free(item.topic);
+            free(item.displayName);
             free(item.onType);
             free(item.onValue);
             free(item.offType);
@@ -938,16 +970,222 @@ void RC_RouterDestroy(RC_Router *r)
     free(r);
 }
 
+static int clamp0_100(int v)
+{
+    if (v < 0)
+        return 0;
+    if (v > 100)
+        return 100;
+    return v;
+}
+
 static void router_notify_action(const RC_Router *r, const char *topicUtf8, const char *payloadUtf8)
 {
     if (!r || !r->notifyEnabled)
         return;
 
-    char msg[256];
-    _snprintf(msg, sizeof(msg), "主题：%s\n动作：%s", topicUtf8 ? topicUtf8 : "", payloadUtf8 ? payloadUtf8 : "");
-    msg[sizeof(msg) - 1] = 0;
+    const char *base = NULL;
+    int value = 0;
+    bool hasValue = false;
+    bool payloadOk = parse_percent_payload_strict(payloadUtf8 ? payloadUtf8 : "", &base, &value, &hasValue);
+    if (!payloadOk)
+    {
+        base = payloadUtf8 ? payloadUtf8 : "";
+        hasValue = false;
+        value = 0;
+    }
 
-    notify_show_utf8("RC-main", msg);
+    char title[64];
+    char msg[256];
+    strncpy_s(title, sizeof(title), "远程控制", _TRUNCATE);
+    msg[0] = 0;
+
+    // ===== 内置主题：更友好文本 =====
+    if (r->checkedComputer && r->topicComputer && topicUtf8 && strcmp(topicUtf8, r->topicComputer) == 0)
+    {
+        const char *onAction = cfg_str(r->config, "computer_on_action");
+        const char *offAction = cfg_str(r->config, "computer_off_action");
+        int onDelay = cfg_int(r->config, "computer_on_delay", 0);
+        int offDelay = cfg_int(r->config, "computer_off_delay", 60);
+
+        const char *act = (_stricmp(base, "on") == 0) ? (onAction ? onAction : "lock") : (offAction ? offAction : "none");
+        int delay = (_stricmp(base, "on") == 0) ? onDelay : offDelay;
+
+        const char *actZh = "动作";
+        if (_stricmp(act, "lock") == 0)
+            actZh = "锁屏";
+        else if (_stricmp(act, "shutdown") == 0)
+            actZh = "关机";
+        else if (_stricmp(act, "restart") == 0)
+            actZh = "重启";
+        else if (_stricmp(act, "logoff") == 0)
+            actZh = "注销";
+        else if (_stricmp(act, "none") == 0)
+            actZh = "无动作";
+
+        if (delay > 0 && _stricmp(act, "none") != 0)
+            _snprintf(msg, sizeof(msg), "电脑：%s（延迟 %d 秒）", actZh, delay);
+        else
+            _snprintf(msg, sizeof(msg), "电脑：%s", actZh);
+    }
+    else if (r->checkedScreen && r->topicScreen && topicUtf8 && strcmp(topicUtf8, r->topicScreen) == 0)
+    {
+        int percent = 0;
+        if (_stricmp(base, "off") == 0)
+            percent = 0;
+        else if (_stricmp(base, "on") == 0)
+            percent = hasValue ? clamp0_100(value) : 100;
+        _snprintf(msg, sizeof(msg), "屏幕亮度：%d%%", percent);
+    }
+    else if (r->checkedVolume && r->topicVolume && topicUtf8 && strcmp(topicUtf8, r->topicVolume) == 0)
+    {
+        int percent = 0;
+        if (_stricmp(base, "off") == 0 || _stricmp(base, "pause") == 0)
+            percent = 0;
+        else if (_stricmp(base, "on") == 0)
+            percent = hasValue ? clamp0_100(value) : 100;
+        _snprintf(msg, sizeof(msg), "音量：%d%%", percent);
+    }
+    else if (r->checkedSleep && r->topicSleep && topicUtf8 && strcmp(topicUtf8, r->topicSleep) == 0)
+    {
+        const char *onAction = cfg_str(r->config, "sleep_on_action");
+        const char *offAction = cfg_str(r->config, "sleep_off_action");
+        int onDelay = cfg_int(r->config, "sleep_on_delay", 0);
+        int offDelay = cfg_int(r->config, "sleep_off_delay", 0);
+
+        const char *act = (_stricmp(base, "on") == 0) ? (onAction ? onAction : "sleep") : (offAction ? offAction : "none");
+        int delay = (_stricmp(base, "on") == 0) ? onDelay : offDelay;
+
+        const char *actZh = "动作";
+        if (_stricmp(act, "sleep") == 0)
+            actZh = "睡眠";
+        else if (_stricmp(act, "hibernate") == 0)
+            actZh = "休眠";
+        else if (_stricmp(act, "display_off") == 0)
+            actZh = "关闭显示器";
+        else if (_stricmp(act, "display_on") == 0)
+            actZh = "开启显示器";
+        else if (_stricmp(act, "lock") == 0)
+            actZh = "锁屏";
+        else if (_stricmp(act, "none") == 0)
+            actZh = "无动作";
+
+        if (delay > 0 && _stricmp(act, "none") != 0)
+            _snprintf(msg, sizeof(msg), "睡眠：%s（延迟 %d 秒）", actZh, delay);
+        else
+            _snprintf(msg, sizeof(msg), "睡眠：%s", actZh);
+    }
+    else if (r->checkedMedia && r->topicMedia && topicUtf8 && strcmp(topicUtf8, r->topicMedia) == 0)
+    {
+        const char *mediaZh = "媒体";
+        if (_stricmp(base, "off") == 0)
+            mediaZh = "下一首";
+        else if (_stricmp(base, "on") == 0)
+        {
+            if (hasValue)
+            {
+                int v = clamp0_100(value);
+                if (v <= 33)
+                    mediaZh = "下一首";
+                else if (v <= 66)
+                    mediaZh = "播放/暂停";
+                else
+                    mediaZh = "上一首";
+            }
+            else
+            {
+                mediaZh = "上一首";
+            }
+        }
+        else if (_stricmp(base, "pause") == 0)
+            mediaZh = "播放/暂停";
+        _snprintf(msg, sizeof(msg), "媒体：%s", mediaZh);
+    }
+    else
+    {
+        // ===== 可配置主题：apps/cmds/services/hotkeys =====
+        const char *kind = NULL;
+        const char *label = NULL;
+
+        if (!kind)
+        {
+            for (int i = 0; i < r->appsCount; i++)
+            {
+                if (r->apps[i].topic && topicUtf8 && strcmp(topicUtf8, r->apps[i].topic) == 0)
+                {
+                    kind = "应用";
+                    label = (r->apps[i].displayName && *r->apps[i].displayName) ? r->apps[i].displayName : r->apps[i].topic;
+                    break;
+                }
+            }
+        }
+
+        if (!kind)
+        {
+            for (int i = 0; i < r->cmdsCount; i++)
+            {
+                if (r->cmds[i].topic && topicUtf8 && strcmp(topicUtf8, r->cmds[i].topic) == 0)
+                {
+                    kind = "命令";
+                    label = (r->cmds[i].displayName && *r->cmds[i].displayName) ? r->cmds[i].displayName : r->cmds[i].topic;
+                    break;
+                }
+            }
+        }
+
+        if (!kind)
+        {
+            for (int i = 0; i < r->servesCount; i++)
+            {
+                if (r->serves[i].topic && topicUtf8 && strcmp(topicUtf8, r->serves[i].topic) == 0)
+                {
+                    kind = "服务";
+                    if (r->serves[i].displayName && *r->serves[i].displayName)
+                        label = r->serves[i].displayName;
+                    else
+                        label = (r->serves[i].serviceName && *r->serves[i].serviceName) ? r->serves[i].serviceName : r->serves[i].topic;
+                    break;
+                }
+            }
+        }
+
+        if (!kind)
+        {
+            for (int i = 0; i < r->hotkeysCount; i++)
+            {
+                if (r->hotkeys[i].topic && topicUtf8 && strcmp(topicUtf8, r->hotkeys[i].topic) == 0)
+                {
+                    kind = "热键";
+                    label = (r->hotkeys[i].displayName && *r->hotkeys[i].displayName) ? r->hotkeys[i].displayName : r->hotkeys[i].topic;
+                    break;
+                }
+            }
+        }
+
+        if (kind)
+        {
+            const char *opZh = "触发";
+            if (_stricmp(base, "on") == 0)
+                opZh = "开启";
+            else if (_stricmp(base, "off") == 0)
+                opZh = "关闭";
+            else if (_stricmp(base, "pause") == 0)
+                opZh = "暂停";
+
+            if (hasValue)
+                _snprintf(msg, sizeof(msg), "%s：%s（%s %d%%）", kind, label ? label : "", opZh, clamp0_100(value));
+            else
+                _snprintf(msg, sizeof(msg), "%s：%s（%s）", kind, label ? label : "", opZh);
+        }
+        else
+        {
+            _snprintf(msg, sizeof(msg), "主题：%s（%s）", topicUtf8 ? topicUtf8 : "", payloadUtf8 ? payloadUtf8 : "");
+        }
+    }
+
+    msg[sizeof(msg) - 1] = 0;
+    title[sizeof(title) - 1] = 0;
+    notify_show_utf8(title, msg);
 }
 
 const char *const *RC_RouterGetTopics(const RC_Router *r, int *outCount)
