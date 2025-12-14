@@ -20,7 +20,181 @@ import subprocess
 import win32com.client
 import re
 import shutil
+import locale
 from typing import Any, Dict, List, Union
+
+# ----------------------------
+# i18n (zh/en) for GUI
+# ----------------------------
+
+def _normalize_lang(lang: str | None) -> str:
+    if not lang:
+        return ""
+    s = str(lang).strip().lower().replace("_", "-")
+    if s in ("zh", "zh-cn", "zh-hans", "cn", "zh-hans-cn"):
+        return "zh"
+    if s in ("en", "en-us", "en-gb"):
+        return "en"
+    if s.startswith("zh"):
+        return "zh"
+    if s.startswith("en"):
+        return "en"
+    return ""
+
+
+def _detect_default_lang() -> str:
+    try:
+        loc = locale.getdefaultlocale()[0]  # type: ignore[deprecated]
+        norm = _normalize_lang(loc)
+        if norm:
+            return norm
+    except Exception:
+        pass
+    try:
+        loc2 = locale.getlocale()[0]
+        norm2 = _normalize_lang(loc2)
+        if norm2:
+            return norm2
+    except Exception:
+        pass
+    # Windows 默认偏中文用户群，这里保守地按系统语言判断失败则给 en
+    return "en"
+
+
+# 全局语言：在读取 config.json 后会被覆盖
+LANG: str = _detect_default_lang()
+
+# 中文源文案 -> 英文翻译（只翻 GUI 文案；未命中的保持原样）
+_ZH_TO_EN: dict[str, str] = {
+    "远程控制": "Remote Controls",
+    "远程控制-": "Remote Controls - ",
+    "(管理员)": "(Admin)",
+    "系统配置": "System Settings",
+    "MQTT认证配置": "MQTT Auth",
+    "主题配置": "Themes",
+    "网站：": "Broker:",
+    "端口：": "Port:",
+    "认证模式：": "Auth mode:",
+    "私钥模式": "Private key",
+    "账密模式": "Username/Password",
+    "test模式": "Test mode",
+    "通知提示": "Notifications",
+    "点击打开任务计划": "Open Task Scheduler",
+    "需要管理员权限才能设置": "Admin required",
+    "开机自启/启用睡眠(休眠)功能": "Autostart / Sleep (Hibernate)",
+    "获取权限": "Request admin",
+    "用户名：": "Username:",
+    "密码：": "Password:",
+    "客户端ID：": "Client ID:",
+    "私钥模式：\n        使用客户端ID作为私钥\n账密模式：\n        兼容大多数IoT平台": "Private key:\n        Client ID is used as the secret\nUsername/Password:\n        Works with most IoT platforms",
+    "内置": "Built-in",
+    "详情": "Details",
+    "主题：": "Theme:",
+    "自定义：": "Custom:",
+    "双击即可修改": "Double-click to edit",
+    "刷新": "Reload",
+    "更多": "More",
+    "添加": "Add",
+    "修改": "Edit",
+    "打开配置文件夹": "Open config folder",
+    "保存配置文件": "Save config",
+    "取消": "Cancel",
+    "提示": "Info",
+    "警告": "Warning",
+    "错误": "Error",
+    "确认刷新": "Confirm reload",
+    "配置文件错误": "Config error",
+    "备份完成": "Backup created",
+    "备份失败": "Backup failed",
+    "程序退出": "Exit",
+    "管理员权限": "Administrator",
+    "管理员权限确认": "Administrator confirmation",
+    "权限提醒": "Permission notice",
+    "UAC提权": "UAC elevation",
+    "检查失败": "Check failed",
+    "睡眠功能状态": "Sleep status",
+    "语言：": "Language:",
+}
+
+
+def t(s: str) -> str:
+    """Translate a Chinese UI string to English when LANG==en."""
+    if LANG != "en":
+        return s
+    return _ZH_TO_EN.get(s, s)
+
+
+def _set_root_title() -> None:
+    try:
+        base = f"远程控制-{BANBEN}"
+        if IS_GUI_ADMIN:
+            base = f"远程控制-{BANBEN}(管理员)"
+        if LANG == "en":
+            # 保留版本号，只替换前缀
+            base = base.replace("远程控制-", "Remote Controls - ")
+            base = base.replace("(管理员)", "(Admin)")
+        root.title(base)
+    except Exception:
+        pass
+
+
+def apply_language_to_widgets(widget: tk.Misc) -> None:
+    """Apply current LANG to widget tree (static text only)."""
+
+    def _apply_one(w: tk.Misc) -> None:
+        # 常规 text 选项
+        try:
+            cfg = w.configure()
+        except Exception:
+            cfg = {}
+
+        if "text" in cfg:
+            try:
+                src = getattr(w, "_rc_text_src", None)
+                if src is None:
+                    src = str(w.cget("text"))
+                    setattr(w, "_rc_text_src", src)
+                w.configure(text=t(src))
+            except Exception:
+                pass
+
+        # Treeview headings
+        if isinstance(w, ttk.Treeview):
+            try:
+                src_map = getattr(w, "_rc_heading_src", None)
+                if src_map is None:
+                    src_map = {}
+                    for col in w["columns"]:
+                        src_map[col] = w.heading(col).get("text", "")
+                    setattr(w, "_rc_heading_src", src_map)
+                for col, src_text in src_map.items():
+                    w.heading(col, text=t(str(src_text)))
+            except Exception:
+                pass
+
+    try:
+        _apply_one(widget)
+        for child in widget.winfo_children():
+            apply_language_to_widgets(child)
+    except Exception:
+        return
+
+
+def _apply_language_everywhere() -> None:
+    # root/title
+    _set_root_title()
+    # 主窗口控件文案
+    try:
+        apply_language_to_widgets(root)
+    except Exception:
+        pass
+    # 已打开的 Toplevel
+    try:
+        for w in root.winfo_children():
+            if isinstance(w, tk.Toplevel):
+                apply_language_to_widgets(w)
+    except Exception:
+        pass
 
 def _normalize_command_for_powershell(cmd: str) -> str:
     """规范化命令避免 PowerShell 将 curl 映射为 Invoke-WebRequest。
@@ -244,14 +418,14 @@ def check_and_request_uac():
     
     try:
         # 询问用户是否要提权
-        if messagebox.askyesno("管理员权限", "程序未获得管理员权限。\n是否立即请求管理员权限？\n\n选择'是'将重新启动程序并请求管理员权限。"):
+        if messagebox.askyesno(t("管理员权限"), t("程序未获得管理员权限。\n是否立即请求管理员权限？\n\n选择'是'将重新启动程序并请求管理员权限。")):
             # 以管理员权限重新启动程序
             return restart_self_as_admin()
         else:
             return False
         
     except Exception as e:
-        messagebox.showerror("管理员权限", f"提权失败: {e}")
+        messagebox.showerror(t("管理员权限"), t(f"提权失败: {e}"))
         return False
 
 def startup_admin_check():
@@ -260,11 +434,11 @@ def startup_admin_check():
         # 检查并请求提权（如果需要的话）
         admin_result = check_and_request_uac()
         if admin_result is False:  # 明确检查False，因为None表示其他情况
-            messagebox.showinfo("管理员权限", "未进行提权或提权失败，程序将以当前权限继续运行")
+            messagebox.showinfo(t("管理员权限"), t("未进行提权或提权失败，程序将以当前权限继续运行"))
         # 如果admin_result是True，说明已经有管理员权限
         # 如果函数内部重启了程序，这里的代码不会执行到
     except Exception as e:
-        messagebox.showerror("管理员权限检查", f"管理员权限检查过程中出现异常: {e}")
+        messagebox.showerror(t("管理员权限检查"), t(f"管理员权限检查过程中出现异常: {e}"))
 
 
 # DPI 与字体优化
@@ -1985,6 +2159,7 @@ def generate_config() -> None:
         "mqtt_username": mqtt_username_entry.get(),
         "mqtt_password": mqtt_password_entry.get(),
         "client_id": client_id_entry.get(),
+        "language": LANG,
     })
 
     # 内置主题配置
@@ -2064,7 +2239,7 @@ def generate_config() -> None:
     with open(config_file_path, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
     # 保存后刷新界面
-    messagebox.showinfo("提示", "配置文件已保存\n请重新打开主程序以应用更改\n刷新test模式需重启本程序")
+    messagebox.showinfo(t("提示"), t("配置文件已保存\n请重新打开主程序以应用更改\n刷新test模式需重启本程序"))
     # 重新读取配置
     with open(config_file_path, "r", encoding="utf-8") as f:
         config = json.load(f)
@@ -2093,7 +2268,7 @@ def refresh_custom_themes() -> None:
     global config
     
     # 提示用户未保存的更改将丢失
-    if not messagebox.askyesno("确认刷新", "刷新将加载配置文件中的设置，\n您未保存的更改将会丢失！\n确定要继续吗？"):
+    if not messagebox.askyesno(t("确认刷新"), t("刷新将加载配置文件中的设置，\n您未保存的更改将会丢失！\n确定要继续吗？")):
         return
     
     # 从配置文件重新读取最新配置
@@ -2120,11 +2295,11 @@ def refresh_custom_themes() -> None:
             # 重新加载自定义主题
             load_custom_themes()
             
-            messagebox.showinfo("提示", "已从配置文件刷新自定义主题列表")
+            messagebox.showinfo(t("提示"), t("已从配置文件刷新自定义主题列表"))
         except Exception as e:
-            messagebox.showerror("错误", f"读取配置文件失败: {e}")
+            messagebox.showerror(t("错误"), t(f"读取配置文件失败: {e}"))
     else:
-        messagebox.showwarning("警告", "配置文件不存在，无法刷新")
+        messagebox.showwarning(t("警告"), t("配置文件不存在，无法刷新"))
 
 def sleep():
     # 检查系统休眠/睡眠支持（test模式开启时跳过检测）
@@ -2222,23 +2397,23 @@ def enable_sleep_window() -> None:
     """
     # 二次确认
     if not messagebox.askyesno(
-        "确认启用？",
-        "将启用系统的休眠/睡眠功能。\n\n此操作会更改系统电源配置，需管理员权限。\n\n是否继续？",
+        t("确认启用？"),
+        t("将启用系统的休眠/睡眠功能。\n\n此操作会更改系统电源配置，需管理员权限。\n\n是否继续？"),
     ):
         return
     # 检查是否有管理员权限
     if not IS_GUI_ADMIN:
-        messagebox.showerror("错误", "需要管理员权限才能启用休眠/睡眠功能")
+        messagebox.showerror(t("错误"), t("需要管理员权限才能启用休眠/睡眠功能"))
         return
     # 尝试启用休眠/睡眠功能
     try:
         result = subprocess.run(["powercfg", "/hibernate", "on"], capture_output=True, text=True, shell=True)
         if result.returncode == 0:
-            messagebox.showinfo("提示", "休眠/睡眠功能已启用")
+            messagebox.showinfo(t("提示"), t("休眠/睡眠功能已启用"))
         else:
-            messagebox.showerror("错误", f"启用失败: \n{result.stderr.strip()}")
+            messagebox.showerror(t("错误"), t(f"启用失败: \n{result.stderr.strip()}"))
     except Exception as e:
-        messagebox.showerror("错误", f"启用失败: {e}")
+        messagebox.showerror(t("错误"), t(f"启用失败: {e}"))
 
 def disable_sleep_window() -> None:
     """
@@ -2246,23 +2421,23 @@ def disable_sleep_window() -> None:
     """
     # 二次确认
     if not messagebox.askyesno(
-        "确认关闭",
-        "将关闭系统的休眠/睡眠功能。\n\n此操作会更改系统电源配置，需管理员权限。\n\n是否继续？",
+        t("确认关闭"),
+        t("将关闭系统的休眠/睡眠功能。\n\n此操作会更改系统电源配置，需管理员权限。\n\n是否继续？"),
     ):
         return
     # 检查是否有管理员权限
     if not IS_GUI_ADMIN:
-        messagebox.showerror("错误", "需要管理员权限才能关闭休眠/睡眠功能")
+        messagebox.showerror(t("错误"), t("需要管理员权限才能关闭休眠/睡眠功能"))
         return
     # 尝试关闭休眠/睡眠功能
     try:
         result = subprocess.run(["powercfg", "/hibernate", "off"], capture_output=True, text=True, shell=True)
         if result.returncode == 0:
-            messagebox.showinfo("提示", "休眠/睡眠功能已关闭")
+            messagebox.showinfo(t("提示"), t("休眠/睡眠功能已关闭"))
         else:
-            messagebox.showerror("错误", f"关闭失败: \n{result.stderr.strip()}")
+            messagebox.showerror(t("错误"), t(f"关闭失败: \n{result.stderr.strip()}"))
     except Exception as e:
-        messagebox.showerror("错误", f"关闭失败: {e}")
+        messagebox.showerror(t("错误"), t(f"关闭失败: {e}"))
 
 def check_sleep_status_window() -> None:
     """
@@ -2272,7 +2447,7 @@ def check_sleep_status_window() -> None:
         result = subprocess.run(["powercfg", "-a"], capture_output=True, text=True, shell=True)
         output = (result.stdout or "") + (result.stderr or "")
         if result.returncode != 0:
-            messagebox.showerror("检查失败", f"命令执行失败：\n{output.strip()}")
+            messagebox.showerror(t("检查失败"), t(f"命令执行失败：\n{output.strip()}"))
             return
 
         enabled = True
@@ -2286,9 +2461,11 @@ def check_sleep_status_window() -> None:
                 enabled = False
 
         status_text = "已启用（可用）" if enabled else "未启用或不可用"
-        messagebox.showinfo("睡眠功能状态", f"休眠/睡眠状态：{status_text}\n\n详细信息：\n{output.strip()}")
+        if LANG == "en":
+            status_text = "Enabled" if enabled else "Disabled/Unavailable"
+        messagebox.showinfo(t("睡眠功能状态"), t(f"休眠/睡眠状态：{status_text}\n\n详细信息：\n{output.strip()}"))
     except Exception as e:
-        messagebox.showerror("检查失败", f"检查时出错：{e}")
+        messagebox.showerror(t("检查失败"), t(f"检查时出错：{e}"))
 
 # 在程序启动时查询程序的管理员权限状态并保存为全局变量
 IS_GUI_ADMIN = False
@@ -2312,25 +2489,40 @@ if os.path.exists(config_file_path):
         with open(config_file_path, "r", encoding="utf-8") as f:
             config = json.load(f)
     except json.decoder.JSONDecodeError as e:
-        error_msg = f"配置文件格式错误：\n{str(e)}\n\n请选择：\n• 点击\"是\"删除错误的配置文件并继续\n• 点击\"否\"退出程序不删除配置文件"
-        if messagebox.askyesno("配置文件错误", error_msg):
+        if LANG == "en":
+            error_msg = (
+                f"Config file is invalid:\n{str(e)}\n\nChoose:\n"
+                "• Yes: backup the broken config and continue\n"
+                "• No: exit and keep the config"
+            )
+        else:
+            error_msg = f"配置文件格式错误：\n{str(e)}\n\n请选择：\n• 点击\"是\"删除错误的配置文件并继续\n• 点击\"否\"退出程序不删除配置文件"
+        if messagebox.askyesno(t("配置文件错误"), error_msg):
             # 用户选择删除配置文件
             try:
                 os.rename(config_file_path, f"{config_file_path}.bak")
-                messagebox.showinfo("备份完成", f"已将错误的配置文件备份为：\n{config_file_path}.bak")
+                messagebox.showinfo(t("备份完成"), t(f"已将错误的配置文件备份为：\n{config_file_path}.bak"))
             except Exception as backup_error:
-                messagebox.showwarning("备份失败", f"无法备份配置文件：{str(backup_error)}\n将直接删除错误的配置文件。")           
+                messagebox.showwarning(t("备份失败"), t(f"无法备份配置文件：{str(backup_error)}\n将直接删除错误的配置文件。"))           
                 try:
                     os.remove(config_file_path)
                 except Exception as remove_error:
-                    messagebox.showerror("错误", f"无法删除配置文件：{str(remove_error)}\n程序将退出。")
+                    messagebox.showerror(t("错误"), t(f"无法删除配置文件：{str(remove_error)}\n程序将退出。"))
                     sys.exit(1)
             # 继续使用空配置
             config = {}
         else:
             # 用户选择退出程序
-            messagebox.showinfo("程序退出", "您选择了保留配置文件并退出程序。\n请手动修复配置文件后再次运行程序。")
+            messagebox.showinfo(t("程序退出"), t("您选择了保留配置文件并退出程序。\n请手动修复配置文件后再次运行程序。"))
             sys.exit(0)
+
+# 根据配置文件覆盖语言（如果存在）
+try:
+    _lang_cfg = _normalize_lang(config.get("language"))
+    if _lang_cfg:
+        LANG = _lang_cfg
+except Exception:
+    pass
 
 
 # 创建主窗口前启用 DPI 感知
@@ -2340,7 +2532,7 @@ _enable_dpi_awareness()
 check_and_request_uac()
 # 创建主窗口
 root = tk.Tk()
-root.title(f"远程控制-{BANBEN}")
+_set_root_title()
 
 # 设置窗口左上角与任务栏图标为 top.ico（优先打包资源，其次侧边 res/）
 try:
@@ -2377,72 +2569,74 @@ PADX = 10
 PADY = 6
 
 # 系统配置部分
-system_frame = ttk.LabelFrame(root, text="系统配置")
+system_frame = ttk.LabelFrame(root, text=t("系统配置"))
 system_frame.grid(row=0, column=0, padx=PADX, pady=PADY, sticky="nsew")
-for i in range(3):
+for i in range(6):
     system_frame.rowconfigure(i, weight=1)
 for j in range(3):
     system_frame.columnconfigure(j, weight=1)
 
-ttk.Label(system_frame, text="网站：").grid(row=0, column=0, sticky="e", padx=PADX, pady=PADY)
+ttk.Label(system_frame, text=t("网站：")).grid(row=0, column=0, sticky="e", padx=PADX, pady=PADY)
 website_entry = ttk.Entry(system_frame)
 website_entry.grid(row=0, column=1, sticky="ew", padx=PADX, pady=PADY)
 website_entry.insert(0, config.get("broker", ""))
 
-ttk.Label(system_frame, text="端口：").grid(row=1, column=0, sticky="e", padx=PADX, pady=PADY)
+ttk.Label(system_frame, text=t("端口：")).grid(row=1, column=0, sticky="e", padx=PADX, pady=PADY)
 port_entry = ttk.Entry(system_frame)
 port_entry.grid(row=1, column=1, sticky="ew", padx=PADX, pady=PADY)
 port_entry.insert(0, str(config.get("port", "")))
 
 # MQTT认证模式选择
-ttk.Label(system_frame, text="认证模式：").grid(row=2, column=0, sticky="e", padx=PADX, pady=PADY)
+ttk.Label(system_frame, text=t("认证模式：")).grid(row=2, column=0, sticky="e", padx=PADX, pady=PADY)
 auth_mode_var = tk.StringVar(value=config.get("auth_mode", "private_key"))
-auth_mode_combo = ttk.Combobox(system_frame, 
-                               values=["私钥模式", "账密模式"], 
-                               state="readonly", width=15)
+
+def _auth_mode_labels() -> list[str]:
+    return [t("私钥模式"), t("账密模式")]
+
+auth_mode_combo = ttk.Combobox(system_frame, values=_auth_mode_labels(), state="readonly", width=18)
 auth_mode_combo.grid(row=2, column=1, sticky="w", padx=PADX, pady=PADY)
 
 # 设置下拉框显示文本
 def update_auth_mode_display():
     current_value = auth_mode_var.get()
     if current_value == "private_key":
-        auth_mode_combo.set("私钥模式")
+        auth_mode_combo.set(t("私钥模式"))
     elif current_value == "username_password":
-        auth_mode_combo.set("账密模式")
+        auth_mode_combo.set(t("账密模式"))
 
 # 绑定选择事件
 def on_auth_mode_change(event):
     selected_text = auth_mode_combo.get()
-    if selected_text == "私钥模式":
+    if selected_text == t("私钥模式"):
         auth_mode_var.set("private_key")
-    elif selected_text == "账密模式":
+    elif selected_text == t("账密模式"):
         auth_mode_var.set("username_password")
 
 auth_mode_combo.bind("<<ComboboxSelected>>", on_auth_mode_change)
 update_auth_mode_display()
 
 test_var = tk.IntVar(value=config.get("test", 0))
-test_check = ttk.Checkbutton(system_frame, text="test模式", variable=test_var)
+test_check = ttk.Checkbutton(system_frame, text=t("test模式"), variable=test_var)
 test_check.grid(row=3, column=0, sticky="n", padx=PADX, pady=PADY)
 
 # 通知开关（控制主程序是否发送 toast 通知），位于 test 模式开关右侧
 notify_var = tk.IntVar(value=config.get("notify", 1))
-notify_check = ttk.Checkbutton(system_frame, text="通知提示", variable=notify_var)
+notify_check = ttk.Checkbutton(system_frame, text=t("通知提示"), variable=notify_var)
 notify_check.grid(row=3, column=1, sticky="n", padx=PADX, pady=PADY)
 
 #添加打开任务计划按钮
-task_button = ttk.Button(system_frame, text="点击打开任务计划", command=lambda:os.startfile("taskschd.msc"))
+task_button = ttk.Button(system_frame, text=t("点击打开任务计划"), command=lambda:os.startfile("taskschd.msc"))
 task_button.grid(row=3, column=2, sticky="n", padx=PADX, pady=PADY)
 
 # 添加设置开机自启动按钮上面的提示
 auto_start_label = ttk.Label(
     system_frame,
-    text="需要管理员权限才能设置",
+    text=t("需要管理员权限才能设置"),
 )
 auto_start_label.grid(row=0, column=2, sticky="n", padx=PADX, pady=PADY)
 auto_start_label1 = ttk.Label(
     system_frame,
-    text="开机自启/启用睡眠(休眠)功能",
+    text=t("开机自启/启用睡眠(休眠)功能"),
 )
 auto_start_label1.grid(row=1, column=2, sticky="n", padx=PADX, pady=PADY)
 
@@ -2450,8 +2644,37 @@ auto_start_label1.grid(row=1, column=2, sticky="n", padx=PADX, pady=PADY)
 auto_start_button = ttk.Button(system_frame, text="", command=set_auto_start)
 auto_start_button.grid(row=2, column=2,  sticky="n", padx=PADX, pady=PADY)
 
+# 语言选择
+language_var = tk.StringVar(value=LANG)
+ttk.Label(system_frame, text=t("语言：")).grid(row=4, column=0, sticky="e", padx=PADX, pady=PADY)
+language_combo = ttk.Combobox(system_frame, state="readonly", width=18)
+language_combo["values"] = ["中文", "English"]
+language_combo.grid(row=4, column=1, sticky="w", padx=PADX, pady=PADY)
+
+def _sync_language_combo() -> None:
+    try:
+        language_combo.set("English" if LANG == "en" else "中文")
+    except Exception:
+        pass
+
+def _on_language_change(_event=None) -> None:
+    global LANG
+    sel = (language_combo.get() or "").strip()
+    LANG = "en" if sel.lower().startswith("english") else "zh"
+    language_var.set(LANG)
+    # 更新组合框显示、认证模式文案、窗口文案
+    try:
+        auth_mode_combo.configure(values=_auth_mode_labels())
+        update_auth_mode_display()
+    except Exception:
+        pass
+    _apply_language_everywhere()
+
+language_combo.bind("<<ComboboxSelected>>", _on_language_change)
+_sync_language_combo()
+
 # MQTT认证配置部分
-auth_frame = ttk.LabelFrame(root, text="MQTT认证配置")
+auth_frame = ttk.LabelFrame(root, text=t("MQTT认证配置"))
 auth_frame.grid(row=1, column=0, padx=PADX, pady=PADY, sticky="nsew")
 for i in range(3):
     auth_frame.rowconfigure(i, weight=1)
@@ -2459,19 +2682,19 @@ for j in range(3):
     auth_frame.columnconfigure(j, weight=1)
 
 # 用户名配置
-ttk.Label(auth_frame, text="用户名：").grid(row=0, column=0, sticky="e", padx=PADX, pady=PADY)
+ttk.Label(auth_frame, text=t("用户名：")).grid(row=0, column=0, sticky="e", padx=PADX, pady=PADY)
 mqtt_username_entry = ttk.Entry(auth_frame)
 mqtt_username_entry.grid(row=0, column=1, sticky="ew", padx=PADX, pady=PADY)
 mqtt_username_entry.insert(0, config.get("mqtt_username", ""))
 
 # 密码配置
-ttk.Label(auth_frame, text="密码：").grid(row=1, column=0, sticky="e", padx=PADX, pady=PADY)
+ttk.Label(auth_frame, text=t("密码：")).grid(row=1, column=0, sticky="e", padx=PADX, pady=PADY)
 mqtt_password_entry = ttk.Entry(auth_frame, show="*")
 mqtt_password_entry.grid(row=1, column=1, sticky="ew", padx=PADX, pady=PADY)
 mqtt_password_entry.insert(0, config.get("mqtt_password", ""))
 
 # 客户端ID配置
-ttk.Label(auth_frame, text="客户端ID：").grid(row=2, column=0, sticky="e", padx=PADX, pady=PADY)
+ttk.Label(auth_frame, text=t("客户端ID：")).grid(row=2, column=0, sticky="e", padx=PADX, pady=PADY)
 client_id_entry = ttk.Entry(auth_frame)
 client_id_entry.grid(row=2, column=1, sticky="ew", padx=PADX, pady=PADY)
 # 读取client_id配置
@@ -2481,7 +2704,7 @@ client_id_entry.insert(0, client_id_value)
 # 认证模式说明
 auth_info_label = ttk.Label(
     auth_frame,
-    text="私钥模式：\n        使用客户端ID作为私钥\n账密模式：\n        兼容大多数IoT平台",
+    text=t("私钥模式：\n        使用客户端ID作为私钥\n账密模式：\n        兼容大多数IoT平台"),
     justify="left"
 )
 auth_info_label.grid(row=0, column=2, rowspan=3, sticky="n", padx=PADX, pady=PADY)
@@ -2508,12 +2731,12 @@ toggle_auth_mode()
 # 程序标题栏
 if IS_GUI_ADMIN:
     check_task()
-    root.title(f"远程控制-{BANBEN}(管理员)")
+    _set_root_title()
 else:
-    auto_start_button.config(text="获取权限", command=get_administrator_privileges)
+    auto_start_button.config(text=t("获取权限"), command=get_administrator_privileges)
 
 # 主题配置部分
-theme_frame = ttk.LabelFrame(root, text="主题配置")
+theme_frame = ttk.LabelFrame(root, text=t("主题配置"))
 theme_frame.grid(row=2, column=0, padx=PADX, pady=PADY, sticky="nsew")
 for i in range(6):
     theme_frame.rowconfigure(i, weight=1)
@@ -2554,7 +2777,7 @@ builtin_themes: List[Dict[str, Any]] = [
     },
 ]
 
-ttk.Label(theme_frame, text="内置").grid(row=0, column=0, sticky="w", padx=PADX, pady=PADY)
+ttk.Label(theme_frame, text=t("内置")).grid(row=0, column=0, sticky="w", padx=PADX, pady=PADY)
 
 # 更多：打开内置主题设置
 def open_builtin_settings():
@@ -2827,9 +3050,9 @@ def open_builtin_settings():
         pass
 
 
-ttk.Button(theme_frame, text="详情", command=show_detail_window).grid(row=0, column=2, sticky="e", columnspan=2, padx=PADX, pady=PADY)
-ttk.Label(theme_frame, text="主题：").grid(row=0, column=2, sticky="w", padx=PADX, pady=PADY)
-ttk.Label(theme_frame, text="自定义：").grid(
+ttk.Button(theme_frame, text=t("详情"), command=show_detail_window).grid(row=0, column=2, sticky="e", columnspan=2, padx=PADX, pady=PADY)
+ttk.Label(theme_frame, text=t("主题：")).grid(row=0, column=2, sticky="w", padx=PADX, pady=PADY)
+ttk.Label(theme_frame, text=t("自定义：")).grid(
     row=0, column=3, sticky="w", padx=PADX, pady=PADY
 )
 
@@ -2876,20 +3099,20 @@ custom_themes: List[Dict[str, Any]] = []
 
 # 自定义主题列表组件
 custom_theme_tree = ttk.Treeview(theme_frame, columns=("theme",), show="headings")
-custom_theme_tree.heading("theme", text="双击即可修改")
+custom_theme_tree.heading("theme", text=t("双击即可修改"))
 custom_theme_tree.grid(row=1, column=3, rowspan=5, pady=PADY, padx=PADX, sticky="nsew")
 
 # 刷新主题配置按钮
-ttk.Button(theme_frame, text="刷新", command=refresh_custom_themes).grid(
+ttk.Button(theme_frame, text=t("刷新"), command=refresh_custom_themes).grid(
     row=6, pady=PADY, padx=PADX, column=0, sticky="w"
 )
-ttk.Button(theme_frame, text="更多", command=open_builtin_settings).grid(row=6, column=2, pady=PADY, padx=PADX, sticky="n")
+ttk.Button(theme_frame, text=t("更多"), command=open_builtin_settings).grid(row=6, column=2, pady=PADY, padx=PADX, sticky="n")
 
 # 添加和修改按钮
-ttk.Button(theme_frame, text="添加", command=lambda: add_custom_theme(config)).grid(
+ttk.Button(theme_frame, text=t("添加"), command=lambda: add_custom_theme(config)).grid(
     row=6, pady=PADY, padx=PADX, column=3, sticky="w"
 )
-ttk.Button(theme_frame, text="修改", command=lambda: modify_custom_theme()).grid(
+ttk.Button(theme_frame, text=t("修改"), command=lambda: modify_custom_theme()).grid(
     row=6, pady=PADY, padx=PADX, column=3, sticky="e"
 )
 
@@ -2904,13 +3127,13 @@ button_frame.grid_columnconfigure(0, weight=1)
 button_frame.grid_columnconfigure(1, weight=1)
 button_frame.grid_columnconfigure(2, weight=1)
 
-ttk.Button(button_frame, text="打开配置文件夹", command=lambda:os.startfile(appdata_dir)).grid(
+ttk.Button(button_frame, text=t("打开配置文件夹"), command=lambda:os.startfile(appdata_dir)).grid(
     row=0, column=0, padx=PADX, pady=PADY, sticky="e"
 )
-ttk.Button(button_frame, text="保存配置文件", command=generate_config).grid(
+ttk.Button(button_frame, text=t("保存配置文件"), command=generate_config).grid(
     row=0, column=1, padx=PADX, pady=PADY, sticky="w"
 )
-ttk.Button(button_frame, text="取消", command=lambda:root.destroy()).grid(
+ttk.Button(button_frame, text=t("取消"), command=lambda:root.destroy()).grid(
     row=0, column=2, padx=PADX, pady=PADY, sticky="w"
 )
 
@@ -2925,6 +3148,9 @@ root.columnconfigure(0, weight=1)
 
 # 调用加载自定义主题的函数
 load_custom_themes()
+
+# 初始应用一次语言（确保 LabelFrame/heading/按钮在英文模式下生效）
+_apply_language_everywhere()
 
 root.mainloop()
 

@@ -108,8 +108,10 @@ static BOOL WideToUtf8(const wchar_t *src, char *dst, int dstCount)
  *   允许记事本/编辑器在托盘运行时打开并读取。
  * - _open_osfhandle + _fdopen：把 Win32 HANDLE 转换为 CRT FILE*，以复用 fprintf/vfprintf。
  */
-static FILE *OpenLogFileSharedAppendW(const wchar_t *pathW)
+static FILE *OpenLogFileSharedAppendWEx(const wchar_t *pathW, DWORD *outLastError)
 {
+    if (outLastError)
+        *outLastError = 0;
     if (!pathW || !pathW[0])
         return NULL;
 
@@ -121,7 +123,11 @@ static FILE *OpenLogFileSharedAppendW(const wchar_t *pathW)
                            FILE_ATTRIBUTE_NORMAL,
                            NULL);
     if (h == INVALID_HANDLE_VALUE)
+    {
+        if (outLastError)
+            *outLastError = GetLastError();
         return NULL;
+    }
 
     int fd = _open_osfhandle((intptr_t)h, _O_WRONLY | _O_APPEND | _O_TEXT);
     if (fd == -1)
@@ -138,6 +144,47 @@ static FILE *OpenLogFileSharedAppendW(const wchar_t *pathW)
     }
 
     return f;
+}
+
+static BOOL EnsureDirW(const wchar_t *dirW)
+{
+    if (!dirW || !dirW[0])
+        return FALSE;
+    if (CreateDirectoryW(dirW, NULL))
+        return TRUE;
+    DWORD err = GetLastError();
+    return err == ERROR_ALREADY_EXISTS;
+}
+
+static BOOL GetWritableTrayLogsDirW(wchar_t *outDirW, int outCount)
+{
+    if (!outDirW || outCount <= 0)
+        return FALSE;
+    outDirW[0] = L'\0';
+
+    wchar_t baseW[MAX_PATH] = {0};
+    DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", baseW, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH)
+    {
+        DWORD tn = GetTempPathW(MAX_PATH, baseW);
+        if (tn == 0 || tn >= MAX_PATH)
+            return FALSE;
+    }
+
+    wchar_t dirW[MAX_PATH] = {0};
+    wcsncpy_s(dirW, MAX_PATH, baseW, _TRUNCATE);
+
+    // %LOCALAPPDATA%\Remote-Controls\logs
+    if (!PathAppendW(dirW, L"Remote-Controls"))
+        return FALSE;
+    (void)EnsureDirW(dirW);
+
+    if (!PathAppendW(dirW, L"logs"))
+        return FALSE;
+    (void)EnsureDirW(dirW);
+
+    wcsncpy_s(outDirW, outCount, dirW, _TRUNCATE);
+    return TRUE;
 }
 
 /*
@@ -723,30 +770,63 @@ BOOL InitApplication(void)
         return FALSE;
     }
 
-    // 创建日志目录（best-effort）。
-    // 即使目录已存在，_mkdir 也不会影响后续流程。
-    sprintf_s(g_logsDir, MAX_PATH, "%s\\logs", g_appDir);
-    _mkdir(g_logsDir);
-
-    // 打开日志文件：共享 + 追加。
-    // 目的：允许托盘运行期间，编辑器/记事本仍能打开 logs\tray.log 进行查看。
-    char logPath[MAX_PATH];
-    sprintf_s(logPath, MAX_PATH, "%s\\tray.log", g_logsDir);
-    wchar_t logPathW[MAX_PATH];
-    if (!Utf8ToWide(logPath, logPathW, MAX_PATH))
+    // 检查管理员权限（并在需要时先提权）。
+    // 说明：
+    // - 托盘常驻安装目录（例如 Program Files）时，普通权限可能无法创建 logs\tray.log。
+    // - 这里先尝试提权，再进行日志文件创建，避免“无权限创建日志导致启动失败”。
+    g_isTrayAdmin = RC_IsUserAdmin();
+    if (!g_isTrayAdmin)
     {
-        return FALSE;
+        if (EnsureTrayAdmin())
+        {
+            // EnsureTrayAdmin 成功时会启动新的管理员进程并退出当前进程。
+            return FALSE;
+        }
     }
-    g_logFile = OpenLogFileSharedAppendW(logPathW);
-    if (!g_logFile)
+
+    // 共享日志目录：用于与主程序协作（读取 logs\admin_status.txt）。
+    // 这里保持固定为安装目录下的 logs。
+    sprintf_s(g_logsDir, MAX_PATH, "%s\\logs", g_appDir);
+
+    // 打开托盘自身日志文件（共享 + 追加）。
+    // 优先写入安装目录 logs\tray.log；若无权限则回退到用户可写目录。
     {
-        // 使用当前语言显示错误信息
-        wchar_t msgW[256];
-        wchar_t titleW[64];
-        Utf8ToWide(g_lang->logCreateError, msgW, (int)(sizeof(msgW) / sizeof(msgW[0])));
-        Utf8ToWide(g_lang->errorTitle, titleW, (int)(sizeof(titleW) / sizeof(titleW[0])));
-        MessageBoxW(NULL, msgW, titleW, MB_ICONERROR);
-        return FALSE;
+        char logPathA[MAX_PATH] = {0};
+        sprintf_s(logPathA, MAX_PATH, "%s\\tray.log", g_logsDir);
+
+        wchar_t logPathW[MAX_PATH] = {0};
+        if (!Utf8ToWide(logPathA, logPathW, MAX_PATH))
+            return FALSE;
+
+        // best-effort 创建 logs 目录（可能因权限失败）。
+        _mkdir(g_logsDir);
+
+        DWORD openErr = 0;
+        g_logFile = OpenLogFileSharedAppendWEx(logPathW, &openErr);
+        if (!g_logFile)
+        {
+            wchar_t writableLogsDirW[MAX_PATH] = {0};
+            if (GetWritableTrayLogsDirW(writableLogsDirW, MAX_PATH))
+            {
+                wchar_t fallbackLogPathW[MAX_PATH] = {0};
+                wcsncpy_s(fallbackLogPathW, MAX_PATH, writableLogsDirW, _TRUNCATE);
+                if (PathAppendW(fallbackLogPathW, L"tray.log"))
+                {
+                    g_logFile = OpenLogFileSharedAppendWEx(fallbackLogPathW, NULL);
+                }
+            }
+        }
+
+        if (!g_logFile)
+        {
+            // 使用当前语言显示错误信息
+            wchar_t msgW[256];
+            wchar_t titleW[64];
+            Utf8ToWide(g_lang->logCreateError, msgW, (int)(sizeof(msgW) / sizeof(msgW[0])));
+            Utf8ToWide(g_lang->errorTitle, titleW, (int)(sizeof(titleW) / sizeof(titleW[0])));
+            MessageBoxW(NULL, msgW, titleW, MB_ICONERROR);
+            return FALSE;
+        }
     }
 
     // 记录启动信息（写入 tray.log）。
@@ -762,23 +842,10 @@ BOOL InitApplication(void)
 
     LogMessage("INFO", "=================================================");
 
-    // 检查管理员权限。
-    // 说明：托盘需要具备关闭/重启主程序、读取某些系统信息等能力，
-    // 因此默认会尝试提权；若失败则继续以普通权限运行（功能会受限）。
-    g_isTrayAdmin = RC_IsUserAdmin();
     LogMessage("INFO", g_logMsg->trayAdminStatus, g_isTrayAdmin ? g_logMsg->adminYes : g_logMsg->adminNo);
-
-    // 启动时若未提权，自动申请管理员权限。
-    // 注意：EnsureTrayAdmin() 成功时会启动一个新的“管理员托盘进程”，
-    // 当前进程应尽快退出，避免重复驻留。
     if (!g_isTrayAdmin)
     {
-        if (EnsureTrayAdmin())
-        {
-            // 已启动新的管理员进程，当前进程可以结束
-            return FALSE;
-        }
-        LogMessage("INFO", "申请管理员权限失败，继续以普通权限运行");
+        LogMessage("INFO", "未获得管理员权限，托盘将继续以普通权限运行（部分功能可能受限）");
     }
 
     // 设置主程序和GUI程序的路径
@@ -973,13 +1040,42 @@ void CheckMainAdminStatus(void)
  */
 void OpenConfigGui(void)
 {
-    RC_StartProgram(g_guiExePath, NULL, LogMessage, ShowNotificationDirect,
-                    g_logMsg->funcOpenConfig, NULL, // 无需检查GUI是否已在运行
-                    g_logMsg->configOpened, g_logMsg->configOpenFailed,
-                    g_logMsg->configNotExists, g_lang->promptTitle,
-                    NULL, NULL, // 无需通知程序已在运行或者正在启动
-                    g_lang->errorPromptTitle, g_lang->configNotExists,
-                    FALSE); // 不使用管理员权限启动GUI
+    // 优先启动 RC-GUI.exe；若不存在，则用系统默认程序打开 config.json。
+    wchar_t guiPathW[MAX_PATH] = {0};
+    if (Utf8ToWide(g_guiExePath, guiPathW, MAX_PATH) && PathFileExistsW(guiPathW))
+    {
+        RC_StartProgram(g_guiExePath, NULL, LogMessage, ShowNotificationDirect,
+                        g_logMsg->funcOpenConfig, NULL, // 无需检查GUI是否已在运行
+                        g_logMsg->configOpened, g_logMsg->configOpenFailed,
+                        g_logMsg->configNotExists, g_lang->promptTitle,
+                        NULL, NULL, // 无需通知程序已在运行或者正在启动
+                        g_lang->errorPromptTitle, g_lang->configNotExists,
+                        FALSE); // 不使用管理员权限启动GUI
+        return;
+    }
+
+    LogMessage("WARNING", g_logMsg->configNotExists, g_guiExePath);
+
+    // 回退：打开 config.json（使用系统默认 JSON 打开方式）。
+    char configPathA[MAX_PATH] = {0};
+    sprintf_s(configPathA, MAX_PATH, "%s\\config.json", g_appDir);
+    wchar_t configPathW[MAX_PATH] = {0};
+    if (!Utf8ToWide(configPathA, configPathW, MAX_PATH) || !PathFileExistsW(configPathW))
+    {
+        ShowNotificationDirect(g_lang->errorPromptTitle, g_lang->configNotExists);
+        return;
+    }
+
+    HINSTANCE res = ShellExecuteW(NULL, L"open", configPathW, NULL, NULL, SW_SHOWNORMAL);
+    if ((INT_PTR)res <= 32)
+    {
+        ShowNotificationDirect(g_lang->errorPromptTitle, g_lang->openConfigFailed);
+        LogMessage("ERROR", g_logMsg->configOpenFailed, (unsigned long)(ULONG_PTR)res);
+        return;
+    }
+
+    ShowNotificationDirect(g_lang->promptTitle, g_lang->openingConfig);
+    LogMessage("INFO", "已使用默认程序打开配置文件: %s", configPathA);
 }
 
 /**

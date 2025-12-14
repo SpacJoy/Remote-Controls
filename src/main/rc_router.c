@@ -17,9 +17,125 @@
 #include "rc_log.h"
 
 #include <windows.h>
+#include <shellapi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define WM_RCMAIN_NOTIFYICON (WM_USER + 201)
+#define RCMAIN_NOTIFY_ICON_ID 2
+
+static HWND g_notifyHwnd = NULL;
+static NOTIFYICONDATAW g_notifyNid;
+static bool g_notifyInited = false;
+
+static BOOL utf8_to_wide0(const char *src, wchar_t *dst, int dstCount)
+{
+    if (!dst || dstCount <= 0)
+        return FALSE;
+    dst[0] = L'\0';
+    if (!src)
+        return TRUE;
+    return MultiByteToWideChar(CP_UTF8, 0, src, -1, dst, dstCount) > 0;
+}
+
+static LRESULT CALLBACK notify_wndproc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    (void)wParam;
+    (void)lParam;
+    return DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+static bool notify_ensure_icon(void)
+{
+    if (g_notifyInited)
+        return true;
+
+    HINSTANCE hInst = GetModuleHandleW(NULL);
+    const wchar_t *cls = L"RCMainNotifyClass";
+
+    WNDCLASSEXW wc;
+    ZeroMemory(&wc, sizeof(wc));
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = notify_wndproc;
+    wc.hInstance = hInst;
+    wc.lpszClassName = cls;
+
+    // RegisterClassExW 可能因已注册返回失败（ERROR_CLASS_ALREADY_EXISTS）。
+    if (!RegisterClassExW(&wc))
+    {
+        DWORD e = GetLastError();
+        if (e != ERROR_CLASS_ALREADY_EXISTS)
+        {
+            RC_LogWarn("通知窗口类注册失败：%lu", e);
+            return false;
+        }
+    }
+
+    // 使用 message-only window，避免出现在 Alt-Tab / 任务栏。
+    g_notifyHwnd = CreateWindowExW(0, cls, L"RC-main-notify", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, hInst, NULL);
+    if (!g_notifyHwnd)
+    {
+        RC_LogWarn("通知窗口创建失败：%lu", GetLastError());
+        return false;
+    }
+
+    ZeroMemory(&g_notifyNid, sizeof(g_notifyNid));
+    g_notifyNid.cbSize = sizeof(g_notifyNid);
+    g_notifyNid.hWnd = g_notifyHwnd;
+    g_notifyNid.uID = RCMAIN_NOTIFY_ICON_ID;
+    g_notifyNid.uCallbackMessage = WM_RCMAIN_NOTIFYICON;
+    g_notifyNid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_STATE;
+    g_notifyNid.hIcon = LoadIconW(NULL, IDI_APPLICATION);
+    wcsncpy_s(g_notifyNid.szTip, _countof(g_notifyNid.szTip), L"RC-main", _TRUNCATE);
+    g_notifyNid.dwStateMask = NIS_HIDDEN;
+    g_notifyNid.dwState = NIS_HIDDEN;
+
+    if (!Shell_NotifyIconW(NIM_ADD, &g_notifyNid))
+    {
+        RC_LogWarn("通知图标添加失败：%lu", GetLastError());
+        DestroyWindow(g_notifyHwnd);
+        g_notifyHwnd = NULL;
+        return false;
+    }
+
+    g_notifyInited = true;
+    return true;
+}
+
+static void notify_shutdown(void)
+{
+    if (g_notifyInited)
+    {
+        Shell_NotifyIconW(NIM_DELETE, &g_notifyNid);
+    }
+    if (g_notifyHwnd)
+    {
+        DestroyWindow(g_notifyHwnd);
+        g_notifyHwnd = NULL;
+    }
+    g_notifyInited = false;
+}
+
+static void notify_show_utf8(const char *titleUtf8, const char *messageUtf8)
+{
+    if (!notify_ensure_icon())
+        return;
+
+    // 与托盘端一致：先发“空通知”再发新内容，规避 Windows 忽略更新。
+    g_notifyNid.uFlags = NIF_INFO;
+    g_notifyNid.szInfoTitle[0] = L'\0';
+    g_notifyNid.szInfo[0] = L'\0';
+    g_notifyNid.dwInfoFlags = NIIF_NONE;
+    Shell_NotifyIconW(NIM_MODIFY, &g_notifyNid);
+    Sleep(10);
+
+    g_notifyNid.uFlags = NIF_INFO;
+    utf8_to_wide0(titleUtf8, g_notifyNid.szInfoTitle, (int)_countof(g_notifyNid.szInfoTitle));
+    utf8_to_wide0(messageUtf8, g_notifyNid.szInfo, (int)_countof(g_notifyNid.szInfo));
+    g_notifyNid.dwInfoFlags = NIIF_INFO;
+    Shell_NotifyIconW(NIM_MODIFY, &g_notifyNid);
+}
 
 typedef struct
 {
@@ -68,6 +184,8 @@ typedef struct
 struct RC_Router
 {
     RC_Json *config; // owned
+
+    bool notifyEnabled;
 
     // 内置功能对应的 topic（直接从 config 中读取的字符串）。
     char *topicComputer;
@@ -772,6 +890,9 @@ RC_Router *RC_RouterCreate(RC_Json *configRoot)
 
     r->config = configRoot;
 
+    // notify: 0/1（由 RC-GUI 的“通知提示”开关写入）
+    r->notifyEnabled = (cfg_int(r->config, "notify", 1) != 0);
+
     load_builtins(r);
     load_applications(r);
     load_commands(r);
@@ -812,7 +933,21 @@ void RC_RouterDestroy(RC_Router *r)
     free(r->cmdProcs);
 
     free(r->topics);
+    // best-effort：主程序退出前清理通知图标，避免托盘残留。
+    notify_shutdown();
     free(r);
+}
+
+static void router_notify_action(const RC_Router *r, const char *topicUtf8, const char *payloadUtf8)
+{
+    if (!r || !r->notifyEnabled)
+        return;
+
+    char msg[256];
+    _snprintf(msg, sizeof(msg), "主题：%s\n动作：%s", topicUtf8 ? topicUtf8 : "", payloadUtf8 ? payloadUtf8 : "");
+    msg[sizeof(msg) - 1] = 0;
+
+    notify_show_utf8("RC-main", msg);
 }
 
 const char *const *RC_RouterGetTopics(const RC_Router *r, int *outCount)
@@ -950,6 +1085,8 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
             // For matched app topics, ignore unknown payloads.
             RC_LogInfo("已忽略应用 payload：%s (topic=%s)", payloadUtf8, a->topic);
         }
+
+        router_notify_action(r, topicUtf8, payloadUtf8);
         return;
     }
 
@@ -1061,6 +1198,8 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                             {
                                 // Python: if CTRL_BREAK was sent, don't escalate to kill here.
                                 cmd_proc_cleanup_dead(p);
+
+                                router_notify_action(r, topicUtf8, payloadUtf8);
                                 return;
                             }
 
@@ -1098,6 +1237,8 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         {
             RC_LogInfo("已忽略命令 payload：%s (topic=%s)", payloadUtf8, c->topic);
         }
+
+        router_notify_action(r, topicUtf8, payloadUtf8);
         return;
     }
 
@@ -1146,6 +1287,8 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         {
             RC_LogInfo("已忽略服务 payload：%s (topic=%s)", payloadUtf8, s->topic);
         }
+
+        router_notify_action(r, topicUtf8, payloadUtf8);
         return;
     }
 
@@ -1167,6 +1310,8 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
             RC_ActionPerformComputer(offAction ? offAction : "none", offDelay);
         else
             RC_LogWarn("未知电脑指令：%s", payloadUtf8);
+
+        router_notify_action(r, topicUtf8, payloadUtf8);
         return;
     }
 
@@ -1184,7 +1329,10 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                 bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
                 bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
                 if (RC_ActionSetBrightnessTwinkleTrayPercentUtf8(0, path, tmode, tval, overlay, panel))
+                {
+                    router_notify_action(r, topicUtf8, payloadUtf8);
                     return;
+                }
                 RC_LogWarn("Twinkle Tray 亮度调整失败；回退到 DDC/CI");
             }
             RC_ActionSetBrightnessPercent(0);
@@ -1207,7 +1355,10 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                     bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
                     bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
                     if (RC_ActionSetBrightnessTwinkleTrayPercentUtf8(value, path, tmode, tval, overlay, panel))
+                    {
+                        router_notify_action(r, topicUtf8, payloadUtf8);
                         return;
+                    }
                     RC_LogWarn("Twinkle Tray 亮度调整失败；回退到 DDC/CI");
                 }
 
@@ -1223,7 +1374,10 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                     bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
                     bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
                     if (RC_ActionSetBrightnessTwinkleTrayPercentUtf8(100, path, tmode, tval, overlay, panel))
+                    {
+                        router_notify_action(r, topicUtf8, payloadUtf8);
                         return;
+                    }
                     RC_LogWarn("Twinkle Tray 亮度调整失败；回退到 DDC/CI");
                 }
 
@@ -1232,6 +1386,8 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         }
         else
             RC_LogWarn("未知屏幕指令：%s", payloadUtf8);
+
+        router_notify_action(r, topicUtf8, payloadUtf8);
         return;
     }
 
@@ -1257,6 +1413,8 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
             RC_ActionSetVolumePercent(0);
         else
             RC_LogWarn("未知音量指令：%s", payloadUtf8);
+
+        router_notify_action(r, topicUtf8, payloadUtf8);
         return;
     }
 
@@ -1283,12 +1441,16 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         }
         else
             RC_LogWarn("未知睡眠指令：%s", payloadUtf8);
+
+        router_notify_action(r, topicUtf8, payloadUtf8);
         return;
     }
 
     if (r->checkedMedia && r->topicMedia && topic_eq(topicUtf8, r->topicMedia))
     {
         RC_ActionMediaCommand(payloadUtf8);
+
+        router_notify_action(r, topicUtf8, payloadUtf8);
         return;
     }
 
@@ -1305,6 +1467,8 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
             RC_ActionHotkey(h->offType, h->offValue, h->charDelayMs);
         else
             RC_LogInfo("已忽略热键 payload：%s (topic=%s)", payloadUtf8, h->topic);
+
+        router_notify_action(r, topicUtf8, payloadUtf8);
         return;
     }
 
