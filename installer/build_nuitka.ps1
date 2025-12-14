@@ -1,4 +1,4 @@
-<#
+﻿<#
 Remote Controls 项目 Nuitka 打包脚本 (PowerShell)
 说明：
   - 生成与 PyInstaller 相同命名的三款 EXE（RC-GUI.exe / RC-main.exe / RC-tray.exe）
@@ -17,6 +17,14 @@ Remote Controls 项目 Nuitka 打包脚本 (PowerShell)
 param(
   [string]$Version = ""
 )
+
+# 统一编码：避免 PowerShell 5.1 下中文输出出现乱码
+try {
+  [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+  [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+  $OutputEncoding = [Console]::OutputEncoding
+} catch {
+}
 
 Write-Host "========================================"
 Write-Host "Remote Controls Nuitka 打包脚本" -ForegroundColor Cyan
@@ -98,7 +106,8 @@ if ($Version) {
   if (Test-Path $IssFile) {
     $Iss = Get-Content -Path $IssFile -Raw
   $Iss = $Iss -replace '#define MyAppVersion "[\d\.]+"', ('#define MyAppVersion "' + $Version + '"')
-    Set-Content -Path $IssFile -Value $Iss -Encoding UTF8BOM
+    $IssEncoding = if ($PSVersionTable.PSVersion.Major -ge 6) { 'utf8BOM' } else { 'utf8' }
+    Set-Content -Path $IssFile -Value $Iss -Encoding $IssEncoding
   }
   Write-Host "版本同步完成：$Version" -ForegroundColor Green
 } else {

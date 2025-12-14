@@ -1,4 +1,4 @@
-<#
+﻿<#
 根目录入口：转发执行 installer/build_nuitka.ps1
 #>
 param([string]$Version = "")

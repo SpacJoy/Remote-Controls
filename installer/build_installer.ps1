@@ -12,6 +12,14 @@ param(
     [switch]$NoPause
 )
 
+# 统一编码：避免 PowerShell 5.1 下脚本/外部命令中文输出出现乱码
+try {
+    [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+    $OutputEncoding = [Console]::OutputEncoding
+} catch {
+}
+
 function Pause-IfNeeded {
     param([string]$Message = '按Enter键退出')
     if (-not $NoPause) {
@@ -277,7 +285,8 @@ $IssPath = (Join-Path $InstallerDir 'Remote-Controls.iss')
 $TempIssPath = (Join-Path $InstallerDir 'Remote-Controls-temp.iss')
 $IssContent = Get-Content -Path $IssPath -Raw
 $IssContentWithVersion = "#define MyAppVersion `"$FinalVersion`"`r`n" + $IssContent
-Set-Content -Path $TempIssPath -Value $IssContentWithVersion -Encoding UTF8
+$IssEncoding = if ($PSVersionTable.PSVersion.Major -ge 6) { 'utf8BOM' } else { 'utf8' }
+Set-Content -Path $TempIssPath -Value $IssContentWithVersion -Encoding $IssEncoding
 
 Write-Host "  生成临时Inno Setup脚本，版本：$FinalVersion" -ForegroundColor Cyan
 

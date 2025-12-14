@@ -28,7 +28,7 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
 Name: "chinesesimplified"; MessagesFile: ".\ChineseSimplified.isl"
@@ -48,14 +48,14 @@ Source: "dist\res\icon.ico"; DestDir: "{app}\res"; Flags: ignoreversion
 ; Source: "..\config.json"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
 
 [Icons]
-Name: "{autoprograms}\Remote Controls"; Filename: "{app}\RC-tray.exe"
-Name: "{autodesktop}\Remote Controls"; Filename: "{app}\RC-tray.exe"; Tasks: desktopicon
-Name: "{autoprograms}\Remote Controls GUI"; Filename: "{app}\RC-GUI.exe"
+Name: "{commonprograms}\Remote Controls"; Filename: "{app}\RC-tray.exe"
+Name: "{commondesktop}\Remote Controls"; Filename: "{app}\RC-tray.exe"; Tasks: desktopicon
+Name: "{commonprograms}\Remote Controls GUI"; Filename: "{app}\RC-GUI.exe"
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: string; ValueName: "{app}\RC-tray.exe"; ValueData: "RUNASADMIN"; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: string; ValueName: "{app}\RC-main.exe"; ValueData: "RUNASADMIN"; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: string; ValueName: "{app}\RC-GUI.exe"; ValueData: "RUNASADMIN"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: string; ValueName: "{app}\RC-tray.exe"; ValueData: "RUNASADMIN"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: string; ValueName: "{app}\RC-main.exe"; ValueData: "RUNASADMIN"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: string; ValueName: "{app}\RC-GUI.exe"; ValueData: "RUNASADMIN"; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\RC-tray.exe"; Description: "启动托盘程序"; Flags: nowait postinstall skipifsilent shellexec; Tasks: autoruntray
@@ -356,7 +356,7 @@ begin
       // 注意：{commonpf32} 在 64 位系统上指向 Program Files (x86)
       OldConfigPath := ExpandConstant('{commonpf32}\Remote-Controls\config.json');
       if FileExists(OldConfigPath) then begin
-        FileCopy(OldConfigPath, NewConfigPath, False);
+        CopyFile(OldConfigPath, NewConfigPath, False);
       end;
     end;
 
