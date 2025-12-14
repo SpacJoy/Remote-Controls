@@ -120,6 +120,42 @@ _ZH_TO_EN: dict[str, str] = {
     "睡眠功能状态": "Sleep status",
     "语言：": "Language:",
 
+    # 开机自启
+    "设置开机自启": "Enable autostart",
+    "关闭开机自启": "Disable autostart",
+    "选择启动方案": "Choose startup mode",
+    "请选择以下两种启动方案之一：\n\n" +
+    "【方案一】用户登录时运行\n注：无托盘时推荐!!\n" +
+    "优点：只有用户登录时才运行\n" +
+    "缺点：需要用户登录后才能启动\n\n" +
+    "【方案二】系统启动时运行\n注：有托盘时推荐!!\n" +
+    "优点：系统启动即可运行，无需用户登录\n" +
+    "缺点：需要登录后托盘自动重启主程序才能使用媒体控制\n\n" +
+    "选择 是：【方案一】\n\n选择 否：【方案二】":
+        "Please choose one of the following startup modes:\n\n"
+        "[Mode 1] Run at user logon\nNote: recommended when tray is disabled.\n"
+        "Pros: runs only after a user signs in\n"
+        "Cons: will not start until a user signs in\n\n"
+        "[Mode 2] Run at system startup\nNote: recommended when tray is enabled.\n"
+        "Pros: starts when Windows boots (no sign-in required)\n"
+        "Cons: media control requires tray to restart main after sign-in\n\n"
+        "Choose Yes: Mode 1\n\nChoose No: Mode 2",
+    "已取消设置开机自启动": "Autostart setup cancelled",
+    "未找到 RC-main.exe 文件\n请检查文件是否存在": "RC-main.exe not found.\nPlease check the file exists.",
+    "未找到 RC-tray.exe 文件，跳过托盘启动设置": "RC-tray.exe not found. Skipping tray autostart setup.",
+    "创建任务成功\n已配置为任何用户登录时以管理员组权限运行":
+        "Task created.\nConfigured to run at logon for any user with Administrators group privileges.",
+    "创建任务成功\n已配置为系统启动时以SYSTEM用户权限运行":
+        "Task created.\nConfigured to run at system startup as SYSTEM.",
+    "创建托盘自启动失败\n{code}": "Failed to create tray autostart.\n{code}",
+    "移动文件位置后需重新设置任务哦！": "If you move the files, please reconfigure the task.",
+    "创建开机自启动失败\n{code}": "Failed to create autostart task.\n{code}",
+    "你确定要删除开机自启动任务吗？": "Are you sure you want to delete the autostart tasks?",
+    "关闭所有自启动任务成功": "Disabled all autostart tasks successfully.",
+    "关闭主程序自启动成功，托盘任务不存在": "Main autostart disabled. Tray task not found.",
+    "关闭托盘自启动成功，主程序任务不存在": "Tray autostart disabled. Main task not found.",
+    "关闭开机自启动失败": "Failed to disable autostart.",
+
     # 自定义主题：类型/关闭预设选项
     "程序或脚本": "Program/Script",
     "服务(需管理员权限)": "Service (admin)",
@@ -224,6 +260,10 @@ _ZH_TO_EN: dict[str, str] = {
     "请先将关闭预设切换为“自定义”并填写命令": "Switch Off preset to Custom and enter a command first.",
     "无法启动 PowerShell: {err}": "Failed to start PowerShell: {err}",
     "无法打开服务管理器: {err}": "Failed to open Services: {err}",
+
+    # 配置保存提示
+    "配置文件已保存\n请重新打开主程序以应用更改\n刷新test模式需重启本程序":
+        "Config saved.\nPlease restart the main program to apply changes.\nRestart is required to refresh test mode.",
 }
 
 # 反向映射：用于从英文切回中文（避免某些控件在英文模式创建时无法回切）
@@ -978,27 +1018,27 @@ def set_auto_start() -> None:
 
     # 检查文件是否存在
     if not os.path.exists(exe_path):
-        messagebox.showerror(
-            "错误", "未找到 RC-main.exe 文件\n请检查文件是否存在"
-        )
+        messagebox.showerror(t("错误"), t("未找到 RC-main.exe 文件\n请检查文件是否存在"))
         return
     
     # 让用户选择两种方案
     choice = messagebox.askyesnocancel(
-        "选择启动方案", 
-        "请选择以下两种启动方案之一：\n\n" +
-        "【方案一】用户登录时运行\n注：无托盘时推荐!!\n" +
-        "优点：只有用户登录时才运行\n" +
-        "缺点：需要用户登录后才能启动\n\n" +
-        "【方案二】系统启动时运行\n注：有托盘时推荐!!\n" +
-        "优点：系统启动即可运行，无需用户登录\n" +
-        "缺点：需要登录后托盘自动重启主程序才能使用媒体控制\n\n" +
-        "选择 是：【方案一】\n\n选择 否：【方案二】",
+        t("选择启动方案"),
+        t(
+            "请选择以下两种启动方案之一：\n\n"
+            + "【方案一】用户登录时运行\n注：无托盘时推荐!!\n"
+            + "优点：只有用户登录时才运行\n"
+            + "缺点：需要用户登录后才能启动\n\n"
+            + "【方案二】系统启动时运行\n注：有托盘时推荐!!\n"
+            + "优点：系统启动即可运行，无需用户登录\n"
+            + "缺点：需要登录后托盘自动重启主程序才能使用媒体控制\n\n"
+            + "选择 是：【方案一】\n\n选择 否：【方案二】"
+        ),
         icon='question'
     )
       # 如果用户取消选择（点击右上角X），则退出设置过程
     if choice is None:
-        messagebox.showinfo("已取消", "已取消设置开机自启动")
+        messagebox.showinfo(t("已取消"), t("已取消设置开机自启动"))
         return
 
     # 在 Windows 下，schtasks /TR 需要用双引号包裹路径即可；不使用 shlex.quote（那是 *nix 风格，可能引入单引号）
@@ -1049,6 +1089,8 @@ def set_auto_start() -> None:
             os.path.dirname(os.path.abspath(sys.argv[0])), "RC-tray.exe"
             # and "tray.py"
         )
+
+    tray_result = 0
     if os.path.exists(tray_exe_path):
         tray_cmd = tray_exe_path  # 托盘程序使用当前登录用户（最高权限）运行，登录后触发
         tray_result = subprocess.call(
@@ -1076,18 +1118,26 @@ def set_auto_start() -> None:
         # else:
         #     messagebox.showerror("错误", "创建托盘自启动失败")
     else:
-        messagebox.showwarning("警告", "未找到 RC-tray.exe 文件，跳过托盘启动设置")    # 检查创建任务的结果
+        messagebox.showwarning(t("警告"), t("未找到 RC-tray.exe 文件，跳过托盘启动设置"))    # 检查创建任务的结果
+
+    # 检查创建任务的结果
     if check_task_exists(TASK_NAME_MAIN):
         if choice == True:
-            messagebox.showinfo("提示", "创建任务成功\n已配置为任何用户登录时以管理员组权限运行")
+            messagebox.showinfo(t("提示"), t("创建任务成功\n已配置为任何用户登录时以管理员组权限运行"))
         else:
-            messagebox.showinfo("提示", "创建任务成功\n已配置为系统启动时以SYSTEM用户权限运行")
+            messagebox.showinfo(t("提示"), t("创建任务成功\n已配置为系统启动时以SYSTEM用户权限运行"))
             if tray_result != 0:
-                messagebox.showwarning("警告", f"创建托盘自启动失败\n{tray_result}")
-        messagebox.showinfo("提示", "移动文件位置后需重新设置任务哦！")
+                messagebox.showwarning(
+                    t("警告"),
+                    t("创建托盘自启动失败\n{code}").format(code=tray_result),
+                )
+        messagebox.showinfo(t("提示"), t("移动文件位置后需重新设置任务哦！"))
         check_task()
     else:
-        messagebox.showerror("错误", f"创建开机自启动失败\n{result}")
+        messagebox.showerror(
+            t("错误"),
+            t("创建开机自启动失败\n{code}").format(code=result),
+        )
         check_task()
 
 
@@ -1097,7 +1147,7 @@ def remove_auto_start() -> None:
     English: Removes the scheduled task for auto-start
     中文: 移除开机自启动的计划任务
     """
-    if messagebox.askyesno("确定？", "你确定要删除开机自启动任务吗？"):
+    if messagebox.askyesno(t("确定？"), t("你确定要删除开机自启动任务吗？")):
         delete_result = subprocess.call(
             f'schtasks /Delete /TN "{TASK_NAME_MAIN}" /F', shell=True
         )
@@ -1111,13 +1161,13 @@ def remove_auto_start() -> None:
         except Exception:
             pass
         if delete_result == 0 and tray_delete == 0:
-            messagebox.showinfo("提示", "关闭所有自启动任务成功")
+            messagebox.showinfo(t("提示"), t("关闭所有自启动任务成功"))
         elif delete_result == 0:
-            messagebox.showinfo("提示", "关闭主程序自启动成功，托盘任务不存在")
+            messagebox.showinfo(t("提示"), t("关闭主程序自启动成功，托盘任务不存在"))
         elif tray_delete == 0:
-            messagebox.showinfo("提示", "关闭托盘自启动成功，主程序任务不存在")
+            messagebox.showinfo(t("提示"), t("关闭托盘自启动成功，主程序任务不存在"))
         else:
-            messagebox.showerror("错误", "关闭开机自启动失败")
+            messagebox.showerror(t("错误"), t("关闭开机自启动失败"))
         check_task()
 
 
@@ -1127,10 +1177,15 @@ def check_task() -> None:
     English: Updates the button text based on whether the auto-start task exists
     中文: 检查是否存在开机自启任务，并更新按钮文字
     """
+    src_text = "关闭开机自启" if check_task_exists(TASK_NAME_MAIN) else "设置开机自启"
     if check_task_exists(TASK_NAME_MAIN):
-        auto_start_button.config(text="关闭开机自启", command=remove_auto_start)
+        auto_start_button.config(text=t(src_text), command=remove_auto_start)
     else:
-        auto_start_button.config(text="设置开机自启", command=set_auto_start)
+        auto_start_button.config(text=t(src_text), command=set_auto_start)
+    try:
+        setattr(auto_start_button, "_rc_text_src", src_text)
+    except Exception:
+        pass
     auto_start_button.update_idletasks()
 
 
