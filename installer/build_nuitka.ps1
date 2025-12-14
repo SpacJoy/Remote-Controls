@@ -200,7 +200,7 @@ $verMatch = [regex]::Match($verRaw, 'VERSION\s*=\s*"([^"]+)"')
 $Common = @(
   '--onefile',
   '--assume-yes-for-downloads', # 允许自动下载依赖组件
-  '--windows-company-name=chen6019',
+  '--windows-company-name=SpacJoy',
   '--windows-product-name=Remote Controls',
   "--windows-file-version=$FileVersion",
   '--remove-output',

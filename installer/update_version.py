@@ -84,12 +84,12 @@ VERSION_BUILD = {build}
 # 应用信息
 APP_NAME = "Remote Controls"
 APP_NAME_CN = "远程控制"
-COMPANY = "chen6019"
+COMPANY = "SpacJoy"
 COPYRIGHT = f"Copyright © 2024-{current_year} {{COMPANY}}"
 DESCRIPTION = "Windows 远程控制工具套件"
 
 # GitHub 信息
-GITHUB_REPO = "chen6019/Remote-Controls"
+GITHUB_REPO = "SpacJoy/Remote-Controls"
 GITHUB_URL = f"https://github.com/{{GITHUB_REPO}}"
 RELEASE_URL = f"{{GITHUB_URL}}/releases"
 

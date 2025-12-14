@@ -16,7 +16,7 @@ except ImportError:
         return {
             "version": "未知版本",
             "app_name": "Remote Controls",
-            "company": "chen6019",
+            "company": "SpacJoy",
             "description": "Windows 远程控制工具套件"
         }
     
@@ -87,7 +87,7 @@ def check_update_version():
     current_version = version_info["version"]
     
     # GitHub API 检查最新版本
-    github_api_url = f"https://api.github.com/repos/chen6019/Remote-Controls/releases/latest"
+    github_api_url = f"https://api.github.com/repos/SpacJoy/Remote-Controls/releases/latest"
     
     print("更新检查信息:")
     print(f"当前版本: v{current_version}")
