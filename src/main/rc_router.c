@@ -137,13 +137,6 @@ static void notify_show_utf8(const char *titleUtf8, const char *messageUtf8)
     Shell_NotifyIconW(NIM_MODIFY, &g_notifyNid);
 }
 
-void RC_RouterNotifyUtf8(RC_Router *r, const char *titleUtf8, const char *messageUtf8)
-{
-    if (!r || !r->notifyEnabled)
-        return;
-    notify_show_utf8(titleUtf8 ? titleUtf8 : "", messageUtf8 ? messageUtf8 : "");
-}
-
 typedef struct
 {
     char *topic;
@@ -932,6 +925,13 @@ RC_Router *RC_RouterCreate(RC_Json *configRoot)
     load_hotkeys(r);
 
     return r;
+}
+
+void RC_RouterNotifyUtf8(RC_Router *r, const char *titleUtf8, const char *messageUtf8)
+{
+    if (!r || !r->notifyEnabled)
+        return;
+    notify_show_utf8(titleUtf8 ? titleUtf8 : "", messageUtf8 ? messageUtf8 : "");
 }
 
 void RC_RouterDestroy(RC_Router *r)

@@ -194,6 +194,7 @@ _ZH_TO_EN: dict[str, str] = {
 
     # 动作/选项通用
     "不执行": "None",
+    "键盘组合": "Key combo",
     "锁屏": "Lock",
     "关机": "Shutdown",
     "重启": "Restart",
@@ -214,6 +215,15 @@ _ZH_TO_EN: dict[str, str] = {
     "录制键盘组合": "Record hotkey",
     "已按下：(空)": "Pressed: (empty)",
     "已按下：": "Pressed: ",
+
+    # 命令测试弹窗
+    "输入参数": "Input parameter",
+    "请输入 {value} 的值，例如 50：": "Enter a value for {value}, e.g. 50:",
+    "请先在“值”中输入要测试的命令": "Please enter a command to test in the value field.",
+    "请先在“关闭(off)”中输入要测试的命令": "Please enter a command to test in the Off field.",
+    "请先将关闭预设切换为“自定义”并填写命令": "Switch Off preset to Custom and enter a command first.",
+    "无法启动 PowerShell: {err}": "Failed to start PowerShell: {err}",
+    "无法打开服务管理器: {err}": "Failed to open Services: {err}",
 }
 
 # 反向映射：用于从英文切回中文（避免某些控件在英文模式创建时无法回切）
@@ -1288,47 +1298,67 @@ def show_detail_window():
         notebook = ttk.Notebook(win)
         notebook.pack(fill="both", expand=True, padx=6, pady=6)
 
-        # 通用文本创建函数
-        def make_text_tab(title: str, content: str) -> None:
-                frame = ttk.Frame(notebook)
-                notebook.add(frame, text=title)
-                # 使用 Text + Scrollbar 而非 scrolledtext（避免某些打包环境主题差异）
-                txt = tk.Text(frame, wrap="word", undo=False, relief="flat", padx=8, pady=8)
-                vsb = ttk.Scrollbar(frame, orient="vertical", command=txt.yview)
-                txt.configure(yscrollcommand=lambda *a: vsb.set(*a))
-                vsb.pack(side="right", fill="y")
-                txt.pack(side="left", fill="both", expand=True)
+        def _fill_text(txt: tk.Text, content: str) -> None:
+            try:
+                txt.configure(state=tk.NORMAL)
+            except Exception:
+                pass
+            try:
+                txt.delete("1.0", tk.END)
+            except Exception:
+                return
+            lines = content.strip().splitlines()
+            for line in lines:
+                striped = line.strip()
+                if not striped:
+                    txt.insert("end", "\n")
+                    continue
+                if striped.startswith("【") and striped.endswith("】"):
+                    txt.insert("end", striped + "\n", ("section",))
+                elif (striped.endswith("：") or striped.endswith(":")) and len(striped) < 40:
+                    txt.insert("end", striped + "\n", ("sub",))
+                else:
+                    txt.insert("end", striped + "\n")
+            txt.configure(state=tk.DISABLED)
 
-                # 字体：在系统默认字体基础上放大 + 行距
-                base_font = tkfont.nametofont("TkDefaultFont").copy()
-                size = max(10, base_font.cget("size"))
-                try:
-                        base_font.configure(size=size + 1)
-                except Exception:
-                        pass
-                txt.configure(font=base_font, spacing1=4, spacing2=2, spacing3=6)
+        def make_text_tab(title_zh: str, content_zh: str, content_en: str) -> dict:
+            frame = ttk.Frame(notebook)
+            notebook.add(frame, text=title_zh)
+            # 使用 Text + Scrollbar 而非 scrolledtext（避免某些打包环境主题差异）
+            txt = tk.Text(frame, wrap="word", undo=False, relief="flat", padx=8, pady=8)
+            vsb = ttk.Scrollbar(frame, orient="vertical", command=txt.yview)
+            txt.configure(yscrollcommand=lambda *a: vsb.set(*a))
+            vsb.pack(side="right", fill="y")
+            txt.pack(side="left", fill="both", expand=True)
 
-                # 插入内容并对标题/小节样式加粗
-                txt.tag_config("section", font=(base_font.cget("family"), base_font.cget("size") + 1, "bold"), spacing3=10)
-                txt.tag_config("sub", font=(base_font.cget("family"), base_font.cget("size"), "bold"))
+            # 字体：在系统默认字体基础上放大 + 行距
+            base_font = tkfont.nametofont("TkDefaultFont").copy()
+            size = max(10, base_font.cget("size"))
+            try:
+                base_font.configure(size=size + 1)
+            except Exception:
+                pass
+            txt.configure(font=base_font, spacing1=4, spacing2=2, spacing3=6)
 
-                # 解析行：以全角书名号/【】或以冒号结尾视为小节
-                lines = content.strip().splitlines()
-                for line in lines:
-                        striped = line.strip()
-                        if not striped:
-                                txt.insert("end", "\n")
-                                continue
-                        if striped.startswith("【") and striped.endswith("】"):
-                                txt.insert("end", striped + "\n", ("section",))
-                        elif striped.endswith("：") and len(striped) < 20:
-                                txt.insert("end", striped + "\n", ("sub",))
-                        else:
-                                txt.insert("end", striped + "\n")
-                txt.configure(state="disabled")
+            # 插入内容并对标题/小节样式加粗
+            txt.tag_config(
+                "section",
+                font=(base_font.cget("family"), base_font.cget("size") + 1, "bold"),
+                spacing3=10,
+            )
+            txt.tag_config("sub", font=(base_font.cget("family"), base_font.cget("size"), "bold"))
 
-        # 内置主题内容
-        builtin_content = """
+            entry = {
+                "frame": frame,
+                "txt": txt,
+                "title_zh": title_zh,
+                "content_zh": content_zh,
+                "content_en": content_en,
+            }
+            _fill_text(txt, content_en if LANG == "en" else content_zh)
+            return entry
+
+        builtin_content_zh = """
 【内置主题概览】
 屏幕：
     灯类型；调节系统亮度 (0-100)。
@@ -1345,7 +1375,24 @@ def show_detail_window():
     sleep / hibernate / display_off / display_on / lock；支持 on/off 延时。
 """
 
-        custom_content = """
+        builtin_content_en = """
+【Built-in Themes Overview】
+Screen:
+    Light-type; adjust system brightness (0-100).
+
+Volume:
+    Curtain-type; adjust system master volume (0-100); pause = mute.
+
+Media:
+    Curtain-type; multimedia control:
+        on=Previous  off=Next  pause=Play/Pause
+        on#percent: 1-33 Next / 34-66 Play/Pause / 67-100 Previous.
+
+Sleep:
+    sleep / hibernate / display_off / display_on / lock; supports On/Off delay.
+"""
+
+        custom_content_zh = """
 【自定义主题类型】
 程序或脚本：
     “打开(on)”支持选择 EXE/.py/.ps1/.bat/.cmd 等；必要时自动补全解释器。
@@ -1365,7 +1412,27 @@ def show_detail_window():
     逐字符发送可设置间隔 (>=0)，保存时会提示非 ASCII 风险。
 """
 
-        tips_content = """
+        custom_content_en = """
+【Custom Theme Types】
+Program/Script:
+    On supports selecting EXE/.py/.ps1/.bat/.cmd etc; interpreters may be auto-completed when needed.
+    Off can use presets (Force kill/Ignore) or a custom script. When switching to Custom, you can pick a separate file.
+
+Service (admin):
+    Enter a Windows service name. On starts it; Off preset defaults to Stop service (can be Ignore or Custom command).
+    Running main/tray as admin may be required; the UI will warn if permissions are insufficient.
+
+Command:
+    On is a PowerShell snippet; you can click the test button at any time.
+    Supports on#number (0-100). Use the {value} placeholder in your command.
+    Off preset defaults to Interrupt (CTRL+BREAK); you can change it to Force kill or Custom and test separately.
+
+Hotkey:
+    Supports ctrl/alt/shift/win combos; supports {down}/{up} suffixes.
+    Char-by-char sending can be delayed (>=0); saving may warn about non-ASCII risks.
+"""
+
+        tips_content_zh = """
 【使用与提示】
 日志：
     issues 时附 logs/RC.log 便于排查。
@@ -1383,15 +1450,40 @@ def show_detail_window():
     主程序具互斥 + 进程确认；脚本模式可选择结束/忽略/退出。
 """
 
-        make_text_tab("内置主题", builtin_content)
-        make_text_tab("自定义主题", custom_content)
-        make_text_tab("提示说明", tips_content)
+        tips_content_en = """
+【Usage & Tips】
+Logs:
+    When reporting issues, attach logs/RC.log for troubleshooting.
+
+Updates:
+    You can manually check updates from the tray menu. Unknown versions show as 'VUnknown' with an upgrade prompt.
+
+Permissions:
+    Some features (Service/Brightness/Scheduled tasks) require admin; the UI will warn if missing.
+
+Config:
+    After saving in the GUI, the main program reads it automatically; leftover mutexes are ignored and it continues.
+
+Multiple instances:
+    The main program uses a mutex and process check; script mode can choose Kill/Ignore/Exit.
+"""
+
+        _detail_entries: list[dict] = []
+        _detail_entries.append(make_text_tab("内置主题", builtin_content_zh, builtin_content_en))
+        _detail_entries.append(make_text_tab("自定义主题", custom_content_zh, custom_content_en))
+        _detail_entries.append(make_text_tab("提示说明", tips_content_zh, tips_content_en))
 
         center_window(win)
 
         def _apply_lang_to_detail() -> None:
             if not win.winfo_exists():
                 return
+            try:
+                for ent in _detail_entries:
+                    notebook.tab(ent["frame"], text=t(ent["title_zh"]))
+                    _fill_text(ent["txt"], ent["content_en"] if LANG == "en" else ent["content_zh"])
+            except Exception:
+                pass
             try:
                 win.title(t("详情信息"))
             except Exception:
@@ -1705,35 +1797,50 @@ def modify_custom_theme() -> None:
             try:
                 subprocess.Popen(["services.msc"])  # 备用方式
             except Exception as e:
-                messagebox.showerror("错误", f"无法打开服务管理器: {e}")
+                messagebox.showerror(t("错误"), t("无法打开服务管理器: {err}").format(err=e))
 
     def test_command_in_powershell():
         cmd = on_value_text.get("1.0", "end-1c").strip()
         if not cmd:
-            messagebox.showwarning("提示", "请先在“值”中输入要测试的命令")
+            messagebox.showwarning(t("提示"), t("请先在“值”中输入要测试的命令"))
             return
         if "{value}" in cmd:
-            val = simpledialog.askstring("输入参数", "请输入 {value} 的值，例如 50：", initialvalue="50", parent=theme_window)
+            val = simpledialog.askstring(
+                t("输入参数"),
+                t("请输入 {value} 的值，例如 50："),
+                initialvalue="50",
+                parent=theme_window,
+            )
             if val is None:
                 return
             cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
         # 在 PowerShell 中显示命令，等待用户按回车后再执行
-        ps_script = (
-            "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
-            "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
-            "\nWrite-Host $cmd -ForegroundColor Yellow;"
-            "\nRead-Host '按回车后执行';"
-            "\nWrite-Host '正在执行...' -ForegroundColor Green;"
-            "\ntry { iex $cmd } catch { Write-Host ('发生错误: ' + $_.Exception.Message) -ForegroundColor Red }"
-        )
+        if LANG == "en":
+            ps_script = (
+                "Write-Host 'Ready to test command:' -ForegroundColor Cyan;"
+                "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
+                "\nWrite-Host $cmd -ForegroundColor Yellow;"
+                "\nRead-Host 'Press Enter to run';"
+                "\nWrite-Host 'Running...' -ForegroundColor Green;"
+                "\ntry { iex $cmd } catch { Write-Host ('Error: ' + $_.Exception.Message) -ForegroundColor Red }"
+            )
+        else:
+            ps_script = (
+                "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
+                "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
+                "\nWrite-Host $cmd -ForegroundColor Yellow;"
+                "\nRead-Host '按回车后执行';"
+                "\nWrite-Host '正在执行...' -ForegroundColor Green;"
+                "\ntry { iex $cmd } catch { Write-Host ('发生错误: ' + $_.Exception.Message) -ForegroundColor Red }"
+            )
         try:
             subprocess.Popen(
                 ["powershell.exe", "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
         except Exception as e:
-            messagebox.showerror("错误", f"无法启动 PowerShell: {e}")
+            messagebox.showerror(t("错误"), t("无法启动 PowerShell: {err}").format(err=e))
 
     select_file_btn_mod = ttk.Button(theme_window, text="选择文件", command=select_file)
     select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=PADX, pady=PADY)
@@ -1755,7 +1862,7 @@ def modify_custom_theme() -> None:
 
     def test_off_command_in_powershell():
         if (off_preset_key_var_mod.get() or "none") != "custom":
-            messagebox.showwarning("提示", "请先将关闭预设切换为“自定义”并填写命令")
+            messagebox.showwarning(t("提示"), t("请先将关闭预设切换为“自定义”并填写命令"))
             return
         try:
             off_value_text.configure(state=tk.NORMAL)
@@ -1763,29 +1870,44 @@ def modify_custom_theme() -> None:
             pass
         cmd = off_value_text.get("1.0", "end-1c").strip()
         if not cmd:
-            messagebox.showwarning("提示", "请先在“关闭(off)”中输入要测试的命令")
+            messagebox.showwarning(t("提示"), t("请先在“关闭(off)”中输入要测试的命令"))
             return
         if "{value}" in cmd:
-            val = simpledialog.askstring("输入参数", "请输入 {value} 的值，例如 50：", initialvalue="50", parent=theme_window)
+            val = simpledialog.askstring(
+                t("输入参数"),
+                t("请输入 {value} 的值，例如 50："),
+                initialvalue="50",
+                parent=theme_window,
+            )
             if val is None:
                 return
             cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
-        ps_script = (
-            "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
-            "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
-            "\nWrite-Host $cmd -ForegroundColor Yellow;"
-            "\nRead-Host '按回车后执行';"
-            "\nWrite-Host '正在执行...' -ForegroundColor Green;"
-            "\ntry { iex $cmd } catch { Write-Host ('发生错误: ' + $_.Exception.Message) -ForegroundColor Red }"
-        )
+        if LANG == "en":
+            ps_script = (
+                "Write-Host 'Ready to test command:' -ForegroundColor Cyan;"
+                "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
+                "\nWrite-Host $cmd -ForegroundColor Yellow;"
+                "\nRead-Host 'Press Enter to run';"
+                "\nWrite-Host 'Running...' -ForegroundColor Green;"
+                "\ntry { iex $cmd } catch { Write-Host ('Error: ' + $_.Exception.Message) -ForegroundColor Red }"
+            )
+        else:
+            ps_script = (
+                "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
+                "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
+                "\nWrite-Host $cmd -ForegroundColor Yellow;"
+                "\nRead-Host '按回车后执行';"
+                "\nWrite-Host '正在执行...' -ForegroundColor Green;"
+                "\ntry { iex $cmd } catch { Write-Host ('发生错误: ' + $_.Exception.Message) -ForegroundColor Red }"
+            )
         try:
             subprocess.Popen(
                 ["powershell.exe", "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
         except Exception as e:
-            messagebox.showerror("错误", f"无法启动 PowerShell: {e}")
+            messagebox.showerror(t("错误"), t("无法启动 PowerShell: {err}").format(err=e))
 
     off_action_btn_mod = ttk.Button(theme_window, text="选择文件", command=select_off_file)
     off_action_btn_mod.grid(row=5, column=2, sticky="w", padx=PADX, pady=PADY)
@@ -2331,34 +2453,49 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             try:
                 subprocess.Popen(["services.msc"])  # 备用方式
             except Exception as e:
-                messagebox.showerror("错误", f"无法打开服务管理器: {e}")
+                messagebox.showerror(t("错误"), t("无法打开服务管理器: {err}").format(err=e))
 
     def test_command_in_powershell():
         cmd = on_value_text_add.get("1.0", "end-1c").strip()
         if not cmd:
-            messagebox.showwarning("提示", "请先在“值”中输入要测试的命令")
+            messagebox.showwarning(t("提示"), t("请先在“值”中输入要测试的命令"))
             return
         if "{value}" in cmd:
-            val = simpledialog.askstring("输入参数", "请输入 {value} 的值，例如 50：", initialvalue="50", parent=theme_window)
+            val = simpledialog.askstring(
+                t("输入参数"),
+                t("请输入 {value} 的值，例如 50："),
+                initialvalue="50",
+                parent=theme_window,
+            )
             if val is None:
                 return
             cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
-        ps_script = (
-            "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
-            "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
-            "\nWrite-Host $cmd -ForegroundColor Yellow;"
-            "\nRead-Host '按回车后执行';"
-            "\nWrite-Host '正在执行...' -ForegroundColor Green;"
-            "\ntry { iex $cmd } catch { Write-Host ('发生错误: ' + $_.Exception.Message) -ForegroundColor Red }"
-        )
+        if LANG == "en":
+            ps_script = (
+                "Write-Host 'Ready to test command:' -ForegroundColor Cyan;"
+                "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
+                "\nWrite-Host $cmd -ForegroundColor Yellow;"
+                "\nRead-Host 'Press Enter to run';"
+                "\nWrite-Host 'Running...' -ForegroundColor Green;"
+                "\ntry { iex $cmd } catch { Write-Host ('Error: ' + $_.Exception.Message) -ForegroundColor Red }"
+            )
+        else:
+            ps_script = (
+                "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
+                "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
+                "\nWrite-Host $cmd -ForegroundColor Yellow;"
+                "\nRead-Host '按回车后执行';"
+                "\nWrite-Host '正在执行...' -ForegroundColor Green;"
+                "\ntry { iex $cmd } catch { Write-Host ('发生错误: ' + $_.Exception.Message) -ForegroundColor Red }"
+            )
         try:
             subprocess.Popen(
                 ["powershell.exe", "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
         except Exception as e:
-            messagebox.showerror("错误", f"无法启动 PowerShell: {e}")
+            messagebox.showerror(t("错误"), t("无法启动 PowerShell: {err}").format(err=e))
 
     select_file_btn_add = ttk.Button(theme_window, text="选择文件", command=select_file)
     select_file_btn_add.grid(row=4, column=2, sticky="w", padx=PADX, pady=PADY)
@@ -2380,7 +2517,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
 
     def test_off_command_in_powershell_add():
         if (off_preset_key_var_add.get() or "none") != "custom":
-            messagebox.showwarning("提示", "请先将关闭预设切换为“自定义”并填写命令")
+            messagebox.showwarning(t("提示"), t("请先将关闭预设切换为“自定义”并填写命令"))
             return
         try:
             off_value_text_add.configure(state=tk.NORMAL)
@@ -2388,29 +2525,44 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             pass
         cmd = off_value_text_add.get("1.0", "end-1c").strip()
         if not cmd:
-            messagebox.showwarning("提示", "请先在“关闭(off)”中输入要测试的命令")
+            messagebox.showwarning(t("提示"), t("请先在“关闭(off)”中输入要测试的命令"))
             return
         if "{value}" in cmd:
-            val = simpledialog.askstring("输入参数", "请输入 {value} 的值，例如 50：", initialvalue="50", parent=theme_window)
+            val = simpledialog.askstring(
+                t("输入参数"),
+                t("请输入 {value} 的值，例如 50："),
+                initialvalue="50",
+                parent=theme_window,
+            )
             if val is None:
                 return
             cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
-        ps_script = (
-            "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
-            "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
-            "\nWrite-Host $cmd -ForegroundColor Yellow;"
-            "\nRead-Host '按回车后执行';"
-            "\nWrite-Host '正在执行...' -ForegroundColor Green;"
-            "\ntry { iex $cmd } catch { Write-Host ('发生错误: ' + $_.Exception.Message) -ForegroundColor Red }"
-        )
+        if LANG == "en":
+            ps_script = (
+                "Write-Host 'Ready to test command:' -ForegroundColor Cyan;"
+                "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
+                "\nWrite-Host $cmd -ForegroundColor Yellow;"
+                "\nRead-Host 'Press Enter to run';"
+                "\nWrite-Host 'Running...' -ForegroundColor Green;"
+                "\ntry { iex $cmd } catch { Write-Host ('Error: ' + $_.Exception.Message) -ForegroundColor Red }"
+            )
+        else:
+            ps_script = (
+                "Write-Host '已准备好要测试的命令：' -ForegroundColor Cyan;"
+                "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
+                "\nWrite-Host $cmd -ForegroundColor Yellow;"
+                "\nRead-Host '按回车后执行';"
+                "\nWrite-Host '正在执行...' -ForegroundColor Green;"
+                "\ntry { iex $cmd } catch { Write-Host ('发生错误: ' + $_.Exception.Message) -ForegroundColor Red }"
+            )
         try:
             subprocess.Popen(
                 ["powershell.exe", "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
         except Exception as e:
-            messagebox.showerror("错误", f"无法启动 PowerShell: {e}")
+            messagebox.showerror(t("错误"), t("无法启动 PowerShell: {err}").format(err=e))
 
     off_action_btn_add = ttk.Button(theme_window, text="选择文件", command=select_off_file_add)
     off_action_btn_add.grid(row=5, column=2, sticky="w", padx=PADX, pady=PADY)
@@ -2833,28 +2985,82 @@ def refresh_custom_themes() -> None:
     else:
         messagebox.showwarning(t("警告"), t("配置文件不存在，无法刷新"))
 
+
+def _decode_bytes_best_effort(data: bytes) -> str:
+    if not data:
+        return ""
+    encs: list[str] = []
+    try:
+        encs.append(locale.getpreferredencoding(False))
+    except Exception:
+        pass
+    encs.extend(["utf-8", "gbk", "mbcs"])
+    seen: set[str] = set()
+    candidates: list[tuple[int, str]] = []
+    for enc in encs:
+        if not enc or enc in seen:
+            continue
+        seen.add(enc)
+        try:
+            s = data.decode(enc, errors="replace")
+        except Exception:
+            continue
+        candidates.append((s.count("\ufffd"), s))
+    if not candidates:
+        return data.decode(errors="replace")
+    candidates.sort(key=lambda x: x[0])
+    return candidates[0][1]
+
+
+def _run_capture_text(args: list[str]) -> tuple[int, str, str]:
+    try:
+        cp = subprocess.run(args, capture_output=True, text=False, shell=False)
+    except FileNotFoundError:
+        # 某些环境下依赖 shell 才能解析内置命令/路径
+        cp = subprocess.run(" ".join(args), capture_output=True, text=False, shell=True)
+    stdout = _decode_bytes_best_effort(cp.stdout or b"")
+    stderr = _decode_bytes_best_effort(cp.stderr or b"")
+    return int(getattr(cp, "returncode", 1) or 0), stdout, stderr
+
+
+def _is_hibernate_enabled_from_powercfg_output(output: str) -> bool:
+    out = output or ""
+    lower = out.lower()
+    # 明确的“未启用/不可用”提示（中英文）
+    if ("尚未启用休眠" in out) or ("休眠不可用" in out):
+        return False
+    if ("hibernation has not been enabled" in lower) or ("hibernate has not been enabled" in lower):
+        return False
+
+    lines = out.splitlines()
+    hibernate_line = next(
+        (
+            l
+            for l in lines
+            if (l.strip().startswith("休眠") or l.strip().lower().startswith("hibernate"))
+        ),
+        None,
+    )
+    if not hibernate_line:
+        # 输出不包含关键行，保守认为不可用
+        return False
+    hl = hibernate_line.lower()
+    if ("不可用" in hibernate_line) or ("not available" in hl) or ("not enabled" in hl):
+        return False
+    return True
+
 def sleep():
     # 检查系统休眠/睡眠支持（test模式开启时跳过检测）
     global sleep_disabled, sleep_status_message
     if not ("config" in globals() and config.get("test", 0) == 1):
         try:
-            result = subprocess.run(["powercfg", "-a"], capture_output=True, text=True, shell=True)
-            output = result.stdout + result.stderr
-            # 只要有“休眠不可用”或“尚未启用休眠”就禁用
-            if ("休眠不可用" in output) or ("尚未启用休眠" in output):
+            rc, out, err = _run_capture_text(["powercfg", "-a"])
+            output = (out or "") + (err or "")
+            if rc != 0:
                 sleep_disabled = True
             else:
-                # 还需判断“休眠”行是否包含“不可用”
-                if "休眠" in output:
-                    lines = output.splitlines()
-                    hibernate_line = next((l for l in lines if l.strip().startswith("休眠")), None)
-                    if hibernate_line and ("不可用" in hibernate_line):
-                        sleep_disabled = True
-                    else:
-                        sleep_disabled = False
-                else:
-                    sleep_disabled = True
-            sleep_status_message = output.strip()
+                sleep_disabled = not _is_hibernate_enabled_from_powercfg_output(output)
+            sleep_status_message = output.strip() or "(no output)"
         except Exception as e:
             sleep_disabled = True
             sleep_status_message = f"检测失败: {e}"
@@ -2939,11 +3145,12 @@ def enable_sleep_window() -> None:
         return
     # 尝试启用休眠/睡眠功能
     try:
-        result = subprocess.run(["powercfg", "/hibernate", "on"], capture_output=True, text=True, shell=True)
-        if result.returncode == 0:
+        rc, out, err = _run_capture_text(["powercfg", "/hibernate", "on"])
+        if rc == 0:
             messagebox.showinfo(t("提示"), t("休眠/睡眠功能已启用"))
         else:
-            messagebox.showerror(t("错误"), t(f"启用失败: \n{result.stderr.strip()}"))
+            detail = (err or out).strip()
+            messagebox.showerror(t("错误"), t(f"启用失败: \n{detail}"))
     except Exception as e:
         messagebox.showerror(t("错误"), t(f"启用失败: {e}"))
 
@@ -2963,11 +3170,12 @@ def disable_sleep_window() -> None:
         return
     # 尝试关闭休眠/睡眠功能
     try:
-        result = subprocess.run(["powercfg", "/hibernate", "off"], capture_output=True, text=True, shell=True)
-        if result.returncode == 0:
+        rc, out, err = _run_capture_text(["powercfg", "/hibernate", "off"])
+        if rc == 0:
             messagebox.showinfo(t("提示"), t("休眠/睡眠功能已关闭"))
         else:
-            messagebox.showerror(t("错误"), t(f"关闭失败: \n{result.stderr.strip()}"))
+            detail = (err or out).strip()
+            messagebox.showerror(t("错误"), t(f"关闭失败: \n{detail}"))
     except Exception as e:
         messagebox.showerror(t("错误"), t(f"关闭失败: {e}"))
 
@@ -2976,21 +3184,13 @@ def check_sleep_status_window() -> None:
     中文: 检查系统睡眠/休眠功能是否启用，并弹窗显示详细状态
     """
     try:
-        result = subprocess.run(["powercfg", "-a"], capture_output=True, text=True, shell=True)
-        output = (result.stdout or "") + (result.stderr or "")
-        if result.returncode != 0:
+        rc, out, err = _run_capture_text(["powercfg", "-a"])
+        output = (out or "") + (err or "")
+        if rc != 0:
             messagebox.showerror(t("检查失败"), t(f"命令执行失败：\n{output.strip()}"))
             return
 
-        enabled = True
-
-        if ("尚未启用休眠" in output) or ("休眠不可用" in output):
-            enabled = False
-        else:
-            lines = output.splitlines()
-            hibernate_line = next((l for l in lines if l.strip().startswith("休眠")), None)
-            if hibernate_line and ("不可用" in hibernate_line):
-                enabled = False
+        enabled = _is_hibernate_enabled_from_powercfg_output(output)
 
         status_text = "已启用（可用）" if enabled else "未启用或不可用"
         if LANG == "en":
