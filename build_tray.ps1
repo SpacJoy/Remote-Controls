@@ -21,7 +21,7 @@ function Invoke-Exe {
   Write-Host ("`n> {0} {1}" -f $FilePath, ($Arguments -join ' '))
   & $FilePath @Arguments
   if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) {
-    throw "Command failed with exit code ${LASTEXITCODE}: $FilePath"
+    throw "错误：命令执行失败（退出码 ${LASTEXITCODE}）：$FilePath"
   }
 }
 

@@ -28,7 +28,7 @@ function Pause-IfNeeded {
 }
 
 Write-Host "========================================"
-Write-Host "Remote Controls 项目打包脚本"
+Write-Host "远程控制 项目打包脚本"
 Write-Host "========================================"
 Write-Host ""
 
@@ -65,6 +65,10 @@ if (-not (Test-Path $BuildMainPs1) -or -not (Test-Path $BuildTrayPs1)) {
 
 # 切换到项目根目录
 Set-Location $Root
+
+# 日志目录（集中保存详细日志，主输出尽量中文）
+$LogDir = Join-Path $Root 'logs'
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 # 兼容：优先使用 pwsh（PowerShell 7+），否则回退到当前会话直接调用
 $Pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
@@ -172,10 +176,12 @@ if (-not $CVersion) {
 }
 if ($CVersion -and -not $CVersion.StartsWith('V')) { $CVersion = "V$CVersion" }
 
+$MainBuildLog = Join-Path $LogDir 'build_main.log'
+Write-Host "  详细日志：logs\build_main.log" -ForegroundColor Cyan
 if ($CVersion) {
-    Invoke-ChildBuildScript -ScriptPath $BuildMainPs1 -CVersion $CVersion
+    Invoke-ChildBuildScript -ScriptPath $BuildMainPs1 -CVersion $CVersion *>&1 | Out-File -FilePath $MainBuildLog -Encoding utf8
 } else {
-    Invoke-ChildBuildScript -ScriptPath $BuildMainPs1
+    Invoke-ChildBuildScript -ScriptPath $BuildMainPs1 *>&1 | Out-File -FilePath $MainBuildLog -Encoding utf8
 }
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：C 版主程序构建失败" -ForegroundColor Red
@@ -194,6 +200,8 @@ Copy-Item -LiteralPath $BuiltMainExe -Destination (Join-Path $DistDir 'RC-main.e
 # 打包GUI程序
 Write-Host ""
 Write-Host "[5/8] 打包GUI程序 RC-GUI.exe..." -ForegroundColor Yellow
+$PyInstallerLog = Join-Path $LogDir 'pyinstaller.log'
+Write-Host "  详细日志：logs\pyinstaller.log" -ForegroundColor Cyan
 & $PythonCmd -m PyInstaller `
     -F -n RC-GUI --noconsole --noconfirm `
     --specpath $InstallerDir `
@@ -202,20 +210,23 @@ Write-Host "[5/8] 打包GUI程序 RC-GUI.exe..." -ForegroundColor Yellow
     --add-data "$TopIco;res" `
     --distpath (Join-Path $InstallerDir 'dist') `
     --workpath (Join-Path $InstallerDir 'build') `
-    src\python\GUI.py
+    src\python\GUI.py *>&1 | Out-File -FilePath $PyInstallerLog -Encoding utf8
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：GUI程序打包失败" -ForegroundColor Red
     Pause-IfNeeded
     exit 1
 }
+Write-Host "  GUI 打包完成" -ForegroundColor Green
 
 # 构建 C 版托盘（RC-tray.exe）
 Write-Host ""
 Write-Host "[6/8] 构建 C 版托盘程序 RC-tray.exe..." -ForegroundColor Yellow
+$TrayBuildLog = Join-Path $LogDir 'build_tray.log'
+Write-Host "  详细日志：logs\build_tray.log" -ForegroundColor Cyan
 if ($CVersion) {
-    Invoke-ChildBuildScript -ScriptPath $BuildTrayPs1 -CVersion $CVersion
+    Invoke-ChildBuildScript -ScriptPath $BuildTrayPs1 -CVersion $CVersion *>&1 | Out-File -FilePath $TrayBuildLog -Encoding utf8
 } else {
-    Invoke-ChildBuildScript -ScriptPath $BuildTrayPs1
+    Invoke-ChildBuildScript -ScriptPath $BuildTrayPs1 *>&1 | Out-File -FilePath $TrayBuildLog -Encoding utf8
 }
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：C 版托盘程序构建失败" -ForegroundColor Red
@@ -289,8 +300,9 @@ $IssEncoding = if ($PSVersionTable.PSVersion.Major -ge 6) { 'utf8BOM' } else { '
 Set-Content -Path $TempIssPath -Value $IssContentWithVersion -Encoding $IssEncoding
 
 Write-Host "  生成临时Inno Setup脚本，版本：$FinalVersion" -ForegroundColor Cyan
-
-& $InnoPath $TempIssPath
+$InnoLog = Join-Path $LogDir 'inno_setup.log'
+Write-Host "  详细日志：logs\inno_setup.log" -ForegroundColor Cyan
+& $InnoPath $TempIssPath *>&1 | Out-File -FilePath $InnoLog -Encoding utf8
 $ExitCode = $LASTEXITCODE
 
 # 清理临时文件

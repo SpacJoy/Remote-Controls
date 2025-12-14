@@ -31,7 +31,7 @@ function Invoke-Exe {
   Write-Host ("`n> {0} {1}" -f $FilePath, ($Arguments -join ' '))
   & $FilePath @Arguments
   if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) {
-    throw "Command failed with exit code ${LASTEXITCODE}: $FilePath"
+    throw "错误：命令执行失败（退出码 ${LASTEXITCODE}）：$FilePath"
   }
 }
 
@@ -66,27 +66,27 @@ function Remove-FileWithRetry {
   }
 
   if (Test-Path -LiteralPath $Path) {
-    throw "Error: failed to delete/overwrite $Path. It may be running/locked; close RC-main and retry."
+    throw "错误：无法删除/覆盖 $Path，文件可能正在运行或被占用。请先关闭 RC-main 后重试。"
   }
 }
 
 $root = $PSScriptRoot
 Set-Location -LiteralPath $root
 
-Write-Host '===== Build Remote-Controls main (C/Win32) ====='
+Write-Host '===== 构建 远程控制 主程序（C/Win32） ====='
 
 if (-not $PSBoundParameters.ContainsKey('Version') -or [string]::IsNullOrWhiteSpace($Version)) {
-  $Version = Read-Host 'Enter version (e.g. V1.2.3)'
+  $Version = Read-Host '请输入版本号（例如 V1.2.3）'
 }
 if ([string]::IsNullOrWhiteSpace($Version)) {
-  throw 'Error: Version not provided'
+  throw '错误: 未提供版本号'
 }
-Write-Host ("Version: {0}" -f $Version)
+Write-Host ("使用版本: {0}" -f $Version)
 
 New-Item -ItemType Directory -Force -Path (Join-Path $root 'bin') | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $root 'logs') | Out-Null
 
-Write-Host 'Stopping old process (best effort)...'
+Write-Host '尝试结束旧进程（尽力而为）...'
 Stop-ProcessBestEffort -ProcessName 'RC-main.exe'
 Start-Sleep -Seconds 1
 
@@ -120,25 +120,25 @@ if (-not $UsePaho -and [string]::IsNullOrWhiteSpace($PahoRoot)) {
 $linkExtra = @()
 if ($UsePaho) {
   if ([string]::IsNullOrWhiteSpace($PahoRoot)) {
-    throw 'Error: -UsePaho specified but -PahoRoot (or env:PAHO_MQTT_C_ROOT) is empty'
+    throw '错误：指定了 -UsePaho，但 -PahoRoot（或环境变量 PAHO_MQTT_C_ROOT）为空'
   }
   $pahoInclude = Join-Path $PahoRoot 'include'
   $pahoLibDir = Join-Path $PahoRoot 'lib'
   if (-not (Test-Path -LiteralPath $pahoInclude)) {
-    throw "Error: Paho include dir not found: $pahoInclude"
+    throw "错误：未找到 Paho include 目录：$pahoInclude"
   }
   if (-not (Test-Path -LiteralPath $pahoLibDir)) {
-    throw "Error: Paho lib dir not found: $pahoLibDir"
+    throw "错误：未找到 Paho lib 目录：$pahoLibDir"
   }
 
-  Write-Host ("Using Paho MQTT C: root={0} lib={1}" -f $PahoRoot, $PahoLib)
+  Write-Host ("使用 Paho MQTT C：root={0} lib={1}" -f $PahoRoot, $PahoLib)
   $flags += '-DRC_USE_PAHO_MQTT'
   $flags += ("-I{0}" -f $pahoInclude)
   $linkExtra += ("-L{0}" -f $pahoLibDir)
   $linkExtra += ("-l{0}" -f $PahoLib)
 }
 
-Write-Host 'Compiling...'
+Write-Host '编译源码...'
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\rc_json.c','-o','src\rc_json_main.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_log.c','-o','src\main\rc_log.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_utf.c','-o','src\main\rc_utf.o'))
@@ -148,7 +148,7 @@ Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_mqtt.c','-o'
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_main_tray.c','-o','src\main\rc_main_tray.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\main.c','-o','src\main\main.o'))
 
-Write-Host 'Linking...'
+Write-Host '链接...'
 
 $linkArgs = @(
   'src\main\main.o',
@@ -175,4 +175,4 @@ if ($linkExtra -and $linkExtra.Count -gt 0) {
 Invoke-Exe -FilePath 'gcc' -Arguments $linkArgs
 
 
-Write-Host 'Done: bin\RC-main.exe'
+Write-Host '构建成功: bin\RC-main.exe'
