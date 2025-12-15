@@ -264,6 +264,13 @@ _ZH_TO_EN: dict[str, str] = {
     # 配置保存提示
     "配置文件已保存\n请重新打开主程序以应用更改\n刷新test模式需重启本程序":
         "Config saved.\nPlease restart the main program to apply changes.\nRestart is required to refresh test mode.",
+
+    # 刷新自定义主题弹窗
+    "刷新将加载配置文件中的设置，\n您未保存的更改将会丢失！\n确定要继续吗？":
+        "Reload will load settings from the config file.\nUnsaved changes will be lost!\nContinue?",
+    "已从配置文件刷新自定义主题列表": "Custom themes reloaded from config.",
+    "读取配置文件失败: {err}": "Failed to read config file: {err}",
+    "配置文件不存在，无法刷新": "Config file not found; cannot reload.",
 }
 
 # 反向映射：用于从英文切回中文（避免某些控件在英文模式创建时无法回切）
@@ -3105,7 +3112,7 @@ def refresh_custom_themes() -> None:
             
             messagebox.showinfo(t("提示"), t("已从配置文件刷新自定义主题列表"))
         except Exception as e:
-            messagebox.showerror(t("错误"), t(f"读取配置文件失败: {e}"))
+            messagebox.showerror(t("错误"), t("读取配置文件失败: {err}").format(err=e))
     else:
         messagebox.showwarning(t("警告"), t("配置文件不存在，无法刷新"))
 
