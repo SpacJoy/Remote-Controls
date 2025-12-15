@@ -36,6 +36,7 @@ typedef struct
     wchar_t appDirW[MAX_PATH];
     char versionUtf8[64];
     volatile bool *stopFlag;
+    bool langEnglish;
 } MainTrayParams;
 
 /*
@@ -121,7 +122,7 @@ static HICON load_tray_icon(const wchar_t *appDirW)
  * 打开配置界面：优先启动 RC-GUI.exe。
  * - 这是“内置最小托盘”的设计选择：只提供最基础的入口，不在此处实现复杂的兜底逻辑。
  */
-static void open_config_gui(const wchar_t *appDirW)
+static void open_config_gui(const wchar_t *appDirW, bool langEnglish)
 {
     wchar_t guiPathW[MAX_PATH] = {0};
     _snwprintf(guiPathW, MAX_PATH, L"%s\\RC-GUI.exe", appDirW ? appDirW : L"");
@@ -133,7 +134,10 @@ static void open_config_gui(const wchar_t *appDirW)
         return;
     }
 
-    MessageBoxW(NULL, L"未找到 RC-GUI.exe。", L"RC-main", MB_ICONERROR);
+    if (langEnglish)
+        MessageBoxW(NULL, L"RC-GUI.exe not found.", L"RC-main", MB_ICONERROR);
+    else
+        MessageBoxW(NULL, L"未找到 RC-GUI.exe。", L"RC-main", MB_ICONERROR);
 }
 
 /*
@@ -187,19 +191,29 @@ static LRESULT CALLBACK main_tray_wndproc(HWND hWnd, UINT msg, WPARAM wParam, LP
         if (st->params && st->params->versionUtf8[0])
         {
             char tipUtf8[128] = {0};
-            _snprintf(tipUtf8, sizeof(tipUtf8), "远程控制-%s", st->params->versionUtf8);
+            if (st->params && st->params->langEnglish)
+                _snprintf(tipUtf8, sizeof(tipUtf8), "Remote Controls-%s", st->params->versionUtf8);
+            else
+                _snprintf(tipUtf8, sizeof(tipUtf8), "远程控制-%s", st->params->versionUtf8);
             utf8_to_wide(tipUtf8, tipW, (int)_countof(tipW));
         }
         else
         {
-            wcsncpy_s(tipW, _countof(tipW), L"远程控制", _TRUNCATE);
+            if (st->params && st->params->langEnglish)
+                wcsncpy_s(tipW, _countof(tipW), L"Remote Controls", _TRUNCATE);
+            else
+                wcsncpy_s(tipW, _countof(tipW), L"远程控制", _TRUNCATE);
         }
         wcsncpy_s(st->nid.szTip, _countof(st->nid.szTip), tipW, _TRUNCATE);
 
         Shell_NotifyIconW(NIM_ADD, &st->nid);
 
         // Match Python main.py behavior: notify that fallback tray is used.
-        show_info_balloon(&st->nid, L"RC-main", L"托盘未启动，将使用自带托盘");
+        // Notify that fallback tray is used.
+        if (st->params && st->params->langEnglish)
+            show_info_balloon(&st->nid, L"RC-main", L"Tray not running. Using built-in tray.");
+        else
+            show_info_balloon(&st->nid, L"RC-main", L"托盘未启动，将使用自带托盘");
         return 0;
     }
 
@@ -221,11 +235,13 @@ static LRESULT CALLBACK main_tray_wndproc(HWND hWnd, UINT msg, WPARAM wParam, LP
             HMENU menu = CreatePopupMenu();
             if (menu)
             {
-                const wchar_t *statusTextW = is_user_admin() ? L"【已获得管理员权限】" : L"【未获得管理员权限】";
+                const bool en = (st && st->params && st->params->langEnglish);
+                const wchar_t *statusTextW = is_user_admin() ? (en ? L"[Admin: Yes]" : L"【已获得管理员权限】")
+                                                             : (en ? L"[Admin: No]" : L"【未获得管理员权限】");
                 InsertMenuW(menu, -1, MF_BYPOSITION | MF_STRING | MF_GRAYED, IDM_STATUS, statusTextW);
-                InsertMenuW(menu, -1, MF_BYPOSITION | MF_STRING, IDM_OPEN_CONFIG, L"打开配置");
+                InsertMenuW(menu, -1, MF_BYPOSITION | MF_STRING, IDM_OPEN_CONFIG, en ? L"Open config" : L"打开配置");
                 InsertMenuW(menu, -1, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
-                InsertMenuW(menu, -1, MF_BYPOSITION | MF_STRING, IDM_EXIT, L"退出");
+                InsertMenuW(menu, -1, MF_BYPOSITION | MF_STRING, IDM_EXIT, en ? L"Exit" : L"退出");
 
                 SetForegroundWindow(hWnd);
                 TrackPopupMenu(menu, TPM_LEFTALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hWnd, NULL);
@@ -235,7 +251,8 @@ static LRESULT CALLBACK main_tray_wndproc(HWND hWnd, UINT msg, WPARAM wParam, LP
         else if (lParam == WM_LBUTTONDBLCLK)
         {
             // 双击：快捷打开 GUI。
-            open_config_gui(st && st->params ? st->params->appDirW : NULL);
+            open_config_gui(st && st->params ? st->params->appDirW : NULL,
+                            (st && st->params) ? st->params->langEnglish : false);
         }
         return 0;
 
@@ -243,7 +260,8 @@ static LRESULT CALLBACK main_tray_wndproc(HWND hWnd, UINT msg, WPARAM wParam, LP
         switch (LOWORD(wParam))
         {
         case IDM_OPEN_CONFIG:
-            open_config_gui(st && st->params ? st->params->appDirW : NULL);
+            open_config_gui(st && st->params ? st->params->appDirW : NULL,
+                            (st && st->params) ? st->params->langEnglish : false);
             break;
         case IDM_EXIT:
             // “退出”语义：置 stopFlag=true 通知 MQTT 主循环退出，然后销毁托盘窗口。
@@ -277,7 +295,10 @@ static unsigned __stdcall main_tray_thread(void *arg)
 
     if (is_process_running_w(L"RC-tray.exe"))
     {
-        RC_LogInfo("检测到 RC-tray.exe；跳过主程序自带托盘");
+        if (p->langEnglish)
+            RC_LogInfo("RC-tray.exe detected; skip built-in tray");
+        else
+            RC_LogInfo("检测到 RC-tray.exe；跳过主程序自带托盘");
         free(p);
         return 0;
     }
@@ -291,12 +312,16 @@ static unsigned __stdcall main_tray_thread(void *arg)
 
     if (!RegisterClassExW(&wc))
     {
-        RC_LogWarn("主程序自带托盘 RegisterClassExW 失败");
+        if (p->langEnglish)
+            RC_LogWarn("Built-in tray RegisterClassExW failed");
+        else
+            RC_LogWarn("主程序自带托盘 RegisterClassExW 失败");
         free(p);
         return 0;
     }
+    void RC_MainTrayStartDelayed(const wchar_t *appDirW, const char *versionUtf8, volatile bool *stopFlag, bool langEnglish)
 
-    MainTrayState st;
+        MainTrayState st;
     ZeroMemory(&st, sizeof(st));
     st.params = p;
 
@@ -351,6 +376,7 @@ void RC_MainTrayStartDelayed(const wchar_t *appDirW, const char *versionUtf8, vo
     if (versionUtf8 && *versionUtf8)
         strncpy_s(p->versionUtf8, sizeof(p->versionUtf8), versionUtf8, _TRUNCATE);
     p->stopFlag = stopFlag;
+    p->langEnglish = langEnglish;
 
     uintptr_t th = _beginthreadex(NULL, 0, main_tray_thread, p, 0, NULL);
     if (th)

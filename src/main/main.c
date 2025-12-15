@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "../rc_json.h"
 
@@ -33,6 +34,15 @@
 #endif
 
 #define MUTEX_NAME L"RC-main"
+
+static bool StrIsEnglishLang(const char *s)
+{
+    if (!s || !*s)
+        return false;
+    if (_strnicmp(s, "en", 2) != 0)
+        return false;
+    return (s[2] == '\0' || s[2] == '-' || s[2] == '_');
+}
 
 /*
  * 获取当前可执行文件所在目录。
@@ -317,6 +327,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
         return 1;
     }
 
+    // language: "zh"/"en"（由 RC-GUI 写入；缺省则中文）
+    const char *lang = RC_JsonGetString(RC_JsonObjectGet(root, "language"));
+    const bool langEnglish = StrIsEnglishLang(lang);
+
     // 基础字段读取（后续 MQTT/动作处理会用到）。
     // 注意：RC_JsonGetString 可能返回 NULL；后续会做必要的空值/合法性检查。
     const char *broker = RC_JsonGetString(RC_JsonObjectGet(root, "broker"));
@@ -333,7 +347,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     if ((!broker || !*broker) || port <= 0)
     {
         // broker/port 是 MQTT 连接最低要求。
-        MessageBoxW(NULL, L"MQTT 配置不完整：broker/port 无效。", L"RC-main", MB_ICONERROR);
+        if (langEnglish)
+            MessageBoxW(NULL, L"Invalid MQTT config: broker/port.", L"RC-main", MB_ICONERROR);
+        else
+            MessageBoxW(NULL, L"MQTT 配置不完整：broker/port 无效。", L"RC-main", MB_ICONERROR);
         OpenGuiOrNotepadConfig(appDir, configPath, true);
         RC_JsonFree(root);
         free(jsonText);
@@ -346,7 +363,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
         if (!clientId || !*clientId)
         {
             // 私钥模式依赖 client_id。缺失时直接提示并回退到 GUI/记事本。
-            MessageBoxW(NULL, L"私钥模式下 client_id 不能为空（请在 RC-GUI 中配置客户端ID/私钥）。", L"RC-main", MB_ICONERROR);
+            if (langEnglish)
+                MessageBoxW(NULL, L"In private_key mode, client_id is required. Please set it in RC-GUI.", L"RC-main", MB_ICONERROR);
+            else
+                MessageBoxW(NULL, L"私钥模式下 client_id 不能为空（请在 RC-GUI 中配置客户端ID/私钥）。", L"RC-main", MB_ICONERROR);
             OpenGuiOrNotepadConfig(appDir, configPath, true);
             RC_JsonFree(root);
             free(jsonText);
@@ -361,7 +381,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
         // 路由初始化失败：通常是配置缺字段/结构异常导致。
         RC_JsonFree(root);
         free(jsonText);
-        MessageBoxW(NULL, L"配置加载失败（路由初始化失败）。", L"RC-main", MB_ICONERROR);
+        if (langEnglish)
+            MessageBoxW(NULL, L"Failed to load configuration (router init failed).", L"RC-main", MB_ICONERROR);
+        else
+            MessageBoxW(NULL, L"配置加载失败（路由初始化失败）。", L"RC-main", MB_ICONERROR);
         OpenGuiOrNotepadConfig(appDir, configPath, true);
         CloseHandle(hMutex);
         return 1;
@@ -373,12 +396,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     int subCount = 0;
     const char *const *subs = RC_RouterGetTopics(router, &subCount);
     (void)subs;
-    RC_LogInfo("路由已就绪。主题数=%d", subCount);
+    if (langEnglish)
+        RC_LogInfo("Router ready. Topics=%d", subCount);
+    else
+        RC_LogInfo("路由已就绪。主题数=%d", subCount);
 
     if (subCount <= 0 && testMode != 1)
     {
         // 正常模式下必须至少订阅一个主题，否则主程序无事可做。
-        MessageBoxW(NULL, L"主题不能一个都没有吧！（除非开启测试模式）\n请先打开 RC-GUI 勾选至少一个主题。", L"RC-main", MB_ICONERROR);
+        if (langEnglish)
+            MessageBoxW(NULL, L"No topics enabled. Please open RC-GUI and enable at least one theme (unless test mode is on).", L"RC-main", MB_ICONERROR);
+        else
+            MessageBoxW(NULL, L"主题不能一个都没有吧！（除非开启测试模式）\n请先打开 RC-GUI 勾选至少一个主题。", L"RC-main", MB_ICONERROR);
         OpenGuiOrNotepadConfig(appDir, configPath, true);
         RC_RouterDestroy(router);
         free(jsonText);
@@ -398,14 +427,17 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     mc.reconnectMinSeconds = 2;
     mc.reconnectMaxSeconds = 30;
 
-    RC_LogInfo("MQTT 启动：broker=%s port=%d auth_mode=%s", broker, port, authMode);
+    if (langEnglish)
+        RC_LogInfo("MQTT starting: broker=%s port=%d auth_mode=%s", broker, port, authMode);
+    else
+        RC_LogInfo("MQTT 启动：broker=%s port=%d auth_mode=%s", broker, port, authMode);
 
     volatile bool stopFlag = false;
 
     // 与 Python 版本行为保持一致：
     // - 若 RC-tray.exe 已运行：主程序不再创建自己的托盘 UI（避免重复）。
     // - 若未运行：主程序启动一个最小托盘（可用于退出等基础操作）。
-    RC_MainTrayStartDelayed(appDir, RC_MAIN_VERSION, &stopFlag);
+    RC_MainTrayStartDelayed(appDir, RC_MAIN_VERSION, &stopFlag, langEnglish);
 
     // MQTT 主循环：内部负责连接/订阅/消息分发；stopFlag 被置为 true 时退出。
     RC_MqttRunLoop(&mc, router, &stopFlag);

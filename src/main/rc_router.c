@@ -191,6 +191,11 @@ struct RC_Router
 
     bool notifyEnabled;
 
+    // 语言：从 config.json 的 "language" 字段读取。
+    // - true  => 英文（"en"/"en-*")
+    // - false => 中文（默认）
+    bool langEnglish;
+
     // 内置功能对应的 topic（直接从 config 中读取的字符串）。
     char *topicComputer;
     char *topicScreen;
@@ -222,6 +227,19 @@ struct RC_Router
     const char **topics; // pointers to owned strings above
     int topicsCount;
 };
+
+static bool str_is_english(const char *s)
+{
+    if (!s || !*s)
+        return false;
+
+    // 仅做最小归一化：忽略大小写；识别 en / en-*。
+    if (_strnicmp(s, "en", 2) != 0)
+        return false;
+    if (s[2] == '\0' || s[2] == '-' || s[2] == '_')
+        return true;
+    return false;
+}
 
 static char *dupstr0(const char *s);
 
@@ -918,6 +936,9 @@ RC_Router *RC_RouterCreate(RC_Json *configRoot)
     // notify: 0/1（由 RC-GUI 的“通知提示”开关写入）
     r->notifyEnabled = (cfg_int(r->config, "notify", 1) != 0);
 
+    // language: "zh"/"en"（由 RC-GUI 写入；缺省则中文）
+    r->langEnglish = str_is_english(cfg_str(r->config, "language"));
+
     load_builtins(r);
     load_applications(r);
     load_commands(r);
@@ -925,6 +946,11 @@ RC_Router *RC_RouterCreate(RC_Json *configRoot)
     load_hotkeys(r);
 
     return r;
+}
+
+bool RC_RouterIsEnglish(const RC_Router *r)
+{
+    return r ? r->langEnglish : false;
 }
 
 void RC_RouterNotifyUtf8(RC_Router *r, const char *titleUtf8, const char *messageUtf8)
@@ -997,7 +1023,7 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
 
     char title[64];
     char msg[256];
-    strncpy_s(title, sizeof(title), "远程控制", _TRUNCATE);
+    strncpy_s(title, sizeof(title), (r && r->langEnglish) ? "Remote Controls" : "远程控制", _TRUNCATE);
     msg[0] = 0;
 
     // ===== 内置主题：更友好文本 =====
@@ -1011,22 +1037,33 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
         const char *act = (_stricmp(base, "on") == 0) ? (onAction ? onAction : "lock") : (offAction ? offAction : "none");
         int delay = (_stricmp(base, "on") == 0) ? onDelay : offDelay;
 
-        const char *actZh = "动作";
+        const bool en = (r && r->langEnglish);
+        const char *actText = en ? "Action" : "动作";
         if (_stricmp(act, "lock") == 0)
-            actZh = "锁屏";
+            actText = en ? "Lock" : "锁屏";
         else if (_stricmp(act, "shutdown") == 0)
-            actZh = "关机";
+            actText = en ? "Shutdown" : "关机";
         else if (_stricmp(act, "restart") == 0)
-            actZh = "重启";
+            actText = en ? "Restart" : "重启";
         else if (_stricmp(act, "logoff") == 0)
-            actZh = "注销";
+            actText = en ? "Log off" : "注销";
         else if (_stricmp(act, "none") == 0)
-            actZh = "无动作";
+            actText = en ? "None" : "无动作";
 
         if (delay > 0 && _stricmp(act, "none") != 0)
-            _snprintf(msg, sizeof(msg), "电脑：%s（延迟 %d 秒）", actZh, delay);
+        {
+            if (en)
+                _snprintf(msg, sizeof(msg), "Computer: %s (delay %d s)", actText, delay);
+            else
+                _snprintf(msg, sizeof(msg), "电脑：%s（延迟 %d 秒）", actText, delay);
+        }
         else
-            _snprintf(msg, sizeof(msg), "电脑：%s", actZh);
+        {
+            if (en)
+                _snprintf(msg, sizeof(msg), "Computer: %s", actText);
+            else
+                _snprintf(msg, sizeof(msg), "电脑：%s", actText);
+        }
     }
     else if (r->checkedScreen && r->topicScreen && topicUtf8 && strcmp(topicUtf8, r->topicScreen) == 0)
     {
@@ -1035,7 +1072,10 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
             percent = 0;
         else if (_stricmp(base, "on") == 0)
             percent = hasValue ? clamp0_100(value) : 100;
-        _snprintf(msg, sizeof(msg), "屏幕亮度：%d%%", percent);
+        if (r && r->langEnglish)
+            _snprintf(msg, sizeof(msg), "Screen brightness: %d%%", percent);
+        else
+            _snprintf(msg, sizeof(msg), "屏幕亮度：%d%%", percent);
     }
     else if (r->checkedVolume && r->topicVolume && topicUtf8 && strcmp(topicUtf8, r->topicVolume) == 0)
     {
@@ -1044,7 +1084,10 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
             percent = 0;
         else if (_stricmp(base, "on") == 0)
             percent = hasValue ? clamp0_100(value) : 100;
-        _snprintf(msg, sizeof(msg), "音量：%d%%", percent);
+        if (r && r->langEnglish)
+            _snprintf(msg, sizeof(msg), "Volume: %d%%", percent);
+        else
+            _snprintf(msg, sizeof(msg), "音量：%d%%", percent);
     }
     else if (r->checkedSleep && r->topicSleep && topicUtf8 && strcmp(topicUtf8, r->topicSleep) == 0)
     {
@@ -1056,50 +1099,66 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
         const char *act = (_stricmp(base, "on") == 0) ? (onAction ? onAction : "sleep") : (offAction ? offAction : "none");
         int delay = (_stricmp(base, "on") == 0) ? onDelay : offDelay;
 
-        const char *actZh = "动作";
+        const bool en = (r && r->langEnglish);
+        const char *actText = en ? "Action" : "动作";
         if (_stricmp(act, "sleep") == 0)
-            actZh = "睡眠";
+            actText = en ? "Sleep" : "睡眠";
         else if (_stricmp(act, "hibernate") == 0)
-            actZh = "休眠";
+            actText = en ? "Hibernate" : "休眠";
         else if (_stricmp(act, "display_off") == 0)
-            actZh = "关闭显示器";
+            actText = en ? "Turn display off" : "关闭显示器";
         else if (_stricmp(act, "display_on") == 0)
-            actZh = "开启显示器";
+            actText = en ? "Turn display on" : "开启显示器";
         else if (_stricmp(act, "lock") == 0)
-            actZh = "锁屏";
+            actText = en ? "Lock" : "锁屏";
         else if (_stricmp(act, "none") == 0)
-            actZh = "无动作";
+            actText = en ? "None" : "无动作";
 
         if (delay > 0 && _stricmp(act, "none") != 0)
-            _snprintf(msg, sizeof(msg), "睡眠：%s（延迟 %d 秒）", actZh, delay);
+        {
+            if (en)
+                _snprintf(msg, sizeof(msg), "Sleep: %s (delay %d s)", actText, delay);
+            else
+                _snprintf(msg, sizeof(msg), "睡眠：%s（延迟 %d 秒）", actText, delay);
+        }
         else
-            _snprintf(msg, sizeof(msg), "睡眠：%s", actZh);
+        {
+            if (en)
+                _snprintf(msg, sizeof(msg), "Sleep: %s", actText);
+            else
+                _snprintf(msg, sizeof(msg), "睡眠：%s", actText);
+        }
     }
     else if (r->checkedMedia && r->topicMedia && topicUtf8 && strcmp(topicUtf8, r->topicMedia) == 0)
     {
-        const char *mediaZh = "媒体";
+        const bool en = (r && r->langEnglish);
+        const char *mediaText = en ? "Media" : "媒体";
         if (_stricmp(base, "off") == 0)
-            mediaZh = "下一首";
+            mediaText = en ? "Next" : "下一首";
         else if (_stricmp(base, "on") == 0)
         {
             if (hasValue)
             {
                 int v = clamp0_100(value);
                 if (v <= 33)
-                    mediaZh = "下一首";
+                    mediaText = en ? "Next" : "下一首";
                 else if (v <= 66)
-                    mediaZh = "播放/暂停";
+                    mediaText = en ? "Play/Pause" : "播放/暂停";
                 else
-                    mediaZh = "上一首";
+                    mediaText = en ? "Previous" : "上一首";
             }
             else
             {
-                mediaZh = "上一首";
+                mediaText = en ? "Previous" : "上一首";
             }
         }
         else if (_stricmp(base, "pause") == 0)
-            mediaZh = "播放/暂停";
-        _snprintf(msg, sizeof(msg), "媒体：%s", mediaZh);
+            mediaText = en ? "Play/Pause" : "播放/暂停";
+
+        if (en)
+            _snprintf(msg, sizeof(msg), "Media: %s", mediaText);
+        else
+            _snprintf(msg, sizeof(msg), "媒体：%s", mediaText);
     }
     else
     {
@@ -1113,7 +1172,7 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
             {
                 if (r->apps[i].topic && topicUtf8 && strcmp(topicUtf8, r->apps[i].topic) == 0)
                 {
-                    kind = "应用";
+                    kind = (r && r->langEnglish) ? "App" : "应用";
                     label = (r->apps[i].displayName && *r->apps[i].displayName) ? r->apps[i].displayName : r->apps[i].topic;
                     break;
                 }
@@ -1126,7 +1185,7 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
             {
                 if (r->cmds[i].topic && topicUtf8 && strcmp(topicUtf8, r->cmds[i].topic) == 0)
                 {
-                    kind = "命令";
+                    kind = (r && r->langEnglish) ? "Command" : "命令";
                     label = (r->cmds[i].displayName && *r->cmds[i].displayName) ? r->cmds[i].displayName : r->cmds[i].topic;
                     break;
                 }
@@ -1139,7 +1198,7 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
             {
                 if (r->serves[i].topic && topicUtf8 && strcmp(topicUtf8, r->serves[i].topic) == 0)
                 {
-                    kind = "服务";
+                    kind = (r && r->langEnglish) ? "Service" : "服务";
                     if (r->serves[i].displayName && *r->serves[i].displayName)
                         label = r->serves[i].displayName;
                     else
@@ -1155,7 +1214,7 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
             {
                 if (r->hotkeys[i].topic && topicUtf8 && strcmp(topicUtf8, r->hotkeys[i].topic) == 0)
                 {
-                    kind = "热键";
+                    kind = (r && r->langEnglish) ? "Hotkey" : "热键";
                     label = (r->hotkeys[i].displayName && *r->hotkeys[i].displayName) ? r->hotkeys[i].displayName : r->hotkeys[i].topic;
                     break;
                 }
@@ -1164,22 +1223,36 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
 
         if (kind)
         {
-            const char *opZh = "触发";
+            const bool en = (r && r->langEnglish);
+            const char *opText = en ? "Trigger" : "触发";
             if (_stricmp(base, "on") == 0)
-                opZh = "开启";
+                opText = en ? "On" : "开启";
             else if (_stricmp(base, "off") == 0)
-                opZh = "关闭";
+                opText = en ? "Off" : "关闭";
             else if (_stricmp(base, "pause") == 0)
-                opZh = "暂停";
+                opText = en ? "Pause" : "暂停";
 
             if (hasValue)
-                _snprintf(msg, sizeof(msg), "%s：%s（%s %d%%）", kind, label ? label : "", opZh, clamp0_100(value));
+            {
+                if (en)
+                    _snprintf(msg, sizeof(msg), "%s: %s (%s %d%%)", kind, label ? label : "", opText, clamp0_100(value));
+                else
+                    _snprintf(msg, sizeof(msg), "%s：%s（%s %d%%）", kind, label ? label : "", opText, clamp0_100(value));
+            }
             else
-                _snprintf(msg, sizeof(msg), "%s：%s（%s）", kind, label ? label : "", opZh);
+            {
+                if (en)
+                    _snprintf(msg, sizeof(msg), "%s: %s (%s)", kind, label ? label : "", opText);
+                else
+                    _snprintf(msg, sizeof(msg), "%s：%s（%s）", kind, label ? label : "", opText);
+            }
         }
         else
         {
-            _snprintf(msg, sizeof(msg), "主题：%s（%s）", topicUtf8 ? topicUtf8 : "", payloadUtf8 ? payloadUtf8 : "");
+            if (r && r->langEnglish)
+                _snprintf(msg, sizeof(msg), "Topic: %s (%s)", topicUtf8 ? topicUtf8 : "", payloadUtf8 ? payloadUtf8 : "");
+            else
+                _snprintf(msg, sizeof(msg), "主题：%s（%s）", topicUtf8 ? topicUtf8 : "", payloadUtf8 ? payloadUtf8 : "");
         }
     }
 

@@ -28,6 +28,11 @@
 // - Link with paho-mqtt3c (non-SSL) or paho-mqtt3cs (SSL) as needed
 #include "MQTTClient.h"
 
+static const char *rc_title_for_notify(const RC_Router *router)
+{
+    return (router && RC_RouterIsEnglish(router)) ? "Remote Controls" : "远程控制";
+}
+
 static void notify_status_throttled(RC_Router *router, DWORD *pLastTick, DWORD minIntervalMs, const char *messageUtf8)
 {
     if (!router || !messageUtf8 || !*messageUtf8)
@@ -37,7 +42,7 @@ static void notify_status_throttled(RC_Router *router, DWORD *pLastTick, DWORD m
         return;
     if (pLastTick)
         *pLastTick = now;
-    RC_RouterNotifyUtf8(router, "远程控制", messageUtf8);
+    RC_RouterNotifyUtf8(router, rc_title_for_notify(router), messageUtf8);
 }
 
 /*
@@ -147,31 +152,49 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
      */
     while (!shouldStop || !*shouldStop)
     {
-        RC_LogInfo("MQTT(Paho) 正在连接 %s", address);
+        if (RC_RouterIsEnglish(router))
+            RC_LogInfo("MQTT(Paho) connecting %s", address);
+        else
+            RC_LogInfo("MQTT(Paho) 正在连接 %s", address);
         {
             char msg[256];
-            _snprintf(msg, sizeof(msg), "正在连接服务器：%s", address);
+            if (RC_RouterIsEnglish(router))
+                _snprintf(msg, sizeof(msg), "Connecting to server: %s", address);
+            else
+                _snprintf(msg, sizeof(msg), "正在连接服务器：%s", address);
             msg[sizeof(msg) - 1] = 0;
             notify_status_throttled(router, &lastConnNotifyTick, 30000, msg);
         }
         rc = MQTTClient_connect(client, &conn_opts);
         if (rc != MQTTCLIENT_SUCCESS)
         {
-            RC_LogWarn("MQTT(Paho) 连接失败 rc=%d，%d 秒后重试", rc, backoff);
+            if (RC_RouterIsEnglish(router))
+                RC_LogWarn("MQTT(Paho) connect failed rc=%d, retry in %d s", rc, backoff);
+            else
+                RC_LogWarn("MQTT(Paho) 连接失败 rc=%d，%d 秒后重试", rc, backoff);
             {
                 char msg[256];
-                _snprintf(msg, sizeof(msg), "连接服务器失败(rc=%d)，%d 秒后重试", rc, backoff);
+                if (RC_RouterIsEnglish(router))
+                    _snprintf(msg, sizeof(msg), "Failed to connect (rc=%d). Retrying in %d seconds.", rc, backoff);
+                else
+                    _snprintf(msg, sizeof(msg), "连接服务器失败(rc=%d)，%d 秒后重试", rc, backoff);
                 msg[sizeof(msg) - 1] = 0;
                 notify_status_throttled(router, &lastFailNotifyTick, 30000, msg);
             }
             if (is_fatal_auth_failure(rc))
             {
-                RC_LogError("MQTT(Paho) 鉴权失败 rc=%d", rc);
+                if (RC_RouterIsEnglish(router))
+                    RC_LogError("MQTT(Paho) auth failed rc=%d", rc);
+                else
+                    RC_LogError("MQTT(Paho) 鉴权失败 rc=%d", rc);
                 {
                     char msg[256];
-                    _snprintf(msg, sizeof(msg), "服务器鉴权失败(rc=%d)，请检查账号/密码或权限", rc);
+                    if (RC_RouterIsEnglish(router))
+                        _snprintf(msg, sizeof(msg), "Authentication failed (rc=%d). Please check username/password or permissions.", rc);
+                    else
+                        _snprintf(msg, sizeof(msg), "服务器鉴权失败(rc=%d)，请检查账号/密码或权限", rc);
                     msg[sizeof(msg) - 1] = 0;
-                    RC_RouterNotifyUtf8(router, "远程控制", msg);
+                    RC_RouterNotifyUtf8(router, rc_title_for_notify(router), msg);
                 }
                 break;
             }
@@ -184,9 +207,12 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
 
         {
             char msg[256];
-            _snprintf(msg, sizeof(msg), "已连接服务器：%s", address);
+            if (RC_RouterIsEnglish(router))
+                _snprintf(msg, sizeof(msg), "Connected: %s", address);
+            else
+                _snprintf(msg, sizeof(msg), "已连接服务器：%s", address);
             msg[sizeof(msg) - 1] = 0;
-            RC_RouterNotifyUtf8(router, "远程控制", msg);
+            RC_RouterNotifyUtf8(router, rc_title_for_notify(router), msg);
         }
 
         // 连接成功：重置 backoff，避免下一次断线重连延迟过大。
@@ -220,8 +246,16 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
 #ifdef MQTTClient_isConnected
             if (!MQTTClient_isConnected(client))
             {
-                RC_LogWarn("MQTT(Paho) 已断开连接");
-                notify_status_throttled(router, &lastDiscNotifyTick, 30000, "连接已断开，正在重连...");
+                if (RC_RouterIsEnglish(router))
+                {
+                    RC_LogWarn("MQTT(Paho) disconnected");
+                    notify_status_throttled(router, &lastDiscNotifyTick, 30000, "Disconnected. Reconnecting...");
+                }
+                else
+                {
+                    RC_LogWarn("MQTT(Paho) 已断开连接");
+                    notify_status_throttled(router, &lastDiscNotifyTick, 30000, "连接已断开，正在重连...");
+                }
                 break;
             }
 #endif
@@ -233,7 +267,10 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
             int rcvrc = MQTTClient_receive(client, &topicName, &topicLen, &message, 1000);
             if (rcvrc != MQTTCLIENT_SUCCESS)
             {
-                RC_LogWarn("MQTT(Paho) 接收失败 rc=%d", rcvrc);
+                if (RC_RouterIsEnglish(router))
+                    RC_LogWarn("MQTT(Paho) receive failed rc=%d", rcvrc);
+                else
+                    RC_LogWarn("MQTT(Paho) 接收失败 rc=%d", rcvrc);
                 break;
             }
 
@@ -251,7 +288,10 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
                 break;
             }
 
-            RC_LogInfo("收到 MQTT 消息 topic='%s' payload='%s'", topicName ? topicName : "", payload);
+            if (RC_RouterIsEnglish(router))
+                RC_LogInfo("MQTT message topic='%s' payload='%s'", topicName ? topicName : "", payload);
+            else
+                RC_LogInfo("收到 MQTT 消息 topic='%s' payload='%s'", topicName ? topicName : "", payload);
             RC_RouterHandle(router, topicName ? topicName : "", payload);
 
             free(payload);
@@ -262,7 +302,10 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
         // 主动断开：给 broker 一个有限的处理时间（timeout=1000ms）。
         MQTTClient_disconnect(client, 1000);
         // 断线后退避一段时间再重连（避免 tight-loop）。
-        notify_status_throttled(router, &lastDiscNotifyTick, 30000, "连接已断开，正在重连...");
+        if (RC_RouterIsEnglish(router))
+            notify_status_throttled(router, &lastDiscNotifyTick, 30000, "Disconnected. Reconnecting...");
+        else
+            notify_status_throttled(router, &lastDiscNotifyTick, 30000, "连接已断开，正在重连...");
         Sleep((DWORD)backoff * 1000);
         if (backoff < backoffMax)
             backoff = (backoff < backoffMax / 2) ? backoff * 2 : backoffMax;
@@ -284,6 +327,11 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
 #include <stdlib.h>
 #include <string.h>
 
+static const char *rc_title_for_notify(const RC_Router *router)
+{
+    return (router && RC_RouterIsEnglish(router)) ? "Remote Controls" : "远程控制";
+}
+
 static void notify_status_throttled(RC_Router *router, DWORD *pLastTick, DWORD minIntervalMs, const char *messageUtf8)
 {
     if (!router || !messageUtf8 || !*messageUtf8)
@@ -293,7 +341,7 @@ static void notify_status_throttled(RC_Router *router, DWORD *pLastTick, DWORD m
         return;
     if (pLastTick)
         *pLastTick = now;
-    RC_RouterNotifyUtf8(router, "远程控制", messageUtf8);
+    RC_RouterNotifyUtf8(router, rc_title_for_notify(router), messageUtf8);
 }
 
 typedef struct
@@ -755,7 +803,10 @@ static bool mqtt_process_one_packet(MqttConn *c, RC_Router *router)
             return false;
         }
 
-        RC_LogInfo("收到 MQTT 消息 topic='%s' payload='%s'", topic, payload);
+        if (RC_RouterIsEnglish(router))
+            RC_LogInfo("MQTT message topic='%s' payload='%s'", topic, payload);
+        else
+            RC_LogInfo("收到 MQTT 消息 topic='%s' payload='%s'", topic, payload);
         RC_RouterHandle(router, topic, payload);
 
         free(payload);
@@ -802,7 +853,10 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
     {
-        RC_LogError("WSAStartup 初始化失败");
+        if (RC_RouterIsEnglish(router))
+            RC_LogError("WSAStartup failed");
+        else
+            RC_LogError("WSAStartup 初始化失败");
         return;
     }
 
@@ -817,10 +871,16 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
      */
     while (!shouldStop || !*shouldStop)
     {
-        RC_LogInfo("MQTT 正在连接到 %s:%d...", cfg->brokerHost ? cfg->brokerHost : "", cfg->port);
+        if (RC_RouterIsEnglish(router))
+            RC_LogInfo("MQTT connecting to %s:%d...", cfg->brokerHost ? cfg->brokerHost : "", cfg->port);
+        else
+            RC_LogInfo("MQTT 正在连接到 %s:%d...", cfg->brokerHost ? cfg->brokerHost : "", cfg->port);
         {
             char msg[256];
-            _snprintf(msg, sizeof(msg), "正在连接服务器：%s:%d", cfg->brokerHost ? cfg->brokerHost : "", cfg->port);
+            if (RC_RouterIsEnglish(router))
+                _snprintf(msg, sizeof(msg), "Connecting to server: %s:%d", cfg->brokerHost ? cfg->brokerHost : "", cfg->port);
+            else
+                _snprintf(msg, sizeof(msg), "正在连接服务器：%s:%d", cfg->brokerHost ? cfg->brokerHost : "", cfg->port);
             msg[sizeof(msg) - 1] = 0;
             notify_status_throttled(router, &lastConnNotifyTick, 30000, msg);
         }
@@ -828,10 +888,16 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
         SOCKET s = tcp_connect_utf8(cfg->brokerHost, cfg->port);
         if (s == INVALID_SOCKET)
         {
-            RC_LogWarn("MQTT 连接失败，%d 秒后重试", backoff);
+            if (RC_RouterIsEnglish(router))
+                RC_LogWarn("MQTT connect failed, retry in %d s", backoff);
+            else
+                RC_LogWarn("MQTT 连接失败，%d 秒后重试", backoff);
             {
                 char msg[256];
-                _snprintf(msg, sizeof(msg), "连接服务器失败，%d 秒后重试", backoff);
+                if (RC_RouterIsEnglish(router))
+                    _snprintf(msg, sizeof(msg), "Failed to connect. Retrying in %d seconds.", backoff);
+                else
+                    _snprintf(msg, sizeof(msg), "连接服务器失败，%d 秒后重试", backoff);
                 msg[sizeof(msg) - 1] = 0;
                 notify_status_throttled(router, &lastFailNotifyTick, 30000, msg);
             }
@@ -853,7 +919,10 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
 
         if (!mqtt_send_connect(&c, cfg))
         {
-            RC_LogWarn("MQTT CONNECT 发送失败");
+            if (RC_RouterIsEnglish(router))
+                RC_LogWarn("MQTT CONNECT send failed");
+            else
+                RC_LogWarn("MQTT CONNECT 发送失败");
             closesocket_safe(&s);
             continue;
         }
@@ -861,31 +930,46 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
         int rc = -1;
         if (!mqtt_wait_connack(&c, &rc))
         {
-            RC_LogWarn("MQTT CONNACK 失败");
+            if (RC_RouterIsEnglish(router))
+                RC_LogWarn("MQTT CONNACK failed");
+            else
+                RC_LogWarn("MQTT CONNACK 失败");
             closesocket_safe(&s);
             continue;
         }
 
         if (rc != 0)
         {
-            RC_LogError("MQTT 连接被拒绝 (code=%d)", rc);
+            if (RC_RouterIsEnglish(router))
+                RC_LogError("MQTT connection rejected (code=%d)", rc);
+            else
+                RC_LogError("MQTT 连接被拒绝 (code=%d)", rc);
             // Match python behavior: auth failure => stop retrying.
             if (rc == 5)
             {
-                RC_RouterNotifyUtf8(router, "远程控制", "服务器鉴权失败(code=5)，请检查账号/密码或权限");
+                if (RC_RouterIsEnglish(router))
+                    RC_RouterNotifyUtf8(router, rc_title_for_notify(router), "Authentication failed (code=5). Please check username/password or permissions.");
+                else
+                    RC_RouterNotifyUtf8(router, rc_title_for_notify(router), "服务器鉴权失败(code=5)，请检查账号/密码或权限");
                 closesocket_safe(&s);
                 break;
             }
-            notify_status_throttled(router, &lastFailNotifyTick, 30000, "服务器拒绝连接，稍后重试...");
+            if (RC_RouterIsEnglish(router))
+                notify_status_throttled(router, &lastFailNotifyTick, 30000, "Server rejected connection. Retrying...");
+            else
+                notify_status_throttled(router, &lastFailNotifyTick, 30000, "服务器拒绝连接，稍后重试...");
             closesocket_safe(&s);
             continue;
         }
 
         {
             char msg[256];
-            _snprintf(msg, sizeof(msg), "已连接服务器：%s:%d", cfg->brokerHost ? cfg->brokerHost : "", cfg->port);
+            if (RC_RouterIsEnglish(router))
+                _snprintf(msg, sizeof(msg), "Connected: %s:%d", cfg->brokerHost ? cfg->brokerHost : "", cfg->port);
+            else
+                _snprintf(msg, sizeof(msg), "已连接服务器：%s:%d", cfg->brokerHost ? cfg->brokerHost : "", cfg->port);
             msg[sizeof(msg) - 1] = 0;
-            RC_RouterNotifyUtf8(router, "远程控制", msg);
+            RC_RouterNotifyUtf8(router, rc_title_for_notify(router), msg);
         }
 
         // Subscribe topics from router
@@ -896,7 +980,10 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
             if (!topics[i] || !*topics[i])
                 continue;
             mqtt_send_subscribe_one(&c, topics[i]);
-            RC_LogInfo("MQTT 订阅：%s", topics[i]);
+            if (RC_RouterIsEnglish(router))
+                RC_LogInfo("MQTT subscribe: %s", topics[i]);
+            else
+                RC_LogInfo("MQTT 订阅：%s", topics[i]);
         }
 
         // Main receive loop
@@ -918,7 +1005,10 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
             {
                 if (!mqtt_send_pingreq(&c))
                 {
-                    RC_LogWarn("MQTT 心跳(PING)失败");
+                    if (RC_RouterIsEnglish(router))
+                        RC_LogWarn("MQTT heartbeat (PING) failed");
+                    else
+                        RC_LogWarn("MQTT 心跳(PING)失败");
                     break;
                 }
             }
@@ -931,14 +1021,25 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
 
             if (!mqtt_process_one_packet(&c, router))
             {
-                RC_LogWarn("MQTT 接收失败");
+                if (RC_RouterIsEnglish(router))
+                    RC_LogWarn("MQTT receive failed");
+                else
+                    RC_LogWarn("MQTT 接收失败");
                 break;
             }
         }
 
         closesocket_safe(&s);
-        RC_LogWarn("MQTT 已断开，正在重连...");
-        notify_status_throttled(router, &lastDiscNotifyTick, 30000, "连接已断开，正在重连...");
+        if (RC_RouterIsEnglish(router))
+        {
+            RC_LogWarn("MQTT disconnected, reconnecting...");
+            notify_status_throttled(router, &lastDiscNotifyTick, 30000, "Disconnected. Reconnecting...");
+        }
+        else
+        {
+            RC_LogWarn("MQTT 已断开，正在重连...");
+            notify_status_throttled(router, &lastDiscNotifyTick, 30000, "连接已断开，正在重连...");
+        }
     }
 
     WSACleanup();

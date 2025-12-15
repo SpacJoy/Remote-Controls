@@ -57,6 +57,13 @@ extern "C"
      */
     void RC_RouterNotifyUtf8(RC_Router *r, const char *titleUtf8, const char *messageUtf8);
 
+    /*
+     * 当前语言是否为英文：
+     * - 读取 config.json 的 "language" 字段。
+     * - 约定："en"/"en-*" => 英文；其它/缺省 => 中文。
+     */
+    bool RC_RouterIsEnglish(const RC_Router *r);
+
 #ifdef __cplusplus
 }
 #endif
