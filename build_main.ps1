@@ -83,6 +83,13 @@ Set-Location -LiteralPath $root
 
 Write-Host '===== 构建 远程控制 主程序（C/Win32） ====='
 
+# 强制仅使用 Paho MQTT C。
+# - 不再支持不带 Paho 的构建（rc_mqtt.c 会在编译期要求 RC_USE_PAHO_MQTT）。
+if ($PSBoundParameters.ContainsKey('UsePaho') -and -not $UsePaho) {
+  throw '错误：当前项目已强制使用 Paho MQTT C，不支持禁用（UsePaho=false）。请安装/配置 Paho，并设置 -PahoRoot 或环境变量 PAHO_MQTT_C_ROOT。'
+}
+$UsePaho = $true
+
 if (-not $PSBoundParameters.ContainsKey('Version') -or [string]::IsNullOrWhiteSpace($Version)) {
   $Version = Read-Host '请输入版本号（例如 V1.2.3）'
 }
@@ -120,11 +127,10 @@ $flags = @(
   ('-DRC_MAIN_VERSION={0}' -f $Version)
 )
 
-# Auto-enable Paho build if PAHO_MQTT_C_ROOT is set.
-if (-not $UsePaho -and [string]::IsNullOrWhiteSpace($PahoRoot)) {
+# Resolve Paho root from env var if not provided.
+if ([string]::IsNullOrWhiteSpace($PahoRoot)) {
   if (-not [string]::IsNullOrWhiteSpace($env:PAHO_MQTT_C_ROOT)) {
     $PahoRoot = $env:PAHO_MQTT_C_ROOT
-    $UsePaho = $true
   }
 }
 

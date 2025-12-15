@@ -14,6 +14,12 @@
 #define RC_MQTT_MAX_PAYLOAD_BYTES (4096)
 #define RC_MQTT_LOG_PREVIEW_BYTES (128)
 
+// 强制仅使用 Paho MQTT C：构建必须定义 RC_USE_PAHO_MQTT 并提供 Paho 头文件/库。
+// 说明：为避免 VS Code IntelliSense 全红，这里跳过 __INTELLISENSE__ 分析场景。
+#if !defined(RC_USE_PAHO_MQTT) && !defined(__INTELLISENSE__)
+#error "This build requires Paho MQTT C. Please define RC_USE_PAHO_MQTT and link against paho-mqtt3c (or paho-mqtt3cs for SSL)."
+#endif
+
 #include "rc_log.h"
 
 #include <windows.h>
