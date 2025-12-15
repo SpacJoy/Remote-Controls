@@ -227,11 +227,13 @@ jobs:
                   echo "=== 验证关键依赖 ==="
                   $failed = $false
 
-                  try { python -c "import pystray; print('✓ pystray: OK')" } catch { echo "✗ pystray: MISSING"; $failed = $true }
-                  try { python -c "import paho.mqtt.client as mqtt; print('✓ paho-mqtt: OK')" } catch { echo "✗ paho-mqtt: MISSING"; $failed = $true }
+                  # 当前架构：主程序/托盘为 C 实现；Python 侧主要用于 GUI 与 PyInstaller 构建。
+                  # 因此这里只校验 GUI/构建必需的 Python 依赖（避免历史依赖导致构建误失败）。
+                  try { python -c "import tkinter; print('✓ tkinter: OK')" } catch { echo "✗ tkinter: MISSING"; $failed = $true }
                   try { python -c "import win32com.client; print('✓ pywin32: OK')" } catch { echo "✗ pywin32: MISSING"; $failed = $true }
                   try { python -c "import psutil; print('✓ psutil: OK')" } catch { echo "✗ psutil: MISSING"; $failed = $true }
-                  try { python -c "import PIL; print('✓ Pillow: OK')" } catch { echo "✗ Pillow: MISSING"; $failed = $true }
+                  try { python -c "import wmi; print('✓ wmi: OK')" } catch { echo "✗ wmi: MISSING"; $failed = $true }
+                  try { python -c "import PyInstaller; print('✓ pyinstaller: OK')" } catch { echo "✗ pyinstaller: MISSING"; $failed = $true }
 
                   if ($failed) {
                     echo "❌ 关键依赖缺失，停止构建"
@@ -262,7 +264,7 @@ jobs:
                   # 运行PyInstaller构建脚本
                   echo "开始PyInstaller构建..."
                   try {
-                    pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_installer.ps1 $version
+                    pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_installer.ps1 $version -NoPause
                     echo "✅ PyInstaller构建完成"
                   } catch {
                     echo "❌ PyInstaller构建失败: $_"

@@ -177,10 +177,16 @@ function Remove-FileWithRetry {
     return (-not (Test-Path -LiteralPath $Path))
 }
 
-# 资源绝对路径（避免 --specpath 导致的相对路径解析到 installer/）
-$ResDir   = Join-Path $Root 'res'
-$IconGUI  = Join-Path $ResDir 'icon_GUI.ico'
-$TopIco   = Join-Path $ResDir 'top.ico'
+# 资源路径
+# 说明：PyInstaller 生成/写入 spec 时会把传入参数固化到 spec 中。
+# 为避免生成带有本机绝对路径的 spec（污染工作区/在 CI 中不可复用），这里同时准备：
+# - 绝对路径：用于脚本内部检查/日志
+# - 相对路径：用于传给 PyInstaller
+$ResDir      = Join-Path $Root 'res'
+$IconGUIAbs  = Join-Path $ResDir 'icon_GUI.ico'
+$TopIcoAbs   = Join-Path $ResDir 'top.ico'
+$IconGUIRel  = 'res\icon_GUI.ico'
+$TopIcoRel   = 'res\top.ico'
 # 旧版彩蛋图片 (cd1~cd5) 已不再需要打包，托盘改为仅访问远程随机图片接口。
 
 # 检查Python环境（仅用于：更新版本信息 + 打包 GUI）
@@ -347,10 +353,10 @@ $PyInstallerLog = Join-Path $LogDir 'pyinstaller.log'
 Write-Host "  详细日志：logs\pyinstaller.log" -ForegroundColor Cyan
 & $PythonCmd -m PyInstaller `
     -F -n RC-GUI --noconsole --noconfirm `
-    --specpath $InstallerDir `
-    --icon=$IconGUI `
-    --add-data "$IconGUI;res" `
-    --add-data "$TopIco;res" `
+    --specpath (Join-Path $InstallerDir 'build') `
+    --icon=$IconGUIRel `
+    --add-data "$IconGUIRel;res" `
+    --add-data "$TopIcoRel;res" `
     --distpath (Join-Path $InstallerDir 'dist') `
     --workpath (Join-Path $InstallerDir 'build') `
     src\python\GUI.py *>&1 | Out-File -FilePath $PyInstallerLog -Encoding utf8
