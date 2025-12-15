@@ -91,6 +91,7 @@ _ZH_TO_EN: dict[str, str] = {
     "用户名：": "Username:",
     "密码：": "Password:",
     "客户端ID：": "Client ID:",
+    "启用TLS/SSL": "Use TLS/SSL",
     "私钥模式：\n        使用客户端ID作为私钥\n账密模式：\n        兼容大多数IoT平台": "Private key:\n        Client ID is used as the secret\nUsername/Password:\n        Works with most IoT platforms",
     "内置": "Built-in",
     "计算机": "Computer",
@@ -3113,6 +3114,7 @@ def generate_config() -> None:
     config.update({
         "broker": broker,
         "port": port,
+        "mqtt_tls": tls_var.get(),
         "test": test_var.get(),
         "notify": notify_var.get(),
         "auth_mode": auth_mode_var.get(),
@@ -3711,7 +3713,7 @@ _sync_language_combo()
 # MQTT认证配置部分
 auth_frame = ttk.LabelFrame(root, text=t("MQTT认证配置"))
 auth_frame.grid(row=1, column=0, padx=PADX, pady=PADY, sticky="nsew")
-for i in range(3):
+for i in range(4):
     auth_frame.rowconfigure(i, weight=1)
 for j in range(3):
     auth_frame.columnconfigure(j, weight=1)
@@ -3736,13 +3738,18 @@ client_id_entry.grid(row=2, column=1, sticky="ew", padx=PADX, pady=PADY)
 client_id_value = config.get("client_id", "")
 client_id_entry.insert(0, client_id_value)
 
+# TLS/SSL 开关（主程序使用 ssl:// 连接）
+tls_var = tk.IntVar(value=int(config.get("mqtt_tls", 0) or 0))
+tls_check = ttk.Checkbutton(auth_frame, text=t("启用TLS/SSL"), variable=tls_var)
+tls_check.grid(row=3, column=0, columnspan=2, sticky="w", padx=PADX, pady=PADY)
+
 # 认证模式说明
 auth_info_label = ttk.Label(
     auth_frame,
     text=t("私钥模式：\n        使用客户端ID作为私钥\n账密模式：\n        兼容大多数IoT平台"),
     justify="left"
 )
-auth_info_label.grid(row=0, column=2, rowspan=3, sticky="n", padx=PADX, pady=PADY)
+auth_info_label.grid(row=0, column=2, rowspan=4, sticky="n", padx=PADX, pady=PADY)
 
 def toggle_auth_mode(*args):
     """根据MQTT认证模式切换界面显示"""

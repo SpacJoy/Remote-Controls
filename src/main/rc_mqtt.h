@@ -25,6 +25,10 @@ extern "C"
         // broker 端口（明文 TCP），例如 9501。
         int port;
 
+        // 是否启用 TLS/SSL 加密连接（Paho 模式下将使用 ssl://）。
+        // 注意：这要求构建时链接 Paho SSL 版本库（例如 paho-mqtt3cs）。
+        bool useTls;
+
         /*
          * 鉴权模式：
          * - "private_key"：由上层转换/填充为 username/password（如果实现需要）。

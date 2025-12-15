@@ -363,6 +363,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     const char *authMode = RC_JsonGetString(RC_JsonObjectGet(root, "auth_mode"));
     const char *mqttUser = RC_JsonGetString(RC_JsonObjectGet(root, "mqtt_username"));
     const char *mqttPass = RC_JsonGetString(RC_JsonObjectGet(root, "mqtt_password"));
+    int mqttTls = RC_JsonGetInt(RC_JsonObjectGet(root, "mqtt_tls"), 0);
     int testMode = RC_JsonGetInt(RC_JsonObjectGet(root, "test"), 0);
 
     if (!authMode || !*authMode)
@@ -443,6 +444,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     ZeroMemory(&mc, sizeof(mc));
     mc.brokerHost = broker;
     mc.port = port;
+    mc.useTls = (mqttTls != 0);
     mc.authMode = authMode;
     mc.clientId = clientId;
     mc.username = mqttUser;

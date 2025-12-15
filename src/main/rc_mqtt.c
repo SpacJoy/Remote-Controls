@@ -153,6 +153,21 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
     if (!cfg || !router)
         return;
 
+    if (cfg->useTls)
+    {
+        if (RC_RouterIsEnglish(router))
+            RC_LogError("MQTT TLS/SSL is not supported in the built-in (non-Paho) client. Please build with Paho SSL library (paho-mqtt3cs).");
+        else
+            RC_LogError("当前内置 MQTT 客户端不支持 TLS/SSL。请使用 Paho SSL 版本库构建（例如 paho-mqtt3cs）。");
+
+        if (RC_RouterIsEnglish(router))
+            RC_RouterNotifyUtf8(router, rc_title_for_notify(router), "TLS/SSL is not supported in this build. Please rebuild with Paho SSL (paho-mqtt3cs).");
+        else
+            RC_RouterNotifyUtf8(router, rc_title_for_notify(router), "当前构建不支持 TLS/SSL，请使用 paho-mqtt3cs 重新构建。");
+        (void)shouldStop;
+        return;
+    }
+
     DWORD lastConnNotifyTick = 0;
     DWORD lastDiscNotifyTick = 0;
     DWORD lastFailNotifyTick = 0;
@@ -160,8 +175,21 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
     const char *host = cfg->brokerHost ? cfg->brokerHost : "";
     int port = cfg->port;
 
+    bool useTls = cfg->useTls;
+#ifndef MQTTClient_SSLOptions_initializer
+    if (useTls)
+    {
+        if (RC_RouterIsEnglish(router))
+            RC_LogWarn("MQTT(Paho) TLS/SSL requested but this build/header has no SSL support. Falling back to tcp://");
+        else
+            RC_LogWarn("MQTT(Paho) 已请求 TLS/SSL，但当前构建/头文件不支持 SSL。将回退到 tcp://");
+    }
+    useTls = false;
+#endif
+
     char address[512];
-    _snprintf(address, sizeof(address), "tcp://%s:%d", host, port);
+    const char *scheme = (useTls ? "ssl" : "tcp");
+    _snprintf(address, sizeof(address), "%s://%s:%d", scheme, host, port);
     address[sizeof(address) - 1] = 0;
 
     const char *clientId = (cfg->clientId && *cfg->clientId) ? cfg->clientId : "RC-main";
@@ -184,6 +212,29 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
         conn_opts.username = cfg->username;
     if (cfg->password && *cfg->password)
         conn_opts.password = cfg->password;
+
+    // TLS/SSL：只在 cfg->useTls 时启用。
+    // 默认不强制校验证书（enableServerCertAuth=0），避免要求用户额外配置 CA 文件。
+    // 若需要“严格验证”，可在后续扩展 trustStore 等字段。
+#ifdef MQTTClient_SSLOptions_initializer
+    MQTTClient_SSLOptions ssl_opts = MQTTClient_SSLOptions_initializer;
+    if (useTls)
+    {
+        ssl_opts.enableServerCertAuth = 0;
+#ifdef MQTT_SSL_VERSION_TLS_1_2
+        ssl_opts.sslVersion = MQTT_SSL_VERSION_TLS_1_2;
+#endif
+        conn_opts.ssl = &ssl_opts;
+    }
+#else
+    if (cfg->useTls)
+    {
+        if (RC_RouterIsEnglish(router))
+            RC_LogWarn("MQTT(Paho) TLS/SSL requested but SSL options are not available in this build/header.");
+        else
+            RC_LogWarn("MQTT(Paho) 已请求 TLS/SSL，但当前构建/头文件不支持 SSL 选项。将按非 TLS 方式尝试连接。");
+    }
+#endif
 
     int backoff = (cfg->reconnectMinSeconds > 0 ? cfg->reconnectMinSeconds : 2);
     int backoffMax = (cfg->reconnectMaxSeconds > 0 ? cfg->reconnectMaxSeconds : 30);
