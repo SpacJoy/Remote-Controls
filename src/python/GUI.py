@@ -2187,7 +2187,7 @@ def modify_custom_theme() -> None:
         if type_key == "命令":
             cmd_window_check.grid(row=1, column=1, sticky="n")
             # 放到“关闭预设”同一行右侧
-            cmd_range_frame_mod.grid(row=6, column=2, columnspan=2, sticky="w", padx=PADX, pady=PADY)
+            cmd_range_frame_mod.grid(row=6, column=1, columnspan=2, sticky="w", padx=PADX, pady=PADY)
         else:
             cmd_window_check.grid_remove()
             cmd_range_frame_mod.grid_remove()
@@ -2664,6 +2664,45 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
                 subprocess.Popen(["services.msc"])  # 备用方式
             except Exception as e:
                 messagebox.showerror(t("错误"), t("无法打开服务管理器: {err}").format(err=e))
+
+    # 命令类型：{value} 参数范围（默认 0-100，可配置）
+    cmd_value_min_var_add = tk.StringVar(value="0")
+    cmd_value_max_var_add = tk.StringVar(value="100")
+
+    def _get_cmd_value_range_add() -> tuple[int, int]:
+        try:
+            lo = int((cmd_value_min_var_add.get() or "0").strip())
+            hi = int((cmd_value_max_var_add.get() or "100").strip())
+        except Exception:
+            messagebox.showwarning(t("提示"), t("请输入整数"))
+            return 0, 100
+        if lo > hi:
+            lo, hi = hi, lo
+        return lo, hi
+
+    def _ask_value_for_placeholder_add(parent_win: tk.Misc) -> str | None:
+        lo, hi = _get_cmd_value_range_add()
+        ex = 50
+        if ex < lo or ex > hi:
+            ex = lo
+        s = simpledialog.askstring(
+            t("输入参数"),
+            t("请输入 {value} 的值（范围 {lo}-{hi}），例如 {ex}：").format(value="{value}", lo=lo, hi=hi, ex=ex),
+            initialvalue=str(ex),
+            parent=parent_win,
+        )
+        if s is None:
+            return None
+        s = str(s).strip()
+        try:
+            v = int(s)
+        except Exception:
+            messagebox.showwarning(t("提示"), t("请输入整数"))
+            return None
+        if v < lo or v > hi:
+            messagebox.showwarning(t("提示"), t("参数超出范围：{lo}-{hi}").format(lo=lo, hi=hi))
+            return None
+        return str(v)
 
     def test_command_in_powershell():
         cmd = on_value_text_add.get("1.0", "end-1c").strip()
