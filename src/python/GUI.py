@@ -43,20 +43,25 @@ def _normalize_lang(lang: str | None) -> str:
 
 
 def _detect_default_lang() -> str:
+    # locale.getdefaultlocale() 已弃用（Python 3.15+），改用 setlocale/getlocale。
     try:
-        loc = locale.getdefaultlocale()[0]  # type: ignore[deprecated]
-        norm = _normalize_lang(loc)
-        if norm:
-            return norm
+        locale.setlocale(locale.LC_ALL, "")
     except Exception:
         pass
-    try:
-        loc2 = locale.getlocale()[0]
-        norm2 = _normalize_lang(loc2)
-        if norm2:
-            return norm2
-    except Exception:
-        pass
+
+    for getter in (
+        lambda: locale.getlocale()[0],
+        lambda: os.environ.get("LC_ALL"),
+        lambda: os.environ.get("LC_CTYPE"),
+        lambda: os.environ.get("LANG"),
+    ):
+        try:
+            norm = _normalize_lang(getter())
+            if norm:
+                return norm
+        except Exception:
+            pass
+
     # Windows 默认偏中文用户群，这里保守地按系统语言判断失败则给 en
     return "en"
 
@@ -3753,8 +3758,8 @@ def toggle_auth_mode(*args):
         mqtt_password_entry.config(state="disabled")
         client_id_entry.config(state="normal", show="*")
 
-# 绑定认证模式变化事件
-auth_mode_var.trace("w", toggle_auth_mode)
+# 绑定认证模式变化事件（Tcl 9 下 trace() 已弃用，改用 trace_add）
+auth_mode_var.trace_add("write", toggle_auth_mode)
 # 初始化界面状态
 toggle_auth_mode()
 
@@ -3980,8 +3985,8 @@ def open_builtin_settings():
         elif use_twinkle:
             twinkle_target_entry.state(["!disabled"])
 
-    brightness_mode_var.trace("w", _toggle_twinkle_fields)
-    twinkle_target_mode_var.trace("w", _toggle_twinkle_fields)
+    brightness_mode_var.trace_add("write", _toggle_twinkle_fields)
+    twinkle_target_mode_var.trace_add("write", _toggle_twinkle_fields)
     _toggle_twinkle_fields()
 
     # 分隔线
