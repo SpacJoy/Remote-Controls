@@ -628,7 +628,7 @@ static bool create_process_ex(const wchar_t *exe, const wchar_t *args, bool hide
 
     if (!ok)
     {
-        RC_LogError("CreateProcess 失败 (exe=%ls, args=%ls, err=%lu)", exe ? exe : L"", (args && *args) ? args : L"", (unsigned long)err);
+        RC_LogError("CreateProcess 失败 (exe=%ls, err=%lu)", exe ? exe : L"", (unsigned long)err);
         return false;
     }
 

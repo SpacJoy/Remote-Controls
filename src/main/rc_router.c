@@ -18,6 +18,8 @@
 
 #include <windows.h>
 #include <shellapi.h>
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -239,6 +241,29 @@ static bool str_is_english(const char *s)
     if (s[2] == '\0' || s[2] == '-' || s[2] == '_')
         return true;
     return false;
+}
+
+#define RC_ROUTER_LOG_PREVIEW_BYTES (128)
+
+static void router_sanitize_preview(const char *in, char *out, size_t outLen)
+{
+    if (!out || outLen == 0)
+        return;
+    out[0] = '\0';
+    if (!in)
+        return;
+
+    size_t j = 0;
+    for (size_t i = 0; in[i] != '\0' && j + 1 < outLen; i++)
+    {
+        unsigned char c = (unsigned char)in[i];
+        if (c == '\r' || c == '\n' || c == '\t')
+            c = ' ';
+        else if (c < 0x20)
+            c = '?';
+        out[j++] = (char)c;
+    }
+    out[j] = '\0';
 }
 
 static char *dupstr0(const char *s);
@@ -469,8 +494,11 @@ static bool parse_percent_payload_strict(const char *payload, const char **outBa
             *outBase = "on";
         const char *p = payload + 3;
         char *endp = NULL;
+        errno = 0;
         long v = strtol(p, &endp, 10);
         if (!endp || endp == p || *endp != '\0')
+            return false;
+        if (errno == ERANGE || v > INT_MAX || v < INT_MIN)
             return false;
         if (outHasValue)
             *outHasValue = true;
@@ -484,8 +512,11 @@ static bool parse_percent_payload_strict(const char *payload, const char **outBa
             *outBase = "off";
         const char *p = payload + 4;
         char *endp = NULL;
+        errno = 0;
         long v = strtol(p, &endp, 10);
         if (!endp || endp == p || *endp != '\0')
+            return false;
+        if (errno == ERANGE || v > INT_MAX || v < INT_MIN)
             return false;
         if (outHasValue)
             *outHasValue = true;
@@ -1346,7 +1377,11 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
 
     if (!is_on_off_payload(payloadUtf8))
     {
-        RC_LogWarn("已忽略 payload：%s (topic=%s)", payloadUtf8, topicUtf8);
+        char p[RC_ROUTER_LOG_PREVIEW_BYTES];
+        char t[RC_ROUTER_LOG_PREVIEW_BYTES];
+        router_sanitize_preview(payloadUtf8, p, sizeof(p));
+        router_sanitize_preview(topicUtf8, t, sizeof(t));
+        RC_LogWarn("已忽略 payload：%s (topic=%s)", p, t);
         return;
     }
 
@@ -1355,7 +1390,11 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
     bool hasValue = false;
     if (!parse_percent_payload_strict(payloadUtf8, &base, &value, &hasValue))
     {
-        RC_LogWarn("payload 格式无效：%s (topic=%s)", payloadUtf8, topicUtf8);
+        char p[RC_ROUTER_LOG_PREVIEW_BYTES];
+        char t[RC_ROUTER_LOG_PREVIEW_BYTES];
+        router_sanitize_preview(payloadUtf8, p, sizeof(p));
+        router_sanitize_preview(topicUtf8, t, sizeof(t));
+        RC_LogWarn("payload 格式无效：%s (topic=%s)", p, t);
         return;
     }
 
@@ -1784,5 +1823,9 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         return;
     }
 
-    RC_LogWarn("未知主题：%s", topicUtf8);
+    {
+        char t[RC_ROUTER_LOG_PREVIEW_BYTES];
+        router_sanitize_preview(topicUtf8, t, sizeof(t));
+        RC_LogWarn("未知主题：%s", t);
+    }
 }
