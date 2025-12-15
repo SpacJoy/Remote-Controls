@@ -21,7 +21,7 @@ Full Changelog (相对于 3.0.0): <https://github.com/SpacJoy/Remote-Controls/co
 
 ## 🧰 构建与 CI
 
-- GitHub Actions Release 环境安装 `paho-mqtt-c` 并设置 `PAHO_MQTT_C_ROOT`，避免干净环境构建失败。
+- GitHub Actions Release 环境安装 `paho.mqtt.c` 并设置 `PAHO_MQTT_C_ROOT`，避免干净环境构建失败。
 - 本地 `build_main.ps1` 支持自动探测 MSYS2 常见前缀（`mingw64` / `ucrt64`），降低环境变量依赖。
 
 ## 📖 文档与示例
