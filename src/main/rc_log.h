@@ -33,6 +33,25 @@ extern "C"
     void RC_LogWarn(const char *fmt, ...);
     void RC_LogError(const char *fmt, ...);
 
+    /*
+     * 可选：日志通知回调（用于将 WARN/ERROR 转发到 UI，例如 Windows toast）。
+     *
+     * 说明：
+     * - 回调仅在 RC_LogWarn/RC_LogError 时触发（INFO 不触发）。
+     * - msg 为格式化后的消息内容（不含时间戳/换行）。
+     * - 回调在调用线程内同步执行；应尽量轻量，避免再次调用 RC_Log* 造成递归。
+     */
+    typedef enum
+    {
+        RC_LOG_LEVEL_INFO = 1,
+        RC_LOG_LEVEL_WARN = 2,
+        RC_LOG_LEVEL_ERROR = 3
+    } RC_LogLevel;
+
+    typedef void (*RC_LogNotifyCallback)(void *ctx, RC_LogLevel level, const char *msg);
+
+    void RC_LogSetNotifyCallback(RC_LogNotifyCallback cb, void *ctx);
+
 #ifdef __cplusplus
 }
 #endif

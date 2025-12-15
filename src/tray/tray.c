@@ -893,7 +893,7 @@ void CreateTrayIcon(HWND hWnd)
 
     // 图标加载策略：
     // 1) 优先从资源（.rc）内加载：便于打包发布。
-    // 2) 若资源加载失败，再从磁盘 res\icon.ico 加载：便于用户替换图标。
+    // 2) 若资源加载失败，再从磁盘 res\top.ico 加载：便于用户替换图标。
     // 3) 再失败则使用系统默认图标。
     //
     // 注意：资源 IDI_TRAYICON 与 windres 编译的资源脚本保持一致。
@@ -903,7 +903,7 @@ void CreateTrayIcon(HWND hWnd)
     if (!hIcon)
     {
         char iconPath[MAX_PATH];
-        sprintf_s(iconPath, MAX_PATH, "%s\\res\\icon.ico", g_appDir);
+        sprintf_s(iconPath, MAX_PATH, "%s\\res\\top.ico", g_appDir);
         wchar_t iconPathW[MAX_PATH];
         if (Utf8ToWide(iconPath, iconPathW, MAX_PATH) && PathFileExistsW(iconPathW))
         {

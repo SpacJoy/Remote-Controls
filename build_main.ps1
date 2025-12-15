@@ -11,7 +11,15 @@
 
   # Library name without -l prefix, e.g. paho-mqtt3c or paho-mqtt3cs
   [Parameter(Mandatory = $false)]
-  [string]$PahoLib = 'paho-mqtt3c'
+  [string]$PahoLib = 'paho-mqtt3c',
+
+  # How to link Paho library:
+  # - auto: prefer static if available (e.g. libpaho-mqtt3c-static.a), otherwise dynamic
+  # - dynamic: link against DLL import lib (needs libpaho-mqtt3c.dll at runtime)
+  # - static: link against static archive (RC-main.exe becomes single-file w.r.t Paho)
+  [Parameter(Mandatory = $false)]
+  [ValidateSet('auto','dynamic','static')]
+  [string]$PahoLink = 'auto'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -98,6 +106,7 @@ Remove-Item -LiteralPath (Join-Path $root 'src\main\rc_router.o') -Force -ErrorA
 Remove-Item -LiteralPath (Join-Path $root 'src\main\rc_mqtt.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'src\main\rc_main_tray.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'src\rc_json_main.o') -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $root 'src\main\main_res.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'bin\RC-main.exe') -Force -ErrorAction SilentlyContinue
 Remove-FileWithRetry -Path (Join-Path $root 'bin\RC-main.exe')
 
@@ -118,6 +127,7 @@ if (-not $UsePaho -and [string]::IsNullOrWhiteSpace($PahoRoot)) {
 }
 
 $linkExtra = @()
+$PahoLinkModeResolved = 'none'
 if ($UsePaho) {
   if ([string]::IsNullOrWhiteSpace($PahoRoot)) {
     throw '错误：指定了 -UsePaho，但 -PahoRoot（或环境变量 PAHO_MQTT_C_ROOT）为空'
@@ -131,14 +141,64 @@ if ($UsePaho) {
     throw "错误：未找到 Paho lib 目录：$pahoLibDir"
   }
 
-  Write-Host ("使用 Paho MQTT C：root={0} lib={1}" -f $PahoRoot, $PahoLib)
+  # Decide whether to link Paho statically.
+  $wantStatic = $false
+  if ($PahoLink -eq 'static') { $wantStatic = $true }
+  elseif ($PahoLink -eq 'dynamic') { $wantStatic = $false }
+  else {
+    # auto
+    $wantStatic = $true
+  }
+
+  $pahoChosenLib = $PahoLib
+  $pahoLinkMode = 'dynamic'
+
+  if ($wantStatic) {
+    $candidateLibs = @()
+    if ($PahoLib -match '-static$') {
+      $candidateLibs += $PahoLib
+    } else {
+      $candidateLibs += ($PahoLib + '-static')
+      $candidateLibs += $PahoLib
+    }
+
+    foreach ($libName in $candidateLibs) {
+      $archive = Join-Path $pahoLibDir ("lib{0}.a" -f $libName)
+      if (Test-Path -LiteralPath $archive) {
+        $pahoChosenLib = $libName
+        $pahoLinkMode = 'static'
+        break
+      }
+    }
+
+    if ($pahoLinkMode -ne 'static' -and $PahoLink -eq 'static') {
+      throw "错误：指定了 -PahoLink static，但未找到静态库。请确认存在类似 lib$PahoLib-static.a（或 lib$PahoLib.a）的文件于：$pahoLibDir"
+    }
+  }
+
+  $PahoLinkModeResolved = $pahoLinkMode
+  Write-Host ("使用 Paho MQTT C：root={0} lib={1} link={2}" -f $PahoRoot, $pahoChosenLib, $pahoLinkMode)
   $flags += '-DRC_USE_PAHO_MQTT'
   $flags += ("-I{0}" -f $pahoInclude)
   $linkExtra += ("-L{0}" -f $pahoLibDir)
-  $linkExtra += ("-l{0}" -f $PahoLib)
+
+  if ($pahoLinkMode -eq 'static') {
+    $linkExtra += '-Wl,-Bstatic'
+    $linkExtra += ("-l{0}" -f $pahoChosenLib)
+    $linkExtra += '-Wl,-Bdynamic'
+  } else {
+    $linkExtra += ("-l{0}" -f $pahoChosenLib)
+  }
 }
 
 Write-Host '编译源码...'
+Write-Host '编译资源文件...'
+Invoke-Exe -FilePath 'windres' -Arguments @(
+  '-c', '65001',
+  'src\main\main.rc',
+  '-o', 'src\main\main_res.o'
+)
+
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\rc_json.c','-o','src\rc_json_main.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_log.c','-o','src\main\rc_log.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_utf.c','-o','src\main\rc_utf.o'))
@@ -158,18 +218,28 @@ $linkArgs = @(
   'src\main\rc_router.o',
   'src\main\rc_mqtt.o',
   'src\main\rc_main_tray.o',
+  'src\main\main_res.o',
   'src\rc_json_main.o',
   '-o','bin\RC-main.exe',
   '-mwindows',
   '-municode',
   '-lshlwapi','-lshell32','-luser32',
   '-lole32','-luuid',
-  '-ldxva2',
-  '-lws2_32'
+  '-ldxva2'
+  # 注意：Paho 静态库依赖 ws2_32/crypt32/rpcrt4/advapi32，
+  # 对于静态库链接，依赖库需要放到静态库之后，避免 undefined reference。
+  # 因此这里暂不放 ws2_32，稍后根据模式追加。
 )
 
 if ($linkExtra -and $linkExtra.Count -gt 0) {
   $linkArgs += $linkExtra
+}
+
+# Append libraries that are sensitive to link order (especially for static Paho).
+if ($PahoLinkModeResolved -eq 'static') {
+  $linkArgs += @('-lws2_32','-lcrypt32','-lrpcrt4','-ladvapi32')
+} else {
+  $linkArgs += @('-lws2_32')
 }
 
 Invoke-Exe -FilePath 'gcc' -Arguments $linkArgs

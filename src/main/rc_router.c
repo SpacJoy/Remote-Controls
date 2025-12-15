@@ -18,6 +18,7 @@
 
 #include <windows.h>
 #include <shellapi.h>
+#include <shlwapi.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
@@ -26,6 +27,35 @@
 
 #define WM_RCMAIN_NOTIFYICON (WM_USER + 201)
 #define RCMAIN_NOTIFY_ICON_ID 2
+#define RCMAIN_APP_ICON_ID 1
+
+static HICON load_main_icon_16(void)
+{
+    // 优先：从可执行文件资源加载（main.rc 内嵌 top.ico）。
+    HINSTANCE hInst = GetModuleHandleW(NULL);
+    HICON h = LoadIconW(hInst, MAKEINTRESOURCEW(RCMAIN_APP_ICON_ID));
+    if (h)
+        return h;
+
+    // 其次：从磁盘 res\top.ico 加载（便于用户替换）。
+    wchar_t exePath[MAX_PATH] = {0};
+    DWORD n = GetModuleFileNameW(NULL, exePath, MAX_PATH);
+    if (n > 0 && n < MAX_PATH)
+    {
+        PathRemoveFileSpecW(exePath);
+        wchar_t iconPathW[MAX_PATH] = {0};
+        _snwprintf(iconPathW, MAX_PATH, L"%s\\res\\top.ico", exePath);
+        iconPathW[MAX_PATH - 1] = 0;
+        if (PathFileExistsW(iconPathW))
+        {
+            h = (HICON)LoadImageW(NULL, iconPathW, IMAGE_ICON, 16, 16, LR_LOADFROMFILE);
+            if (h)
+                return h;
+        }
+    }
+
+    return LoadIconW(NULL, IDI_APPLICATION);
+}
 
 static HWND g_notifyHwnd = NULL;
 static NOTIFYICONDATAW g_notifyNid;
@@ -88,7 +118,7 @@ static bool notify_ensure_icon(void)
     g_notifyNid.uID = RCMAIN_NOTIFY_ICON_ID;
     g_notifyNid.uCallbackMessage = WM_RCMAIN_NOTIFYICON;
     g_notifyNid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_STATE;
-    g_notifyNid.hIcon = LoadIconW(NULL, IDI_APPLICATION);
+    g_notifyNid.hIcon = load_main_icon_16();
     wcsncpy_s(g_notifyNid.szTip, _countof(g_notifyNid.szTip), L"RC-main", _TRUNCATE);
     g_notifyNid.dwStateMask = NIS_HIDDEN;
     g_notifyNid.dwState = NIS_HIDDEN;
@@ -136,6 +166,26 @@ static void notify_show_utf8(const char *titleUtf8, const char *messageUtf8)
     utf8_to_wide0(titleUtf8, g_notifyNid.szInfoTitle, (int)_countof(g_notifyNid.szInfoTitle));
     utf8_to_wide0(messageUtf8, g_notifyNid.szInfo, (int)_countof(g_notifyNid.szInfo));
     g_notifyNid.dwInfoFlags = NIIF_INFO;
+    Shell_NotifyIconW(NIM_MODIFY, &g_notifyNid);
+}
+
+static void notify_show_utf8_ex(const char *titleUtf8, const char *messageUtf8, DWORD infoFlags)
+{
+    if (!notify_ensure_icon())
+        return;
+
+    // 与托盘端一致：先发“空通知”再发新内容，规避 Windows 忽略更新。
+    g_notifyNid.uFlags = NIF_INFO;
+    g_notifyNid.szInfoTitle[0] = L'\0';
+    g_notifyNid.szInfo[0] = L'\0';
+    g_notifyNid.dwInfoFlags = NIIF_NONE;
+    Shell_NotifyIconW(NIM_MODIFY, &g_notifyNid);
+    Sleep(10);
+
+    g_notifyNid.uFlags = NIF_INFO;
+    utf8_to_wide0(titleUtf8, g_notifyNid.szInfoTitle, (int)_countof(g_notifyNid.szInfoTitle));
+    utf8_to_wide0(messageUtf8, g_notifyNid.szInfo, (int)_countof(g_notifyNid.szInfo));
+    g_notifyNid.dwInfoFlags = infoFlags;
     Shell_NotifyIconW(NIM_MODIFY, &g_notifyNid);
 }
 
@@ -267,6 +317,8 @@ static void router_sanitize_preview(const char *in, char *out, size_t outLen)
 }
 
 static char *dupstr0(const char *s);
+
+static void router_log_toast_cb(void *ctx, RC_LogLevel level, const char *msg);
 
 /*
  * 命令 PID 跟踪表（cmdProcs）：
@@ -977,7 +1029,51 @@ RC_Router *RC_RouterCreate(RC_Json *configRoot)
     load_serves(r);
     load_hotkeys(r);
 
+    // 将执行期 WARN/ERROR 日志转发为 toast，便于用户第一时间感知问题。
+    // 注意：仅对 warn/error 生效；并受 notifyEnabled 控制。
+    // 回调会在 RouterDestroy 中注销。
+    RC_LogSetNotifyCallback(router_log_toast_cb, r);
+
     return r;
+}
+
+static void router_log_toast_cb(void *ctx, RC_LogLevel level, const char *msg)
+{
+    RC_Router *r = (RC_Router *)ctx;
+    if (!r || !r->notifyEnabled)
+        return;
+    if (!msg || !*msg)
+        return;
+
+    static LONG inCb = 0;
+    if (InterlockedCompareExchange(&inCb, 1, 0) != 0)
+        return;
+
+    // 简单限频，避免 MQTT 重连等场景刷屏。
+    static DWORD lastTick = 0;
+    DWORD now = GetTickCount();
+    if (lastTick != 0 && (DWORD)(now - lastTick) < 1500)
+    {
+        InterlockedExchange(&inCb, 0);
+        return;
+    }
+    lastTick = now;
+
+    const char *title = NULL;
+    DWORD flags = NIIF_INFO;
+    if (level == RC_LOG_LEVEL_ERROR)
+    {
+        title = r->langEnglish ? "Remote Controls - Error" : "远程控制 - 错误";
+        flags = NIIF_ERROR;
+    }
+    else
+    {
+        title = r->langEnglish ? "Remote Controls - Warning" : "远程控制 - 警告";
+        flags = NIIF_WARNING;
+    }
+
+    notify_show_utf8_ex(title, msg, flags);
+    InterlockedExchange(&inCb, 0);
 }
 
 bool RC_RouterIsEnglish(const RC_Router *r)
@@ -1003,6 +1099,9 @@ void RC_RouterDestroy(RC_Router *r)
         return;
 
     RC_JsonFree(r->config);
+
+    // 注销日志 toast 回调，避免销毁后被误调用。
+    RC_LogSetNotifyCallback(NULL, NULL);
 
     free(r->topicComputer);
     free(r->topicScreen);

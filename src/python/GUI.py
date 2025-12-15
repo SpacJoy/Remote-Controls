@@ -2926,12 +2926,27 @@ def generate_config() -> None:
     中文: 根据输入生成并保存配置文件(JSON格式)
     """
     global config
+    broker = (website_entry.get() or "").strip() or "bemfa.com"
+
+    port_raw = (port_entry.get() or "").strip()
+    if not port_raw:
+        port = 9501
+    else:
+        try:
+            port = int(port_raw)
+        except Exception:
+            messagebox.showerror(t("错误"), t("端口必须是数字"))
+            return
+    if port <= 0 or port > 65535:
+        messagebox.showerror(t("错误"), t("端口范围应为 1-65535"))
+        return
+
     # 从现有配置复制，保留扩展键（如 computer_* / sleep_*）
     config = dict(config)
     # 覆盖基础配置项
     config.update({
-        "broker": website_entry.get(),
-        "port": int(port_entry.get()),
+        "broker": broker,
+        "port": port,
         "test": test_var.get(),
         "notify": notify_var.get(),
         "auth_mode": auth_mode_var.get(),
@@ -3015,13 +3030,27 @@ def generate_config() -> None:
             hotkey_index += 1
 
     # 保存为 JSON 文件
-    with open(config_file_path, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=4)
+    try:
+        with open(config_file_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=4)
+    except PermissionError as e:
+        messagebox.showerror(
+            t("错误"),
+            t(f"无法写入配置文件（可能没有权限）：\n{config_file_path}\n\n{e}")
+        )
+        return
+    except Exception as e:
+        messagebox.showerror(t("错误"), t(f"保存配置文件失败：\n{config_file_path}\n\n{e}"))
+        return
     # 保存后刷新界面
     messagebox.showinfo(t("提示"), t("配置文件已保存\n请重新打开主程序以应用更改\n刷新test模式需重启本程序"))
     # 重新读取配置
-    with open(config_file_path, "r", encoding="utf-8") as f:
-        config = json.load(f)
+    try:
+        with open(config_file_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except Exception:
+        # 不影响保存结果：读取失败则保留内存中的 config
+        pass
     # 刷新test模式
     test_var.set(config.get("test", 0))
     # 刷新通知开关

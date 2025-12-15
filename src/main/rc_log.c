@@ -19,6 +19,11 @@
 
 static FILE *g_log = NULL;
 
+static RC_LogNotifyCallback g_notifyCb = NULL;
+static void *g_notifyCtx = NULL;
+// 递归/重入保护：避免回调里（直接或间接）再次写日志造成无限递归。
+static LONG g_notifyInProgress = 0;
+
 #define RC_LOG_MAX_BYTES (200 * 1024)
 
 /*
@@ -63,6 +68,25 @@ static void log_v(const char *level, const char *fmt, va_list ap)
     vsnprintf(msg, sizeof(msg), fmt, ap);
     msg[sizeof(msg) - 1] = '\0';
 
+    // WARN/ERROR：可选通知回调（用于 toast 等）。
+    if (g_notifyCb)
+    {
+        RC_LogLevel lv = RC_LOG_LEVEL_INFO;
+        if (level && strcmp(level, "WARN") == 0)
+            lv = RC_LOG_LEVEL_WARN;
+        else if (level && strcmp(level, "ERROR") == 0)
+            lv = RC_LOG_LEVEL_ERROR;
+
+        if (lv == RC_LOG_LEVEL_WARN || lv == RC_LOG_LEVEL_ERROR)
+        {
+            if (InterlockedCompareExchange(&g_notifyInProgress, 1, 0) == 0)
+            {
+                g_notifyCb(g_notifyCtx, lv, msg);
+                InterlockedExchange(&g_notifyInProgress, 0);
+            }
+        }
+    }
+
     char line[4600];
     snprintf(line, sizeof(line), "%04u-%02u-%02u %02u:%02u:%02u.%03u [%s] %s\n",
              (unsigned)st.wYear, (unsigned)st.wMonth, (unsigned)st.wDay,
@@ -79,6 +103,12 @@ static void log_v(const char *level, const char *fmt, va_list ap)
         fputs(line, g_log);
         fflush(g_log);
     }
+}
+
+void RC_LogSetNotifyCallback(RC_LogNotifyCallback cb, void *ctx)
+{
+    g_notifyCb = cb;
+    g_notifyCtx = ctx;
 }
 
 void RC_LogInit(const wchar_t *appDirW)

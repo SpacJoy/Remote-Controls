@@ -82,10 +82,10 @@ New-Item -ItemType Directory -Force -Path (Join-Path $root 'bin') | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $root 'logs') | Out-Null
 
 # Icon
-$iconPath = Join-Path $root 'res\icon.ico'
+$iconPath = Join-Path $root 'res\top.ico'
 Write-Host '检查图标文件...'
 if (-not (Test-Path -LiteralPath $iconPath)) {
-  throw '错误: res\icon.ico 不存在'
+  throw '错误: res\top.ico 不存在'
 }
 
 # Kill old process first (best-effort), so outputs can be overwritten.

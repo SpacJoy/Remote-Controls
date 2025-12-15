@@ -103,9 +103,14 @@ static BOOL is_process_running_w(const wchar_t *exeNameW)
 
 static HICON load_tray_icon(const wchar_t *appDirW)
 {
-    // Prefer res\\icon.ico if present, else fall back to default.
+    // Prefer embedded icon (main.rc -> top.ico), then res\\top.ico if present, else fall back.
+    HINSTANCE hInst = GetModuleHandleW(NULL);
+    HICON hRes = LoadIconW(hInst, MAKEINTRESOURCEW(1));
+    if (hRes)
+        return hRes;
+
     wchar_t iconPathW[MAX_PATH] = {0};
-    _snwprintf(iconPathW, MAX_PATH, L"%s\\res\\icon.ico", appDirW ? appDirW : L"");
+    _snwprintf(iconPathW, MAX_PATH, L"%s\\res\\top.ico", appDirW ? appDirW : L"");
     iconPathW[MAX_PATH - 1] = 0;
 
     if (PathFileExistsW(iconPathW))

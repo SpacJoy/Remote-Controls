@@ -10,7 +10,7 @@
 
 // 图标资源 / Icon resource
 #define IDI_TRAYICON 101
-IDI_TRAYICON ICON "../../res/icon.ico"
+IDI_TRAYICON ICON "../../res/top.ico"
 
 // 版本信息 / Version information
 VS_VERSION_INFO VERSIONINFO
