@@ -319,9 +319,8 @@ static unsigned __stdcall main_tray_thread(void *arg)
         free(p);
         return 0;
     }
-    void RC_MainTrayStartDelayed(const wchar_t *appDirW, const char *versionUtf8, volatile bool *stopFlag, bool langEnglish)
 
-        MainTrayState st;
+    MainTrayState st;
     ZeroMemory(&st, sizeof(st));
     st.params = p;
 
@@ -360,7 +359,7 @@ static unsigned __stdcall main_tray_thread(void *arg)
     return 0;
 }
 
-void RC_MainTrayStartDelayed(const wchar_t *appDirW, const char *versionUtf8, volatile bool *stopFlag)
+void RC_MainTrayStartDelayed(const wchar_t *appDirW, const char *versionUtf8, volatile bool *stopFlag, bool langEnglish)
 {
     if (!appDirW || !*appDirW)
         return;

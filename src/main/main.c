@@ -44,6 +44,16 @@ static bool StrIsEnglishLang(const char *s)
     return (s[2] == '\0' || s[2] == '-' || s[2] == '_');
 }
 
+static bool IsSystemEnglishUI(void)
+{
+    // 按托盘侧策略：中文 => 中文，其它语言 => 英文。
+    LANGID langID = GetUserDefaultUILanguage();
+    WORD primary = PRIMARYLANGID(langID);
+    if (primary == LANG_CHINESE)
+        return false;
+    return true;
+}
+
 /*
  * 获取当前可执行文件所在目录。
  * - 使用 GetModuleFileNameW 获取完整路径（失败返回 0）。
@@ -294,10 +304,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     wchar_t configPath[MAX_PATH] = {0};
     BuildPathW(configPath, MAX_PATH, appDir, L"config.json");
 
+    const bool sysEnglish = IsSystemEnglishUI();
+
     if (!PathFileExistsW(configPath))
     {
         // 配置缺失：提示 + 打开 GUI；若 GUI 不可用则记事本打开（并创建空配置）。
-        MessageBoxW(NULL, L"配置文件不存在，请先打开 RC-GUI 进行配置。", L"RC-main", MB_ICONERROR);
+        if (sysEnglish)
+            MessageBoxW(NULL, L"config.json not found. Please open RC-GUI to configure.", L"RC-main", MB_ICONERROR);
+        else
+            MessageBoxW(NULL, L"配置文件不存在，请先打开 RC-GUI 进行配置。", L"RC-main", MB_ICONERROR);
         OpenGuiOrNotepadConfig(appDir, configPath, true);
         CloseHandle(hMutex);
         return 1;
@@ -307,7 +322,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     if (!jsonText)
     {
         // 读取失败：可能是权限/占用/损坏。回退到 GUI/记事本让用户修复。
-        MessageBoxW(NULL, L"读取配置文件失败。", L"RC-main", MB_ICONERROR);
+        if (sysEnglish)
+            MessageBoxW(NULL, L"Failed to read config.json.", L"RC-main", MB_ICONERROR);
+        else
+            MessageBoxW(NULL, L"读取配置文件失败。", L"RC-main", MB_ICONERROR);
         OpenGuiOrNotepadConfig(appDir, configPath, true);
         CloseHandle(hMutex);
         return 1;
@@ -321,7 +339,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
         free(jsonText);
         if (root)
             RC_JsonFree(root);
-        MessageBoxW(NULL, L"配置文件格式错误，请使用 RC-GUI 修复。", L"RC-main", MB_ICONERROR);
+        if (sysEnglish)
+            MessageBoxW(NULL, L"Invalid config.json format. Please fix it in RC-GUI.", L"RC-main", MB_ICONERROR);
+        else
+            MessageBoxW(NULL, L"配置文件格式错误，请使用 RC-GUI 修复。", L"RC-main", MB_ICONERROR);
         OpenGuiOrNotepadConfig(appDir, configPath, true);
         CloseHandle(hMutex);
         return 1;
