@@ -29,11 +29,18 @@
 #define RCMAIN_NOTIFY_ICON_ID 2
 #define RCMAIN_APP_ICON_ID 1
 
-static HICON load_main_icon_16(void)
+static HICON load_main_icon_small(void)
 {
+    // 说明：
+    // - Win10/11 的通知(Toast)会使用 NotifyIcon 的 hIcon 作为应用图标来源之一。
+    // - LoadIconW 返回的是“默认尺寸”的共享图标；这里用 LoadImageW 按系统 small icon 尺寸加载，兼容缩放。
+
+    const int cx = GetSystemMetrics(SM_CXSMICON);
+    const int cy = GetSystemMetrics(SM_CYSMICON);
+
     // 优先：从可执行文件资源加载（main.rc 内嵌 top.ico）。
     HINSTANCE hInst = GetModuleHandleW(NULL);
-    HICON h = LoadIconW(hInst, MAKEINTRESOURCEW(RCMAIN_APP_ICON_ID));
+    HICON h = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(RCMAIN_APP_ICON_ID), IMAGE_ICON, cx, cy, LR_DEFAULTCOLOR);
     if (h)
         return h;
 
@@ -48,7 +55,7 @@ static HICON load_main_icon_16(void)
         iconPathW[MAX_PATH - 1] = 0;
         if (PathFileExistsW(iconPathW))
         {
-            h = (HICON)LoadImageW(NULL, iconPathW, IMAGE_ICON, 16, 16, LR_LOADFROMFILE);
+            h = (HICON)LoadImageW(NULL, iconPathW, IMAGE_ICON, cx, cy, LR_LOADFROMFILE);
             if (h)
                 return h;
         }
@@ -104,8 +111,20 @@ static bool notify_ensure_icon(void)
         }
     }
 
-    // 使用 message-only window，避免出现在 Alt-Tab / 任务栏。
-    g_notifyHwnd = CreateWindowExW(0, cls, L"RC-main-notify", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, hInst, NULL);
+    // 注意：部分 Windows 版本/环境下，message-only window (HWND_MESSAGE) 作为 NotifyIcon owner
+    // 可能导致 Shell_NotifyIcon 失败（或图标异常）。这里改为创建一个隐藏的 tool window。
+    g_notifyHwnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                   cls,
+                                   L"RC-main-notify",
+                                   WS_POPUP,
+                                   0,
+                                   0,
+                                   0,
+                                   0,
+                                   NULL,
+                                   NULL,
+                                   hInst,
+                                   NULL);
     if (!g_notifyHwnd)
     {
         RC_LogWarn("通知窗口创建失败：%lu", GetLastError());
@@ -113,15 +132,14 @@ static bool notify_ensure_icon(void)
     }
 
     ZeroMemory(&g_notifyNid, sizeof(g_notifyNid));
-    g_notifyNid.cbSize = sizeof(g_notifyNid);
+    // 使用 V2 size 兼容不同 Windows 版本对结构体大小的处理。
+    g_notifyNid.cbSize = NOTIFYICONDATA_V2_SIZE;
     g_notifyNid.hWnd = g_notifyHwnd;
     g_notifyNid.uID = RCMAIN_NOTIFY_ICON_ID;
     g_notifyNid.uCallbackMessage = WM_RCMAIN_NOTIFYICON;
-    g_notifyNid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_STATE;
-    g_notifyNid.hIcon = load_main_icon_16();
+    g_notifyNid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    g_notifyNid.hIcon = load_main_icon_small();
     wcsncpy_s(g_notifyNid.szTip, _countof(g_notifyNid.szTip), L"RC-main", _TRUNCATE);
-    g_notifyNid.dwStateMask = NIS_HIDDEN;
-    g_notifyNid.dwState = NIS_HIDDEN;
 
     if (!Shell_NotifyIconW(NIM_ADD, &g_notifyNid))
     {
@@ -130,6 +148,16 @@ static bool notify_ensure_icon(void)
         g_notifyHwnd = NULL;
         return false;
     }
+
+    // 请求更高版本行为，减少不同系统的兼容差异。
+    g_notifyNid.uVersion = NOTIFYICON_VERSION_4;
+    Shell_NotifyIconW(NIM_SETVERSION, &g_notifyNid);
+
+    // 主程序仅用于发送通知，不需要常驻显示托盘图标：添加成功后再隐藏。
+    g_notifyNid.uFlags = NIF_STATE;
+    g_notifyNid.dwStateMask = NIS_HIDDEN;
+    g_notifyNid.dwState = NIS_HIDDEN;
+    Shell_NotifyIconW(NIM_MODIFY, &g_notifyNid);
 
     g_notifyInited = true;
     return true;
