@@ -116,7 +116,8 @@ $flags = @(
   '-DUNICODE','-D_UNICODE',
   '-finput-charset=UTF-8',
   '-fexec-charset=UTF-8',
-  ('-DRC_MAIN_VERSION=\"{0}\"' -f $Version)
+  # 版本宏作为 token 传入（例如 V3.0.0），在 C 侧通过 stringize 转为字符串，避免 PowerShell/Windows 引号转义问题。
+  ('-DRC_MAIN_VERSION={0}' -f $Version)
 )
 
 # Auto-enable Paho build if PAHO_MQTT_C_ROOT is set.

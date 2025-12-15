@@ -36,11 +36,13 @@
 #include "../rc_utils.h"  // 添加工具函数库头文件
 #include "../rc_notify.h" // 通用通知封装
 
-// 版本信息：支持在编译时通过 -DRC_TRAY_VERSION=\"Vx.y.z\" 指定
+// 版本信息：支持在编译时通过 -DRC_TRAY_VERSION=Vx.y.z 指定（代码侧会 stringize 成字符串）
+#define RC_STR2(x) #x
+#define RC_STR(x) RC_STR2(x)
 #ifndef RC_TRAY_VERSION
-#define RC_TRAY_VERSION "V0.0.0"
+#define RC_TRAY_VERSION V0.0.0
 #endif
-#define BANBEN RC_TRAY_VERSION
+#define BANBEN RC_STR(RC_TRAY_VERSION)
 #define TRAY_ICON_ID 1
 #define WM_TRAYICON (WM_USER + 1)
 #define MUTEX_NAME "RC-main"

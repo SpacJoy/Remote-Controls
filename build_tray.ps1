@@ -127,9 +127,8 @@ $commonCFlags = @(
   '-O2',
   '-finput-charset=UTF-8',
   '-fexec-charset=UTF-8',
-  # PowerShell 调用原生程序时，参数里的双引号可能被“吃掉”。
-  # 这里改用 gcc 兼容的 \"...\" 形式，保证宏值是字符串字面量。
-  ('-DRC_TRAY_VERSION=\"{0}\"' -f $Version)
+  # 版本宏作为 token 传入（例如 V3.0.0），在 C 侧通过 stringize 转为字符串。
+  ('-DRC_TRAY_VERSION={0}' -f $Version)
 )
 Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\tray\tray.c', '-o', 'src\tray\tray.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\tray\language.c', '-o', 'src\tray\language.o'))

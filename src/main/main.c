@@ -29,8 +29,11 @@
 #include "rc_mqtt.h"
 #include "rc_main_tray.h"
 
+#define RC_STR2(x) #x
+#define RC_STR(x) RC_STR2(x)
+
 #ifndef RC_MAIN_VERSION
-#define RC_MAIN_VERSION "V0.0.0"
+#define RC_MAIN_VERSION V0.0.0
 #endif
 
 #define MUTEX_NAME L"RC-main"
@@ -294,7 +297,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     SetCurrentDirectoryW(appDir);
 
     RC_LogInit(appDir);
-    RC_LogInfo("RC-main 启动 (%s)", RC_MAIN_VERSION);
+    RC_LogInfo("RC-main 启动 (%s)", RC_STR(RC_MAIN_VERSION));
 
     wchar_t logsDir[MAX_PATH] = {0};
     BuildPathW(logsDir, MAX_PATH, appDir, L"logs");
@@ -458,7 +461,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     // 与 Python 版本行为保持一致：
     // - 若 RC-tray.exe 已运行：主程序不再创建自己的托盘 UI（避免重复）。
     // - 若未运行：主程序启动一个最小托盘（可用于退出等基础操作）。
-    RC_MainTrayStartDelayed(appDir, RC_MAIN_VERSION, &stopFlag, langEnglish);
+    RC_MainTrayStartDelayed(appDir, RC_STR(RC_MAIN_VERSION), &stopFlag, langEnglish);
 
     // MQTT 主循环：内部负责连接/订阅/消息分发；stopFlag 被置为 true 时退出。
     RC_MqttRunLoop(&mc, router, &stopFlag);

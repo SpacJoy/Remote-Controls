@@ -3,11 +3,12 @@ Remote Controls 顶层打包入口（PowerShell）
 作用：路径无关地转发到 installer/build_installer.ps1
 用法：
   - 双击运行（推荐）
-  - 或在任意目录运行：pwsh -NoProfile -ExecutionPolicy Bypass -File build.ps1 [版本号]
+    - 或在任意目录运行：pwsh -NoProfile -ExecutionPolicy Bypass -File build.ps1 [版本号] [-NoPause]
 #>
 
 param(
-    [string]$Version = ""
+        [string]$Version = "",
+        [switch]$NoPause
 )
 
 # 解析脚本所在目录与 installer 路径（兼容 WinPS 5.1 的 Join-Path 行为）
@@ -30,16 +31,32 @@ if (-not (Test-Path $InstallerScript)) {
 $Pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
 if ($Pwsh) {
     if ($Version) {
-        & $Pwsh.Path -NoProfile -ExecutionPolicy Bypass -File $InstallerScript $Version
+        if ($NoPause) {
+            & $Pwsh.Path -NoProfile -ExecutionPolicy Bypass -File $InstallerScript $Version -NoPause
+        } else {
+            & $Pwsh.Path -NoProfile -ExecutionPolicy Bypass -File $InstallerScript $Version
+        }
     } else {
-        & $Pwsh.Path -NoProfile -ExecutionPolicy Bypass -File $InstallerScript
+        if ($NoPause) {
+            & $Pwsh.Path -NoProfile -ExecutionPolicy Bypass -File $InstallerScript -NoPause
+        } else {
+            & $Pwsh.Path -NoProfile -ExecutionPolicy Bypass -File $InstallerScript
+        }
     }
 } else {
     # 未找到 pwsh，直接在当前会话中调用子脚本
     if ($Version) {
-        & $InstallerScript $Version
+        if ($NoPause) {
+            & $InstallerScript $Version -NoPause
+        } else {
+            & $InstallerScript $Version
+        }
     } else {
-        & $InstallerScript
+        if ($NoPause) {
+            & $InstallerScript -NoPause
+        } else {
+            & $InstallerScript
+        }
     }
 }
 

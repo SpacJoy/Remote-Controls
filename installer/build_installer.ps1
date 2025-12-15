@@ -34,7 +34,10 @@ function Write-FullLogIfCi {
     )
 
     $isCi = ($env:GITHUB_ACTIONS -eq 'true') -or ($env:CI -eq 'true')
-    if (-not $isCi) { return }
+    # 默认不在脚本内联输出完整日志：GitHub Actions workflow 已在失败时统一输出 logs/*.log，
+    # 否则会造成“完整日志重复打印”。如确实需要内联全文，设置 RC_CI_INLINE_LOG=1。
+    $inline = ($env:RC_CI_INLINE_LOG -eq '1') -or ($env:RC_CI_INLINE_LOG -eq 'true')
+    if (-not $isCi -or -not $inline) { return }
     if (-not (Test-Path -LiteralPath $LogPath)) { return }
 
     Write-Host "";
@@ -212,13 +215,13 @@ Write-Host "[1/7] 检查Python环境（仅 GUI/版本脚本）..." -ForegroundCo
 $PythonCmd = "python"
 if (Test-Path "venv\Scripts\python.exe") {
     Write-Host "检测到虚拟环境: venv" -ForegroundColor Green
-    $PythonCmd = "venv\Scripts\python.exe"
+    $PythonCmd = (Resolve-Path "venv\Scripts\python.exe").Path
 } elseif (Test-Path ".venv\Scripts\python.exe") {
     Write-Host "检测到虚拟环境: .venv" -ForegroundColor Green
-    $PythonCmd = ".venv\Scripts\python.exe"
+    $PythonCmd = (Resolve-Path ".venv\Scripts\python.exe").Path
 } elseif (Test-Path "env\Scripts\python.exe") {
     Write-Host "检测到虚拟环境: env" -ForegroundColor Green
-    $PythonCmd = "env\Scripts\python.exe"
+    $PythonCmd = (Resolve-Path "env\Scripts\python.exe").Path
 } elseif ($env:VIRTUAL_ENV) {
     Write-Host "检测到激活的虚拟环境: $env:VIRTUAL_ENV" -ForegroundColor Green
     $PythonCmd = "python"
@@ -368,15 +371,31 @@ Write-Host ""
 Write-Host "[5/8] 打包GUI程序 RC-GUI.exe..." -ForegroundColor Yellow
 $PyInstallerLog = Join-Path $LogDir 'pyinstaller.log'
 Write-Host "  详细日志：logs\pyinstaller.log" -ForegroundColor Cyan
-& $PythonCmd -m PyInstaller `
-    -F -n RC-GUI --noconsole --noconfirm `
-    --specpath (Join-Path $InstallerDir 'build') `
-    --icon=$IconGUIRel `
-    --add-data "$IconGUIRel;res" `
-    --add-data "$TopIcoRel;res" `
-    --distpath (Join-Path $InstallerDir 'dist') `
-    --workpath (Join-Path $InstallerDir 'build') `
-    src\python\GUI.py *>&1 | Out-File -FilePath $PyInstallerLog -Encoding utf8
+$PyiBuildDir = (Join-Path $InstallerDir 'build')
+New-Item -ItemType Directory -Force -Path $PyiBuildDir | Out-Null
+
+# 注意：PyInstaller 在使用 .spec 构建时，会把 spec 文件所在目录作为相对路径基准。
+# 我们把 spec 放在 installer\build 下，因此这里也切到该目录执行，并用 ..\.. 访问项目根目录的资源，
+# 以避免在 spec 中写入本机绝对路径，同时保证 res\*.ico 可被正确找到。
+$PyiIconFromBuild = (Join-Path '..\..' $IconGUIRel) # ..\..\res\icon_GUI.ico
+$PyiTopIcoFromBuild = (Join-Path '..\..' $TopIcoRel) # ..\..\res\top.ico
+$PyiEntryFromBuild = (Join-Path '..\..' 'src\python\GUI.py')
+
+Push-Location -LiteralPath $PyiBuildDir
+try {
+    & $PythonCmd -m PyInstaller `
+        -F -n RC-GUI --noconsole --noconfirm `
+        --specpath $PyiBuildDir `
+        --icon=$PyiIconFromBuild `
+        --add-data "$PyiIconFromBuild;res" `
+        --add-data "$PyiTopIcoFromBuild;res" `
+        --distpath (Join-Path $InstallerDir 'dist') `
+        --workpath $PyiBuildDir `
+        --paths (Join-Path '..\..' '.') `
+        $PyiEntryFromBuild *>&1 | Out-File -FilePath $PyInstallerLog -Encoding utf8
+} finally {
+    Pop-Location
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：GUI程序打包失败" -ForegroundColor Red
     Write-FullLogIfCi -Title 'PyInstaller' -LogPath $PyInstallerLog
@@ -385,6 +404,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  GUI 打包完成" -ForegroundColor Green
 Write-ToolLogSummary -Title 'PyInstaller' -LogPath $PyInstallerLog
+
+$BuiltGuiExe = (Join-Path $DistDir 'RC-GUI.exe')
+if (-not (Test-Path -LiteralPath $BuiltGuiExe)) {
+    Write-Host "错误：未找到构建产物 $BuiltGuiExe" -ForegroundColor Red
+    Pause-IfNeeded
+    exit 1
+}
 
 # 构建 C 版托盘（RC-tray.exe）
 Write-Host ""
