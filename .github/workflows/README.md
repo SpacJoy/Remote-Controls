@@ -62,6 +62,7 @@ git push origin :refs/tags/V3.0.0-test
 ## 📋 注意事项
 
 1. **标签格式**: 必须以 `V` 开头（如 V3.0.0）
+	- 以 `-test` 结尾的标签（如 `V3.0.0-test`）会自动发布为 GitHub **预发布（prerelease）**
 2. **版本文件**: 自动更新 `version_info.py` 和相关文件
 3. **构建失败**: 查看 Actions 日志获取详细错误信息
 4. **权限要求**: 需要仓库的 push 权限来创建 Release

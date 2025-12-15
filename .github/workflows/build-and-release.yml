@@ -81,23 +81,53 @@ jobs:
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
 
-                  if ("${{ github.event_name }}" -eq "push") {
-                    # 从标签提取版本号（去掉 V 前缀）
-                    $tagName = "${{ github.ref_name }}"
-                    $version = $tagName -replace '^V', ''
-                    echo "version=$version" >> $env:GITHUB_OUTPUT
-                    echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
-                    echo "is_tag_push=true" >> $env:GITHUB_OUTPUT
-                  } else {
-                    # 手动触发使用输入的版本号
-                    $version = "${{ github.event.inputs.version }}"
-                    $tagName = "V$version"
-                    echo "version=$version" >> $env:GITHUB_OUTPUT
-                    echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
-                    echo "is_tag_push=false" >> $env:GITHUB_OUTPUT
+                  function Resolve-VersionFromTagName {
+                    param([Parameter(Mandatory = $true)][string]$TagName)
+
+                    $raw = ($TagName -replace '^V', '')
+                    $isTest = $false
+                    $buildVersion = $raw
+
+                    # 支持 tag 形式：V3.0.0-test / V3.0.0.8-test
+                    if ($raw -match '^(?<base>\d+\.\d+\.\d+(?:\.\d+)?)-test$') {
+                      $buildVersion = $matches.base
+                      $isTest = $true
+                    }
+
+                    # 版本号必须是纯数字点分段（update_version.py 需要）
+                    if ($buildVersion -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
+                      throw "错误：版本号格式不正确: $raw（构建版本解析为: $buildVersion）。正确格式: X.Y.Z 或 X.Y.Z.B；测试 tag 允许追加 -test。"
+                    }
+
+                    return [pscustomobject]@{
+                      Raw = $raw
+                      Build = $buildVersion
+                      IsTest = $isTest
+                    }
                   }
-                  echo "构建版本: $version"
-                  echo "标签名称: $tagName"
+
+                  $tagName = ""
+                  $isTagPush = $false
+                  if ("${{ github.event_name }}" -eq "push") {
+                    $tagName = "${{ github.ref_name }}"
+                    $isTagPush = $true
+                  } else {
+                    # 手动触发：允许输入带/不带 V 前缀，以及可选的 -test 后缀
+                    $input = "${{ github.event.inputs.version }}"
+                    if ($input -match '^V') { $tagName = $input } else { $tagName = "V$input" }
+                    $isTagPush = $false
+                  }
+
+                  $resolved = Resolve-VersionFromTagName -TagName $tagName
+
+                  echo "version=$($resolved.Build)" >> $env:GITHUB_OUTPUT
+                  echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
+                  echo "is_tag_push=$($isTagPush.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+                  echo "is_test_tag=$($resolved.IsTest.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+
+                  echo "构建版本(用于打包/写入版本文件): $($resolved.Build)"
+                  echo "标签名称(用于发布): $tagName"
+                  echo "是否测试标签(-test): $($resolved.IsTest)"
 
             - name: Set up Python
               uses: actions/setup-python@v5
@@ -169,6 +199,9 @@ jobs:
                   python -c "import sys; print('Python encoding:', sys.stdout.encoding)"
 
                   python installer/update_version.py $version
+                  if ($LASTEXITCODE -ne 0) {
+                    throw "版本文件更新失败: $version"
+                  }
                   echo "版本文件已更新到: $version"
 
             - name: Test source files
@@ -517,7 +550,7 @@ jobs:
                   name: Remote Controls ${{ steps.version.outputs.tag_name }}
                   body: ${{ steps.changelog.outputs.changelog }}
                   draft: false
-                  prerelease: false
+                  prerelease: ${{ steps.version.outputs.is_test_tag == 'true' }}
                   files: |
                       installer/dist/RC-main.exe
                       installer/dist/RC-GUI.exe
