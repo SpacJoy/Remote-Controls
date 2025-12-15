@@ -30,6 +30,10 @@ env:
     PYTHONIOENCODING: "utf-8"
     PYTHONUTF8: "1"
 
+concurrency:
+  group: build-and-release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
     build-and-release:
         runs-on: windows-latest
@@ -44,6 +48,21 @@ jobs:
               uses: actions/checkout@v4
               with:
                   fetch-depth: 0
+
+            - name: Set up MSYS2 (MinGW-w64)
+              uses: msys2/setup-msys2@v2
+              with:
+                  msystem: MINGW64
+                  update: true
+                  cache: true
+                  install: >-
+                      mingw-w64-x86_64-gcc
+                      mingw-w64-x86_64-binutils
+
+            - name: Add MinGW64 to PATH
+              shell: pwsh
+              run: |
+                  Add-Content -Path $env:GITHUB_PATH -Value "C:\\msys64\\mingw64\\bin"
               
             - name: Install Inno Setup 6
               run: |
@@ -112,12 +131,8 @@ jobs:
 
                   .\.venv\Scripts\Activate.ps1
 
-                  # 强制重新安装所有依赖
-                  pip install --upgrade pip setuptools wheel
-
                   echo "=== 安装主要依赖 ==="
-                  # 首先尝试从requirements.txt安装
-                  pip install -r requirements.txt --force-reinstall
+                  pip install -r requirements.txt
 
                   # 验证关键依赖是否正确安装
                   echo "=== 验证依赖安装 ==="
@@ -284,6 +299,7 @@ jobs:
               env:
                   PYTHONIOENCODING: utf-8
                   PYTHONUTF8: 1
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -509,6 +525,16 @@ jobs:
                       installer/dist/installer/Remote-Controls-Installer-${{ steps.version.outputs.version }}.exe
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Upload logs (on failure)
+              if: failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: logs-v${{ steps.version.outputs.version }}
+                  path: |
+                      logs/**/*.log
+                      installer/build/**/warn-*.txt
+                  retention-days: 30
 
             - name: Build Summary
               shell: pwsh

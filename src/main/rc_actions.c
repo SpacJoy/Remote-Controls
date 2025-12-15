@@ -29,6 +29,7 @@
 #include <physicalmonitorenumerationapi.h>
 #include <highlevelmonitorconfigurationapi.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -113,6 +114,69 @@ static int clamp_int(int v, int lo, int hi)
     if (v > hi)
         return hi;
     return v;
+}
+
+static bool rc_vsnwprintf_safe(wchar_t *buf, size_t cap, const wchar_t *fmt, va_list ap)
+{
+    if (!buf || cap == 0)
+        return false;
+    buf[0] = 0;
+    int n = _vsnwprintf(buf, (int)cap, fmt, ap);
+    buf[cap - 1] = 0;
+    if (n < 0)
+        return false;
+    return ((size_t)n < cap);
+}
+
+static bool rc_snwprintf_safe(wchar_t *buf, size_t cap, const wchar_t *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    bool ok = rc_vsnwprintf_safe(buf, cap, fmt, ap);
+    va_end(ap);
+    return ok;
+}
+
+static bool rc_wappend_literal(wchar_t *dst, size_t cap, const wchar_t *suffix)
+{
+    if (!dst || cap == 0)
+        return false;
+    if (!suffix)
+        suffix = L"";
+
+    size_t dlen = wcslen(dst);
+    size_t slen = wcslen(suffix);
+    if (dlen + slen + 1 > cap)
+        return false;
+    memcpy(dst + dlen, suffix, (slen + 1) * sizeof(wchar_t));
+    return true;
+}
+
+static bool rc_contains_cmdline_unsafe_wchars(const wchar_t *s)
+{
+    if (!s)
+        return false;
+    for (const wchar_t *p = s; *p; p++)
+    {
+        wchar_t ch = *p;
+        if (ch == L'\"')
+            return true;
+        if (ch < 0x20)
+            return true;
+    }
+    return false;
+}
+
+static bool rc_is_digits_only_wide(const wchar_t *s)
+{
+    if (!s || !*s)
+        return false;
+    for (const wchar_t *p = s; *p; p++)
+    {
+        if (*p < L'0' || *p > L'9')
+            return false;
+    }
+    return true;
 }
 
 /*
@@ -509,15 +573,38 @@ bool RC_ActionRunProgramUtf8(const char *pathUtf8)
     if (!pathUtf8 || !*pathUtf8)
         return false;
 
-    char *tmp = _strdup(pathUtf8);
-    if (!tmp)
+    char *pathOwned = strip_wrapping_quotes_alloc(pathUtf8);
+    const char *path2 = pathOwned ? pathOwned : skip_spaces(pathUtf8);
+    if (!path2 || !*path2)
+    {
+        free(pathOwned);
         return false;
+    }
+
+    char *tmp = _strdup(path2);
+    if (!tmp)
+    {
+        free(pathOwned);
+        return false;
+    }
     RC_NormalizePathSlashes(tmp);
 
-    wchar_t *wpath = RC_Utf8ToWideAlloc(tmp);
+    wchar_t *wpath0 = RC_Utf8ToWideAlloc(tmp);
+    wchar_t *wpath = wpath0 ? expand_env_wide_alloc(wpath0) : NULL;
+    free(wpath0);
     if (!wpath)
     {
         free(tmp);
+        free(pathOwned);
+        return false;
+    }
+
+    // Paths should not contain quotes/control chars; reject to avoid cmdline injection.
+    if (rc_contains_cmdline_unsafe_wchars(wpath))
+    {
+        free(wpath);
+        free(tmp);
+        free(pathOwned);
         return false;
     }
 
@@ -527,14 +614,26 @@ bool RC_ActionRunProgramUtf8(const char *pathUtf8)
     if (_stricmp(ext, ".ps1") == 0)
     {
         wchar_t args[4096];
-        _snwprintf(args, (int)(sizeof(args) / sizeof(args[0])), L"-NoProfile -ExecutionPolicy Bypass -File \"%s\"", wpath);
+        if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])), L"-NoProfile -ExecutionPolicy Bypass -File \"%ls\"", wpath))
+        {
+            free(wpath);
+            free(tmp);
+            free(pathOwned);
+            return false;
+        }
         DWORD pid = 0;
         ok = create_process_ex(L"powershell.exe", args, true, false, false, &pid);
     }
     else if (_stricmp(ext, ".bat") == 0 || _stricmp(ext, ".cmd") == 0)
     {
         wchar_t args[4096];
-        _snwprintf(args, (int)(sizeof(args) / sizeof(args[0])), L"/c \"%s\"", wpath);
+        if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])), L"/c \"%ls\"", wpath))
+        {
+            free(wpath);
+            free(tmp);
+            free(pathOwned);
+            return false;
+        }
         DWORD pid = 0;
         ok = create_process_ex(L"cmd.exe", args, true, false, false, &pid);
     }
@@ -566,6 +665,7 @@ bool RC_ActionRunProgramUtf8(const char *pathUtf8)
 
     free(wpath);
     free(tmp);
+    free(pathOwned);
     return ok;
 }
 
@@ -590,11 +690,22 @@ static bool create_process_ex(const wchar_t *exe, const wchar_t *args, bool hide
     if (outPid)
         *outPid = 0;
 
+    if (!exe || !*exe)
+        return false;
+    if (rc_contains_cmdline_unsafe_wchars(exe))
+        return false;
+
     wchar_t cmdline[8192];
+    bool fmtOk = false;
     if (args && *args)
-        _snwprintf(cmdline, (int)(sizeof(cmdline) / sizeof(cmdline[0])), L"\"%s\" %s", exe, args);
+        fmtOk = rc_snwprintf_safe(cmdline, (sizeof(cmdline) / sizeof(cmdline[0])), L"\"%ls\" %ls", exe, args);
     else
-        _snwprintf(cmdline, (int)(sizeof(cmdline) / sizeof(cmdline[0])), L"\"%s\"", exe);
+        fmtOk = rc_snwprintf_safe(cmdline, (sizeof(cmdline) / sizeof(cmdline[0])), L"\"%ls\"", exe);
+    if (!fmtOk)
+    {
+        RC_LogError("CreateProcess 参数过长/截断 (exe=%ls)", exe ? exe : L"");
+        return false;
+    }
 
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
@@ -782,11 +893,38 @@ static bool create_process_capture_output(const wchar_t *exe,
     SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0);
     SetHandleInformation(errRead, HANDLE_FLAG_INHERIT, 0);
 
+    if (!exe || !*exe)
+    {
+        CloseHandle(outRead);
+        CloseHandle(outWrite);
+        CloseHandle(errRead);
+        CloseHandle(errWrite);
+        return false;
+    }
+    if (rc_contains_cmdline_unsafe_wchars(exe))
+    {
+        CloseHandle(outRead);
+        CloseHandle(outWrite);
+        CloseHandle(errRead);
+        CloseHandle(errWrite);
+        return false;
+    }
+
     wchar_t cmdline[8192];
+    bool fmtOk = false;
     if (args && *args)
-        _snwprintf(cmdline, (int)(sizeof(cmdline) / sizeof(cmdline[0])), L"\"%s\" %s", exe, args);
+        fmtOk = rc_snwprintf_safe(cmdline, (sizeof(cmdline) / sizeof(cmdline[0])), L"\"%ls\" %ls", exe, args);
     else
-        _snwprintf(cmdline, (int)(sizeof(cmdline) / sizeof(cmdline[0])), L"\"%s\"", exe);
+        fmtOk = rc_snwprintf_safe(cmdline, (sizeof(cmdline) / sizeof(cmdline[0])), L"\"%ls\"", exe);
+    if (!fmtOk)
+    {
+        CloseHandle(outRead);
+        CloseHandle(outWrite);
+        CloseHandle(errRead);
+        CloseHandle(errWrite);
+        RC_LogError("CreateProcess(捕获输出) 参数过长/截断 (exe=%ls)", exe ? exe : L"");
+        return false;
+    }
 
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
@@ -958,13 +1096,25 @@ bool RC_ActionSetBrightnessTwinkleTrayPercentUtf8(int percent0to100,
         return false;
     }
 
+    if (rc_contains_cmdline_unsafe_wchars(exeW))
+    {
+        free(exeCfgOwned);
+        free(exeW);
+        return false;
+    }
+
     wchar_t argsW[1024];
     argsW[0] = 0;
 
     // One monitor selector arg + one brightness arg are required.
     if (_stricmp(mode, "all") == 0)
     {
-        _snwprintf(argsW, (int)(sizeof(argsW) / sizeof(argsW[0])), L"--All --Set=%d", v);
+        if (!rc_snwprintf_safe(argsW, (sizeof(argsW) / sizeof(argsW[0])), L"--All --Set=%d", v))
+        {
+            free(exeCfgOwned);
+            free(exeW);
+            return false;
+        }
     }
     else if (_stricmp(mode, "monitor_id") == 0)
     {
@@ -986,7 +1136,22 @@ bool RC_ActionSetBrightnessTwinkleTrayPercentUtf8(int percent0to100,
             free(exeW);
             return false;
         }
-        _snwprintf(argsW, (int)(sizeof(argsW) / sizeof(argsW[0])), L"--MonitorID=\"%ls\" --Set=%d", idW, v);
+
+        if (rc_contains_cmdline_unsafe_wchars(idW))
+        {
+            free(idW);
+            free(exeCfgOwned);
+            free(exeW);
+            return false;
+        }
+
+        if (!rc_snwprintf_safe(argsW, (sizeof(argsW) / sizeof(argsW[0])), L"--MonitorID=\"%ls\" --Set=%d", idW, v))
+        {
+            free(idW);
+            free(exeCfgOwned);
+            free(exeW);
+            return false;
+        }
         free(idW);
     }
     else
@@ -1004,15 +1169,44 @@ bool RC_ActionSetBrightnessTwinkleTrayPercentUtf8(int percent0to100,
             free(exeW);
             return false;
         }
-        _snwprintf(argsW, (int)(sizeof(argsW) / sizeof(argsW[0])), L"--MonitorNum=%ls --Set=%d", numW, v);
+
+        if (!rc_is_digits_only_wide(numW))
+        {
+            free(numW);
+            free(exeCfgOwned);
+            free(exeW);
+            return false;
+        }
+
+        if (!rc_snwprintf_safe(argsW, (sizeof(argsW) / sizeof(argsW[0])), L"--MonitorNum=%ls --Set=%d", numW, v))
+        {
+            free(numW);
+            free(exeCfgOwned);
+            free(exeW);
+            return false;
+        }
         free(numW);
     }
 
     // Optional UI flags.
     if (overlay)
-        wcscat(argsW, L" --Overlay");
+    {
+        if (!rc_wappend_literal(argsW, (sizeof(argsW) / sizeof(argsW[0])), L" --Overlay"))
+        {
+            free(exeCfgOwned);
+            free(exeW);
+            return false;
+        }
+    }
     if (panel)
-        wcscat(argsW, L" --Panel");
+    {
+        if (!rc_wappend_literal(argsW, (sizeof(argsW) / sizeof(argsW[0])), L" --Panel"))
+        {
+            free(exeCfgOwned);
+            free(exeW);
+            return false;
+        }
+    }
 
     DWORD exitCode = 0;
     char *outTxt = NULL;
@@ -1103,21 +1297,36 @@ bool RC_ActionRunPowershellCommandUtf8(const char *commandUtf8, bool hideWindow,
     wchar_t args[8192];
     if (keepWindow)
     {
-        _snwprintf(args, (int)(sizeof(args) / sizeof(args[0])),
-                   L"-NoProfile -ExecutionPolicy Bypass -NoExit -Command \"%s\"", escaped);
+        if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
+                               L"-NoProfile -ExecutionPolicy Bypass -NoExit -Command \"%ls\"", escaped))
+        {
+            free(escaped);
+            free(wcmd);
+            return false;
+        }
     }
     else
     {
         // For hidden we also use -NonInteractive.
         if (hideWindow)
         {
-            _snwprintf(args, (int)(sizeof(args) / sizeof(args[0])),
-                       L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -Command \"%s\"", escaped);
+            if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
+                                   L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -Command \"%ls\"", escaped))
+            {
+                free(escaped);
+                free(wcmd);
+                return false;
+            }
         }
         else
         {
-            _snwprintf(args, (int)(sizeof(args) / sizeof(args[0])),
-                       L"-NoProfile -ExecutionPolicy Bypass -Command \"%s\"", escaped);
+            if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
+                                   L"-NoProfile -ExecutionPolicy Bypass -Command \"%ls\"", escaped))
+            {
+                free(escaped);
+                free(wcmd);
+                return false;
+            }
         }
     }
 
@@ -1161,20 +1370,35 @@ bool RC_ActionRunPowershellCommandUtf8Ex(const char *commandUtf8, bool hideWindo
     wchar_t args[8192];
     if (keepWindow)
     {
-        _snwprintf(args, (int)(sizeof(args) / sizeof(args[0])),
-                   L"-NoProfile -ExecutionPolicy Bypass -NoExit -Command \"%s\"", escaped);
+        if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
+                               L"-NoProfile -ExecutionPolicy Bypass -NoExit -Command \"%ls\"", escaped))
+        {
+            free(escaped);
+            free(wcmd);
+            return false;
+        }
     }
     else
     {
         if (hideWindow)
         {
-            _snwprintf(args, (int)(sizeof(args) / sizeof(args[0])),
-                       L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -Command \"%s\"", escaped);
+            if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
+                                   L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -Command \"%ls\"", escaped))
+            {
+                free(escaped);
+                free(wcmd);
+                return false;
+            }
         }
         else
         {
-            _snwprintf(args, (int)(sizeof(args) / sizeof(args[0])),
-                       L"-NoProfile -ExecutionPolicy Bypass -Command \"%s\"", escaped);
+            if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
+                                   L"-NoProfile -ExecutionPolicy Bypass -Command \"%ls\"", escaped))
+            {
+                free(escaped);
+                free(wcmd);
+                return false;
+            }
         }
     }
 

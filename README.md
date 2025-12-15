@@ -103,6 +103,11 @@ python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.
 
 - 产物位置：`installer/dist/RC-*.exe` 与安装包 `installer/dist/installer/*.exe`
 
+## GitHub CI/CD
+
+- CI：PR / 推送到 `main` 会触发 `.github/workflows/ci.yml`，做依赖安装与最小自检（`compileall` + 关键依赖导入 + `pip check`）。
+- Release：推送标签 `V*` 或手动触发会运行 `.github/workflows/build-and-release.yml`，完成构建并上传产物/创建 Release。
+
 更多细节见 `installer/` 目录与 `CHANGELOG.md`。
 
 ## 常见问题（精简）

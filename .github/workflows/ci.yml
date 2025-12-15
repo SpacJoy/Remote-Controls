@@ -1,0 +1,49 @@
+# @format
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12.10"
+  PYTHONIOENCODING: "utf-8"
+  PYTHONUTF8: "1"
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+
+      - name: Static smoke checks
+        shell: pwsh
+        run: |
+          python -m compileall -q src installer scripts
+          python -m pip check
+          python -c "import tkinter, psutil, wmi, PyInstaller, win32com.client; print('imports: OK')"
+          python installer/update_version.py 0.0.0
