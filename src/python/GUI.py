@@ -120,6 +120,8 @@ _ZH_TO_EN: dict[str, str] = {
     "睡眠功能状态": "Sleep status",
     "语言：": "Language:",
     "参数范围：": "Value range:",
+        # 命令主题 {value} 范围
+        "value 参数范围：": "Value range:",
     "最小：": "Min:",
     "最大：": "Max:",
     "请输入整数": "Please enter an integer",
@@ -2118,7 +2120,7 @@ def modify_custom_theme() -> None:
     cmd_window_check = ttk.Checkbutton(theme_window, text="显示窗口", variable=cmd_window_var)
 
     cmd_range_frame_mod = ttk.Frame(theme_window)
-    ttk.Label(cmd_range_frame_mod, text=t("参数范围：")).grid(row=0, column=0, sticky="w")
+    ttk.Label(cmd_range_frame_mod, text=t("value 参数范围：")).grid(row=0, column=0, sticky="w")
     ttk.Label(cmd_range_frame_mod, text=t("最小：")).grid(row=0, column=1, sticky="e", padx=(8, 2))
     cmd_min_entry_mod = ttk.Entry(cmd_range_frame_mod, textvariable=cmd_value_min_var, width=8)
     cmd_min_entry_mod.grid(row=0, column=2, sticky="w")
@@ -2876,7 +2878,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     cmd_window_check = ttk.Checkbutton(theme_window, text="显示窗口", variable=cmd_window_var)
 
     cmd_range_frame_add = ttk.Frame(theme_window)
-    ttk.Label(cmd_range_frame_add, text=t("参数范围：")).grid(row=0, column=0, sticky="w")
+    ttk.Label(cmd_range_frame_add, text=t("value 参数范围：")).grid(row=0, column=0, sticky="w")
     ttk.Label(cmd_range_frame_add, text=t("最小：")).grid(row=0, column=1, sticky="e", padx=(8, 2))
     cmd_min_entry_add = ttk.Entry(cmd_range_frame_add, textvariable=cmd_value_min_var_add, width=8)
     cmd_min_entry_add.grid(row=0, column=2, sticky="w")
