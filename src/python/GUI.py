@@ -3750,7 +3750,8 @@ tls_verify_var = tk.IntVar(value=int(config.get("mqtt_tls_verify", 0) or 0))
 tls_verify_check = ttk.Checkbutton(auth_frame, text=t("校验证书"), variable=tls_verify_var)
 tls_verify_check.grid(row=3, column=1, columnspan=2, sticky="n", padx=PADX, pady=PADY)
 
-ttk.Label(auth_frame, text=t("CA证书：")).grid(row=5, column=0, sticky="e", padx=PADX, pady=PADY)
+tls_ca_label = ttk.Label(auth_frame, text=t("CA证书："))
+tls_ca_label.grid(row=5, column=0, sticky="e", padx=PADX, pady=PADY)
 tls_ca_entry = ttk.Entry(auth_frame)
 tls_ca_entry.grid(row=5, column=1, sticky="ew", padx=PADX, pady=PADY)
 tls_ca_entry.insert(0, config.get("mqtt_tls_ca_file", "") or "")
@@ -3770,9 +3771,47 @@ def choose_tls_ca_file() -> None:
         except Exception:
             pass
 
-ttk.Button(auth_frame, text=t("选择文件"), command=choose_tls_ca_file).grid(
-    row=5, column=2, sticky="w", padx=PADX, pady=PADY
-)
+tls_ca_button = ttk.Button(auth_frame, text=t("选择文件"), command=choose_tls_ca_file)
+tls_ca_button.grid(row=5, column=2, sticky="w", padx=PADX, pady=PADY)
+
+def _set_widget_enabled(w, enabled: bool) -> None:
+    try:
+        w.configure(state=("normal" if enabled else "disabled"))
+        return
+    except Exception:
+        pass
+    try:
+        if enabled:
+            w.state(["!disabled"])
+        else:
+            w.state(["disabled"])
+    except Exception:
+        pass
+
+def _sync_tls_ca_controls() -> None:
+    tls_enabled = bool(tls_var.get())
+    verify_enabled = bool(tls_verify_var.get())
+    ca_enabled = tls_enabled and verify_enabled
+    _set_widget_enabled(tls_ca_label, ca_enabled)
+    _set_widget_enabled(tls_ca_entry, ca_enabled)
+    _set_widget_enabled(tls_ca_button, ca_enabled)
+
+def _sync_tls_controls() -> None:
+    tls_enabled = bool(tls_var.get())
+    _set_widget_enabled(tls_verify_check, tls_enabled)
+    if not tls_enabled:
+        try:
+            tls_verify_var.set(0)
+        except Exception:
+            pass
+    _sync_tls_ca_controls()
+
+def _on_tls_or_verify_change(*_args) -> None:
+    _sync_tls_controls()
+
+tls_var.trace_add("write", _on_tls_or_verify_change)
+tls_verify_var.trace_add("write", _on_tls_or_verify_change)
+_sync_tls_controls()
 
 # 认证模式说明
 auth_info_label = ttk.Label(

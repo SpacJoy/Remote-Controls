@@ -58,11 +58,18 @@ jobs:
                   install: >-
                       mingw-w64-x86_64-gcc
                       mingw-w64-x86_64-binutils
+                      mingw-w64-x86_64-paho-mqtt-c
 
             - name: Add MinGW64 to PATH
               shell: pwsh
               run: |
                   Add-Content -Path $env:GITHUB_PATH -Value "C:\\msys64\\mingw64\\bin"
+
+            - name: Configure Paho MQTT C root
+              shell: pwsh
+              run: |
+                  # build_main.ps1 requires PAHO_MQTT_C_ROOT (or -PahoRoot) to locate MQTTClient.h and libpaho-mqtt3c.*
+                  Add-Content -Path $env:GITHUB_ENV -Value "PAHO_MQTT_C_ROOT=C:\\msys64\\mingw64"
               
             - name: Install Inno Setup 6
               run: |

@@ -134,6 +134,23 @@ if ([string]::IsNullOrWhiteSpace($PahoRoot)) {
   }
 }
 
+# Auto-detect common MSYS2 prefixes when PAHO_MQTT_C_ROOT is not set.
+# This makes fresh environments (including CI) more likely to build without extra flags.
+if ([string]::IsNullOrWhiteSpace($PahoRoot)) {
+  $msysCandidates = @(
+    'C:\msys64\mingw64',
+    'C:\msys64\ucrt64'
+  )
+  foreach ($c in $msysCandidates) {
+    $inc = Join-Path $c 'include'
+    $lib = Join-Path $c 'lib'
+    if ((Test-Path -LiteralPath (Join-Path $inc 'MQTTClient.h')) -and (Test-Path -LiteralPath $lib)) {
+      $PahoRoot = $c
+      break
+    }
+  }
+}
+
 $linkExtra = @()
 $PahoLinkModeResolved = 'none'
 if ($UsePaho) {
