@@ -12,6 +12,10 @@
 
 #include "rc_mqtt.h"
 
+// Safety limits for incoming MQTT data (payloads are expected to be small: on/off/on#n).
+#define RC_MQTT_MAX_PAYLOAD_BYTES (4096)
+#define RC_MQTT_LOG_PREVIEW_BYTES (128)
+
 #ifdef RC_USE_PAHO_MQTT
 
 #include "rc_log.h"
@@ -45,6 +49,44 @@ static void notify_status_throttled(RC_Router *router, DWORD *pLastTick, DWORD m
     RC_RouterNotifyUtf8(router, rc_title_for_notify(router), messageUtf8);
 }
 
+static void mqtt_sanitize_preview(const char *in, char *out, size_t outLen)
+{
+    if (!out || outLen == 0)
+        return;
+    out[0] = '\0';
+    if (!in)
+        return;
+
+    size_t j = 0;
+    for (size_t i = 0; in[i] != '\0' && j + 1 < outLen; i++)
+    {
+        unsigned char c = (unsigned char)in[i];
+        if (c == '\r' || c == '\n' || c == '\t')
+            c = ' ';
+        else if (c < 0x20)
+            c = '?';
+        out[j++] = (char)c;
+    }
+    out[j] = '\0';
+}
+
+static void log_mqtt_message(RC_Router *router, const char *topic, const char *payload)
+{
+    if (!topic)
+        topic = "";
+    if (!payload)
+        payload = "";
+
+    char preview[RC_MQTT_LOG_PREVIEW_BYTES];
+    mqtt_sanitize_preview(payload, preview, sizeof(preview));
+    unsigned int payloadLen = (unsigned int)strlen(payload);
+
+    if (RC_RouterIsEnglish(router))
+        RC_LogInfo("MQTT message topic='%s' payload='%s' (len=%u)", topic, preview, payloadLen);
+    else
+        RC_LogInfo("收到 MQTT 消息 topic='%s' payload='%s' (len=%u)", topic, preview, payloadLen);
+}
+
 /*
  * 将 MQTT payload（字节串）复制为 C 字符串，并做简单的首尾空白裁剪。
  *
@@ -60,6 +102,9 @@ static char *utf8_dup_and_trim(const unsigned char *buf, int len)
 {
     if (!buf || len <= 0)
         return _strdup("");
+
+    if (len > RC_MQTT_MAX_PAYLOAD_BYTES)
+        len = RC_MQTT_MAX_PAYLOAD_BYTES;
 
     int start = 0;
     int end = len;
@@ -289,9 +334,9 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
             }
 
             if (RC_RouterIsEnglish(router))
-                RC_LogInfo("MQTT message topic='%s' payload='%s'", topicName ? topicName : "", payload);
+                log_mqtt_message(router, topicName ? topicName : "", payload);
             else
-                RC_LogInfo("收到 MQTT 消息 topic='%s' payload='%s'", topicName ? topicName : "", payload);
+                log_mqtt_message(router, topicName ? topicName : "", payload);
             RC_RouterHandle(router, topicName ? topicName : "", payload);
 
             free(payload);
@@ -342,6 +387,44 @@ static void notify_status_throttled(RC_Router *router, DWORD *pLastTick, DWORD m
     if (pLastTick)
         *pLastTick = now;
     RC_RouterNotifyUtf8(router, rc_title_for_notify(router), messageUtf8);
+}
+
+static void mqtt_sanitize_preview(const char *in, char *out, size_t outLen)
+{
+    if (!out || outLen == 0)
+        return;
+    out[0] = '\0';
+    if (!in)
+        return;
+
+    size_t j = 0;
+    for (size_t i = 0; in[i] != '\0' && j + 1 < outLen; i++)
+    {
+        unsigned char c = (unsigned char)in[i];
+        if (c == '\r' || c == '\n' || c == '\t')
+            c = ' ';
+        else if (c < 0x20)
+            c = '?';
+        out[j++] = (char)c;
+    }
+    out[j] = '\0';
+}
+
+static void log_mqtt_message(RC_Router *router, const char *topic, const char *payload)
+{
+    if (!topic)
+        topic = "";
+    if (!payload)
+        payload = "";
+
+    char preview[RC_MQTT_LOG_PREVIEW_BYTES];
+    mqtt_sanitize_preview(payload, preview, sizeof(preview));
+    unsigned int payloadLen = (unsigned int)strlen(payload);
+
+    if (RC_RouterIsEnglish(router))
+        RC_LogInfo("MQTT message topic='%s' payload='%s' (len=%u)", topic, preview, payloadLen);
+    else
+        RC_LogInfo("收到 MQTT 消息 topic='%s' payload='%s' (len=%u)", topic, preview, payloadLen);
 }
 
 typedef struct
@@ -705,6 +788,9 @@ static char *utf8_dup_and_trim(const uint8_t *buf, int len)
     if (!buf || len <= 0)
         return _strdup("");
 
+    if (len > RC_MQTT_MAX_PAYLOAD_BYTES)
+        len = RC_MQTT_MAX_PAYLOAD_BYTES;
+
     int start = 0;
     int end = len;
     while (start < end && (buf[start] == ' ' || buf[start] == '\r' || buf[start] == '\n' || buf[start] == '\t'))
@@ -804,9 +890,9 @@ static bool mqtt_process_one_packet(MqttConn *c, RC_Router *router)
         }
 
         if (RC_RouterIsEnglish(router))
-            RC_LogInfo("MQTT message topic='%s' payload='%s'", topic, payload);
+            log_mqtt_message(router, topic, payload);
         else
-            RC_LogInfo("收到 MQTT 消息 topic='%s' payload='%s'", topic, payload);
+            log_mqtt_message(router, topic, payload);
         RC_RouterHandle(router, topic, payload);
 
         free(payload);

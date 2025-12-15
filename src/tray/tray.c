@@ -544,6 +544,7 @@ static void BuildVersionMenuText(char *buffer, size_t len)
     }
 
     _snprintf(buffer, len, g_lang->menuVersionInfo, BANBEN);
+    buffer[len - 1] = '\0';
     size_t used = strlen(buffer);
     if (used + 1 >= len)
     {
@@ -566,6 +567,7 @@ static void BuildVersionMenuText(char *buffer, size_t len)
             if (cmp < 0)
             {
                 _snprintf(suffix, sizeof(suffix), g_lang->versionSuffixNew, g_latestVersion);
+                suffix[sizeof(suffix) - 1] = '\0';
             }
             else if (cmp == 0)
             {
@@ -613,6 +615,7 @@ static unsigned __stdcall VersionCheckThread(void *arg)
     {
         // 避免 strncpy 截断告警，同时保证 NUL 结尾
         _snprintf(g_latestVersion, sizeof(g_latestVersion), "%s", latest);
+        g_latestVersion[sizeof(g_latestVersion) - 1] = '\0';
         g_versionStatus = VERSION_OK;
         g_versionCheckedTime = time(NULL);
 
@@ -630,6 +633,7 @@ static unsigned __stdcall VersionCheckThread(void *arg)
         {
             _snprintf(notifyMsg, sizeof(notifyMsg), g_lang->versionNotifyAhead, latest);
         }
+        notifyMsg[sizeof(notifyMsg) - 1] = '\0';
         ShowNotificationDirect(g_lang->promptTitle, notifyMsg);
     }
     else
@@ -1123,6 +1127,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 const char *adminText = g_isTrayAdmin ? g_lang->notifyAdminYes : g_lang->notifyAdminNo;
                 BuildVersionMenuText(versionText, sizeof(versionText));
                 _snprintf(trayStatusText, sizeof(trayStatusText), g_lang->menuTrayStatus, adminText);
+                trayStatusText[sizeof(trayStatusText) - 1] = '\0';
 
                 wchar_t versionTextW[128] = {0};
                 wchar_t trayStatusTextW[128] = {0};
