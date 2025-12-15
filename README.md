@@ -47,6 +47,7 @@ python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.
 ## 使用教程
 
 - MQTT 认证说明与示例：`md/MQTT_AUTH_GUIDE_V2.md`
+- 配置文件字段说明（`config.json`）：`md/Detailed-introduction.md`
 - 巴法云接入与小爱同学（官方文档）：<https://cloud.bemfa.com/docs/src/speaker_mi.html>
 - 主题速查（内置 + 自定义）：
   - 电脑（开关）：lock/restart/shutdown 等，支持延时
@@ -123,11 +124,14 @@ python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.
 - CI：PR / 推送到 `main` 会触发 `.github/workflows/ci.yml`，做依赖安装与最小自检（`compileall` + 关键依赖导入 + `pip check`）。
 - Release：推送标签 `V*` 或手动触发会运行 `.github/workflows/build-and-release.yml`，完成构建并上传产物/创建 Release。
 
+更多工作流说明见：`.github/workflows/README.md`。
+
 更多细节见 `installer/` 目录与 `CHANGELOG.md`。
 
 ## 常见问题（精简）
 
 - MQTT 连接失败：检查地址/端口/认证，程序会在弱网下自动重连
+- MQTT 8883/TLS：当前默认构建使用 TCP（`tcp://`），不支持 TLS（`ssl://`）；请使用非 TLS 端口或自建 MQTT
 - 休眠不可用：以管理员运行并启用休眠 `powercfg /hibernate on`
 - 托盘找不到主程序：以管理员运行托盘；或直接运行 `RC-main.exe`
 - 脚本执行策略：PowerShell 需允许脚本 `Set-ExecutionPolicy RemoteSigned`

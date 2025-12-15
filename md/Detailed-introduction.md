@@ -1,10 +1,15 @@
 
+<!-- @format -->
+
+# 详细使用说明
+
 ## 目录
 
 - 概览与特性
 - 组件结构
 - 快速开始（首次使用）
 - MQTT 配置（两种认证模式）
+- 配置文件字段说明（config.json）
 - 主题说明（内置 + 自定义）
 - 托盘与权限
 - 安装与打包
@@ -94,6 +99,79 @@
 
 确保 `broker` 与 `port` 正确；认证失败会弹窗并停止重试，请修正配置后重启。
 
+补充：当前主程序默认使用 TCP 连接（形如 `tcp://broker:port`），不启用 TLS（SSL）。
+若你的 MQTT 平台只提供 8883/TLS 端口，请选择该平台的非 TLS 端口或自建支持 TCP 的 MQTT 服务。
+
+## 配置文件字段说明（config.json）
+
+`config.json` 默认位于程序同目录（首次保存配置时由 GUI 自动生成）。建议优先使用 GUI 修改配置，手动编辑后重启程序生效。
+
+### MQTT 与基础字段
+
+- `broker` / `port`：MQTT 服务器与端口（示例：`bemfa.com:9501`）
+- `auth_mode`：认证模式
+  - `private_key`：私钥模式（把私钥填到 `client_id`）
+  - `username_password`：账号密码模式（填写 `mqtt_username` / `mqtt_password`）
+- `client_id`：MQTT Client ID（私钥模式下即“私钥”）
+- `mqtt_username` / `mqtt_password`：账号密码模式的用户名与密码
+- `test`：测试模式（一般用于调试；为 1 时可不启用主题也运行）
+- `language`：界面语言（`zh` / `en`）
+- `notify`：通知开关（0/1）
+
+### 内置主题（Topic 与开关）
+
+每个主题对应一组 Topic（如 `Computer`、`screen`、`volume`、`media`、`sleep`），并有一个 `_checked` 开关控制是否启用订阅：
+
+- `Computer` / `Computer_checked`
+- `screen` / `screen_checked`
+- `volume` / `volume_checked`
+- `media` / `media_checked`
+- `sleep` / `sleep_checked`
+
+内置主题的 on/off 动作（以“电脑/睡眠”为例）：
+
+- `computer_on_action` / `computer_off_action`：如 `lock` / `shutdown` / `restart`
+- `computer_on_delay` / `computer_off_delay`：延时秒数
+- `sleep_on_action` / `sleep_off_action`：如 `sleep` / `hibernate` / `display_off` / `display_on` / `lock` / `none`
+- `sleep_on_delay` / `sleep_off_delay`：延时秒数
+
+### 亮度控制（Twinkle Tray 可选）
+
+- `brightness_mode`：亮度控制方案
+  - `wmi`：系统接口（默认显示器场景更稳）
+  - `twinkle_tray`：Twinkle Tray 命令行（外接显示器更友好）
+- `twinkle_tray_path`：Twinkle Tray 可执行文件路径（可包含引号）
+- `twinkle_tray_target_mode`：目标模式（如 `all`）
+- `twinkle_tray_target_value`：目标值（显示器编号/ID 等，取决于模式）
+- `twinkle_tray_overlay`：是否显示 Overlay（0/1）
+
+### 自定义主题（字段命名规则）
+
+自定义主题以 N 递增分组（从 1 开始），常见类型：
+
+- 程序/脚本：`applicationN*`
+  - `applicationN`：该主题 Topic
+  - `applicationN_name`：显示名称
+  - `applicationN_checked`：是否启用
+  - `applicationN_on_value` / `applicationN_off_value`：on/off 的命令或路径
+  - `applicationN_off_preset`：关闭预设（如 `kill`/`ignore`/`custom`）
+  - `applicationN_directoryN`：GUI 选择文件时写入的路径缓存（用于回显）
+
+- 服务：`serveN*`（需要管理员权限）
+  - `serveN_value` / `serveN_on_value`：服务名
+  - `serveN_off_preset`：如 `stop`
+
+- 命令：`commandN*`
+  - `commandN_on_value` / `commandN_off_value`：命令内容（支持 `{value}` 占位符）
+  - `commandN_off_preset`：关闭预设
+  - `commandN_window`：窗口显示模式（如 `show`）
+  - `commandN_value_min` / `commandN_value_max`：参数范围（用于 `on#数字` / `off#数字`）
+
+- 热键：`hotkeyN*`
+  - `hotkeyN_on_type` / `hotkeyN_off_type`：如 `keyboard` / `none`
+  - `hotkeyN_on_value` / `hotkeyN_off_value`：如 `ctrl+alt+s`
+  - `hotkeyN_char_delay_ms`：字符间隔（逐字符发送时）
+
 ## 主题说明（内置 + 自定义）
 
 内置：
@@ -139,3 +217,93 @@
    ![tray](../res/main_tray.png)
 
 自动管理：托盘检测主程序状态；如独立托盘未运行，主程序会启用内置简洁托盘。
+
+## 安装与打包
+
+### 直接使用（推荐）
+
+1. 到 Release 下载：
+  - `Remote-Controls-Installer-*.exe`（安装包）
+  - 或单文件：`RC-main.exe` / `RC-tray.exe` / `RC-GUI.exe`
+2. 先运行 `RC-GUI.exe` 保存配置，再运行 `RC-tray.exe`（推荐）。
+
+### 本地构建（开发/自行打包）
+
+构建依赖：
+
+- Windows 10/11
+- Python 3.12.x（用于 GUI + PyInstaller）
+- MSYS2 + MinGW64（用于 C 主程序/托盘；需要 `gcc`、`windres` 在 PATH）
+- Inno Setup 6（用于生成安装包，默认路径 `C:\Program Files (x86)\Inno Setup 6\iscc.exe`）
+
+推荐命令（PowerShell）：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+# 交互式（会提示输入版本号）
+.\build.ps1
+
+# 无交互（适合 CI/无人值守）
+.\build.ps1 3.0.0 -NoPause
+```
+
+产物位置：
+
+- `installer/dist/RC-*.exe`
+- `installer/dist/installer/Remote-Controls-Installer-*.exe`
+- 详细构建日志：`logs/*.log`
+
+## 开机自启
+
+GUI 提供一键设置/移除开机自启（本质是创建/删除计划任务）：
+
+- 主程序任务名：`Remote Controls Main Service`
+- 托盘任务名：`Remote Controls Tray`
+
+设置时会让你选择两种方案：
+
+- 方案一（ONLOGON）：用户登录时启动主程序（适合“只要登录后才需要运行”的场景）
+- 方案二（ONSTART）：系统启动时以 SYSTEM 启动主程序（适合需要尽早启动的场景；媒体控制可能需登录后托盘重启主程序才能完整生效）
+
+提示：移动 EXE 文件位置后，需要重新设置任务（任务里记录的是旧路径）。
+
+## 常见问题（FAQ）
+
+### 1) MQTT 连接不上 / 频繁重连
+
+- 先确认 `broker`/`port` 可达，认证模式与字段匹配（私钥 vs 用户名密码）。
+- 如果服务端只提供 TLS(8883)：当前默认构建使用 TCP，不支持 TLS。
+- 认证失败属于“不可恢复错误”，程序会提示并停止重试；修正配置后重启。
+
+### 2) 休眠/休眠(hibernate) 不可用
+
+以管理员打开终端执行：
+
+```powershell
+powercfg /hibernate on
+```
+
+### 3) 服务主题无法启动/停止
+
+服务控制需要管理员权限：请用管理员运行托盘/主程序，或用 GUI 设置为最高权限自启。
+
+### 4) PowerShell 脚本无法执行
+
+建议设置执行策略（按需选择范围）：
+
+```powershell
+Set-ExecutionPolicy RemoteSigned
+```
+
+### 5) 找不到配置/日志
+
+- 配置：默认在程序同目录的 `config.json`
+- 构建日志：`logs/*.log`
+
+## 反馈
+
+- Issue：请提供复现步骤、运行方式（安装包/单文件/源码）、以及 `logs` 相关日志片段。
+- 邮件：`mc_chen6019@qq.com`
