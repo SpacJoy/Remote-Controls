@@ -2187,7 +2187,7 @@ def modify_custom_theme() -> None:
         if type_key == "命令":
             cmd_window_check.grid(row=1, column=1, sticky="n")
             # 放到“关闭预设”同一行右侧
-            cmd_range_frame_mod.grid(row=6, column=1, columnspan=2, sticky="w", padx=PADX, pady=PADY)
+            cmd_range_frame_mod.grid(row=6, column=1, columnspan=2, sticky="n", padx=(0, PADX), pady=PADY)
         else:
             cmd_window_check.grid_remove()
             cmd_range_frame_mod.grid_remove()
@@ -2889,7 +2889,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         if type_key == "命令":
             cmd_window_check.grid(row=1, column=1, sticky="n")
             # 放到“关闭预设”同一行右侧
-            cmd_range_frame_add.grid(row=6, column=2, columnspan=2, sticky="w", padx=PADX, pady=PADY)
+            cmd_range_frame_add.grid(row=6, column=1, columnspan=2, sticky="n", padx=(0, PADX), pady=PADY)
         else:
             cmd_window_check.grid_remove()
             cmd_range_frame_add.grid_remove()
