@@ -24,7 +24,7 @@
 
 ```powershell
 python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
-./build.ps1
+.\build.ps1
 ```
 
 2. 配置 MQTT 与主题
@@ -89,6 +89,9 @@ Remote-Controls/
 ## 安装与构建
 
 - 环境：Windows 10/11；Python 3.12.10+（开发/本地构建时）
+- 构建前置（本地）：
+  - C 主程序/托盘：需要 MSYS2 + MinGW64（确保 `gcc`、`windres` 在 PATH 中；Actions 里使用 `msys2/setup-msys2@v2` 同款方案）
+  - 安装包：需要 Inno Setup 6（默认路径 `C:\Program Files (x86)\Inno Setup 6\iscc.exe`）
 - 依赖安装：
 
 ```powershell
@@ -98,7 +101,7 @@ python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.
 - 一键构建（推荐）：
 
 ```powershell
-./build.ps1
+.\build.ps1
 ```
 
 - 产物位置：`installer/dist/RC-*.exe` 与安装包 `installer/dist/installer/*.exe`

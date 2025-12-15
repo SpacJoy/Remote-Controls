@@ -7,7 +7,7 @@
 # V2.4.0 (2025-12-11)
 
 **Twinkle Tray 亮度控制可选方案**  
-Full Changelog (相对于 2.3.10): <https://github.com/chen6019/Remote-Controls/compare/V2.3.10...V2.4.0>
+Full Changelog (相对于 2.3.10): <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.10...V2.4.0>
 
 ## ✨ 新增与优化
 
@@ -25,7 +25,7 @@ Full Changelog (相对于 2.3.10): <https://github.com/chen6019/Remote-Controls/
 # V2.3.10 (2025-12-08)
 
 **界面间隙优化、命令参数增强与彩蛋修复**
-Full Changelog (相对于 2.3.9): <https://github.com/chen6019/Remote-Controls/compare/V2.3.9...V2.3.10>
+Full Changelog (相对于 2.3.9): <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.9...V2.3.10>
 
 ## 🖥 界面适配
 
@@ -53,7 +53,7 @@ Full Changelog (相对于 2.3.9): <https://github.com/chen6019/Remote-Controls/c
 # V2.3.9 (2025-11-24)
 
 **托盘通知稳定性彻底修复与菜单体验优化**
-Full Changelog (相对于 2.3.8): <https://github.com/chen6019/Remote-Controls/compare/V2.3.8...V2.3.9>
+Full Changelog (相对于 2.3.8): <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.8...V2.3.9>
 
 ## 🐛 核心修复：WinRT 通知崩溃与 CrashSender 错误
 
@@ -94,7 +94,7 @@ Full Changelog (相对于 2.3.8): <https://github.com/chen6019/Remote-Controls/c
 # V2.3.8 (2025-11-10)
 
 **完善自定义主题，增加开启/关闭值支持和预设功能**
-Full Changelog (相对于 2.3.7): <https://github.com/chen6019/Remote-Controls/compare/V2.3.7...V2.3.8>
+Full Changelog (相对于 2.3.7): <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.7...V2.3.8>
 
 ## ✨ 新增功能
 
@@ -122,7 +122,7 @@ Full Changelog (相对于 2.3.7): <https://github.com/chen6019/Remote-Controls/c
 # V2.3.7 (2025-11-09)
 
 **托盘在“任务计划 + 最高权限”场景下的通知稳定性修复**
-Full Changelog (相对于 2.3.6: <https://github.com/chen6019/Remote-Controls/compare/V2.3.6...V2.3.7>
+Full Changelog (相对于 2.3.6): <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.6...V2.3.7>
 
 ## 🐛 关键问题修复
 
@@ -160,7 +160,7 @@ Full Changelog (相对于 2.3.6: <https://github.com/chen6019/Remote-Controls/co
 # V2.3.6 (2025-10-04)
 
 **Hotkey 输入兼容性修复与内部健壮性补丁**  
-Full Changelog (相对于 2.3.5): <https://github.com/chen6019/Remote-Controls/compare/V2.3.5...V2.3.6>
+Full Changelog (相对于 2.3.5): <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.5...V2.3.6>
 
 ## 🐛 核心修复
 
@@ -184,12 +184,12 @@ Full Changelog (相对于 2.3.5): <https://github.com/chen6019/Remote-Controls/c
 - 若之前为绕过问题临时改写 Enter（例如换成 `return` 或手动发送回车脚本），现在可以直接写标准 `Enter`。
 - 复杂场景：若需要同时按住 Enter 与其它键，可使用扩展语法 `enter{down}+x+enter{up}`（保持与现有 down/up 语义一致）。
 
-## � 代码实现要点
+## 🧩 代码实现要点
 
 - 在 `main.py` 的 `perform_hotkey` 内新增 `special_single_keys` 集合，并调整“字母串展开”条件：`key.isalpha() and key not in special_single_keys`。
 - 保留已有修饰键排序与显式 `{down}/{up}` 控制逻辑，未改动行为语义。
 
-## �📌 发布类型
+## 📌 发布类型
 
 小规模补丁版本；针对特定输入法/自动化脚本场景的正确性修复，推荐所有使用回车热键的用户升级。
 
@@ -259,7 +259,7 @@ Full Changelog (相对于 2.3.5): <https://github.com/chen6019/Remote-Controls/c
 # V2.3.2 (2025-09-03)
 
 **稳定性加固与打包精简**  
-**Full Changelog**: <https://github.com/chen6019/Remote-Controls/compare/V2.3.1...V2.3.2>
+**Full Changelog**: <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.1...V2.3.2>
 
 ## 🛡 稳定性 / 崩溃防护
 
@@ -296,7 +296,7 @@ Full Changelog (相对于 2.3.5): <https://github.com/chen6019/Remote-Controls/c
 # V2.3.1 (2025-08-29)
 
 **托盘交互与通知系统实时性强化**  
-Full Changelog: <https://github.com/chen6019/Remote-Controls/compare/V2.3.0...V2.3.1>
+Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.0...V2.3.1>
 
 ## 🛎 通知系统重构（低延迟）
 
@@ -336,7 +336,7 @@ Full Changelog: <https://github.com/chen6019/Remote-Controls/compare/V2.3.0...V2
 # V2.3.0 (2025-08-22)
 
 **单实例与脚本模式体验重构**  
-Full Changelog: <https://github.com/chen6019/Remote-Controls/compare/V2.2.13...V2.3.0>
+Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.2.13...V2.3.0>
 
 ## 🔐 单实例 / 互斥体机制
 

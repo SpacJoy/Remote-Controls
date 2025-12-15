@@ -10,24 +10,24 @@
 
 ```bash
 # 创建并推送新标签
-git tag V2.2.8
-git push origin V2.2.8
+git tag V<版本号>   # 例如：V3.0.0
+git push origin V<版本号>
 ```
 
 这将：
 
 -   自动提取版本号（去掉 V 前缀）
--   更新版本文件到 2.2.8
+-   更新版本文件到 3.0.0（或你输入/标签携带的版本）
 -   构建所有程序和安装包
 -   创建 GitHub Release
 -   上传构建产物
 
 ### 2. 手动触发（测试用）
 
-1. 访问 [GitHub Actions](https://github.com/chen6019/Remote-Controls/actions)
+1. 访问 [GitHub Actions](https://github.com/SpacJoy/Remote-Controls/actions)
 2. 选择 "Build and Release Remote Controls" workflow
 3. 点击 "Run workflow"
-4. 输入版本号（如：2.2.8）
+4. 输入版本号（如：3.0.0）
 5. 选择是否更新版本文件
 6. 点击运行
 
@@ -51,17 +51,17 @@ git push origin V2.2.8
 
 ```bash
 # 测试版本号提取
-git tag V2.2.9-test
-git push origin V2.2.9-test
+git tag V3.0.0-test
+git push origin V3.0.0-test
 
 # 手动删除测试标签
-git tag -d V2.2.9-test
-git push origin :refs/tags/V2.2.9-test
+git tag -d V3.0.0-test
+git push origin :refs/tags/V3.0.0-test
 ```
 
 ## 📋 注意事项
 
-1. **标签格式**: 必须以 `V` 开头（如 V2.2.8）
+1. **标签格式**: 必须以 `V` 开头（如 V3.0.0）
 2. **版本文件**: 自动更新 `version_info.py` 和相关文件
 3. **构建失败**: 查看 Actions 日志获取详细错误信息
 4. **权限要求**: 需要仓库的 push 权限来创建 Release

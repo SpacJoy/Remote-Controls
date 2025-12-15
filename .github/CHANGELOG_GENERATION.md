@@ -15,7 +15,7 @@
 ### 📝 生成内容示例
 
 ```markdown
-## Remote Controls V2.2.8
+## Remote Controls V<版本号>
 
 **自动构建发布** - 2025-08-20 10:30:00 UTC
 
@@ -31,7 +31,7 @@
 -   `RC-main.exe` - 主程序
 -   `RC-GUI.exe` - 图形界面程序
 -   `RC-tray.exe` - 系统托盘程序
--   `Remote-Controls-Installer-2.2.8.exe` - 完整安装包
+-   `Remote-Controls-Installer-<版本号>.exe` - 完整安装包
 
 ### 🔄 更新内容
 
@@ -136,8 +136,8 @@
 
     ```bash
     # 创建测试标签
-    git tag V2.2.8-test
-    git push origin V2.2.8-test
+    git tag V3.0.0-test
+    git push origin V3.0.0-test
     ```
 
 2. **手动触发验证**:

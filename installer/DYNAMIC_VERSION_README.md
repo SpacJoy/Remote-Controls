@@ -10,7 +10,7 @@
 
 ### 1. Inno Setup 脚本动态版本 (`installer/Remote-Controls.iss`)
 
--   **问题**: 之前版本号硬编码为 `#define MyAppVersion "2.2.11"`
+-   **问题**: 早期版本号曾硬编码为类似 `#define MyAppVersion "2.x.x"`
 -   **解决**: 实现动态版本读取机制
 -   **方法**: 打包脚本生成临时 Inno Setup 文件，在文件头部添加版本定义
 
@@ -43,7 +43,7 @@
 ### 指定版本构建
 
 ```powershell
-pwsh -File installer/build_installer.ps1 "2.2.14"
+pwsh -File installer/build_installer.ps1 "3.0.0"  # 示例：也可以换成你的版本号
 ```
 
 ### 自动版本构建

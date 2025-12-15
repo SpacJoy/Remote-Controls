@@ -11,11 +11,9 @@
 ```
 Remote-Controls/
 ├── src/python/version_info.py          # 版本信息配置文件
-├── update_version.py        # 版本更新工具
-├── version_example.py       # 使用示例
-├── build_installer_new.bat  # 新的打包脚本（批处理）
-├── build_installer_new.ps1  # 新的打包脚本（PowerShell）
+├── version.txt                       # 简单版本文件（供 Inno Setup/脚本读取）
 └── installer/
+    ├── update_version.py             # 版本更新工具（生成 version_info.py 与 version.txt）
     └── Remote-Controls.iss  # 安装脚本（已更新支持动态版本）
 ```
 
@@ -23,34 +21,32 @@ Remote-Controls/
 
 ### 1. 指定版本打包
 
-#### 方式一：命令行参数
+#### 方式一：命令行参数（推荐）
 
-```cmd
-# 批处理版本 - 命令行指定版本
-.\build_installer_new.bat 1.0.0
+```powershell
+# 顶层入口（推荐）：转发到 installer/build_installer.ps1
 
-# PowerShell版本 - 命令行指定版本
-.\build_installer_new.ps1 -Version "1.0.0"
+# 方式 A：直接指定版本号
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 3.0.0
+
+# 方式 B：直接运行 installer/build_installer.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\installer\build_installer.ps1 3.0.0
 ```
 
 #### 方式二：交互式输入（推荐）
 
 ```cmd
 # 运行脚本，然后输入版本号
-.\build_installer_new.bat
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 # 脚本会提示：请输入版本号 (格式: X.Y.Z，如 1.0.0)
-# 版本号: 1.0.0
-
-# PowerShell版本
-.\build_installer_new.ps1
-# 脚本会提示输入版本号
+# 版本号: 3.0.0
 ```
 
 #### 方式三：使用当前版本
 
 ```cmd
 # 直接按回车，使用 src/python/version_info.py 中的当前版本
-.\build_installer_new.bat
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 # 版本号: [直接按回车]
 ```
 
@@ -58,10 +54,10 @@ Remote-Controls/
 
 ```cmd
 # 更新版本到 1.0.0
-python update_version.py 1.0.0
+python .\installer\update_version.py 3.0.0
 
 # 交互式输入版本
-python update_version.py
+python .\installer\update_version.py
 ```
 
 ### 3. 在程序中使用版本信息
@@ -137,15 +133,15 @@ GitHub: {program_info['github_url']}
 
 ## 打包流程
 
-新的打包流程包含 7 个步骤：
+当前打包流程（`installer/build_installer.ps1`）包含 7 个步骤：
 
 1. **检查 Python 环境** - 自动检测虚拟环境
 2. **更新版本信息** - 如果指定了版本参数，自动更新版本文件
-3. **清理旧文件** - 删除 dist 和 build 目录
-4. **打包主程序** - 使用 RC-main.spec
-5. **打包 GUI 程序** - 使用 RC-GUI.spec
-6. **打包托盘程序** - 使用 RC-tray.spec
-7. **生成安装包** - 使用 Inno Setup（自动读取版本信息）
+3. **清理旧文件** - 删除 `installer/dist` 和 `installer/build`
+4. **构建 C 主程序** - 运行 `build_main.ps1` 输出 `bin/RC-main.exe`，并复制到 `installer/dist/`
+5. **打包 GUI 程序** - 使用 PyInstaller 打包 `src/python/GUI.py` 输出 `installer/dist/RC-GUI.exe`
+6. **构建 C 托盘程序** - 运行 `build_tray.ps1` 输出 `bin/RC-tray.exe`，并复制到 `installer/dist/`
+7. **生成安装包** - 使用 Inno Setup 6（通过临时脚本注入版本号）
 
 ## 安装包版本
 
@@ -172,8 +168,8 @@ GitHub: {program_info['github_url']}
 
 1. 使用新的打包脚本：
 
-    - `build_installer_new.bat` 替代 `build_installer.bat`
-    - `build_installer_new.ps1` 替代 `build_installer.ps1`
+    - 使用项目根目录的 `build.ps1` 作为统一入口（内部转发到 `installer/build_installer.ps1`）
+    - 旧的 `.bat` 入口若仍存在，可视为历史遗留，建议统一使用 PowerShell 入口以获得更好的编码与日志支持
 
 2. 在程序中添加版本信息导入：
 
