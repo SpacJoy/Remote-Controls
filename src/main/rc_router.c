@@ -39,13 +39,7 @@ static HICON load_main_icon_small(void)
     const int cx = GetSystemMetrics(SM_CXSMICON);
     const int cy = GetSystemMetrics(SM_CYSMICON);
 
-    // 优先：从可执行文件资源加载（main.rc 内嵌 icon.ico）。
-    HINSTANCE hInst = GetModuleHandleW(NULL);
-    HICON h = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(RCMAIN_APP_ICON_ID), IMAGE_ICON, cx, cy, LR_DEFAULTCOLOR);
-    if (h)
-        return h;
-
-    // 其次：从磁盘 res\icon.ico 加载（便于用户替换）。
+    // 优先：从磁盘 res\icon.ico 加载（便于用户替换，无需重新编译）。
     wchar_t exePath[MAX_PATH] = {0};
     DWORD n = GetModuleFileNameW(NULL, exePath, MAX_PATH);
     if (n > 0 && n < MAX_PATH)
@@ -56,11 +50,17 @@ static HICON load_main_icon_small(void)
         iconPathW[MAX_PATH - 1] = 0;
         if (PathFileExistsW(iconPathW))
         {
-            h = (HICON)LoadImageW(NULL, iconPathW, IMAGE_ICON, cx, cy, LR_LOADFROMFILE);
+            HICON h = (HICON)LoadImageW(NULL, iconPathW, IMAGE_ICON, cx, cy, LR_LOADFROMFILE);
             if (h)
                 return h;
         }
     }
+
+    // 其次：从可执行文件资源加载（main.rc 内嵌 icon.ico）。
+    HINSTANCE hInst = GetModuleHandleW(NULL);
+    HICON h = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(RCMAIN_APP_ICON_ID), IMAGE_ICON, cx, cy, LR_DEFAULTCOLOR);
+    if (h)
+        return h;
 
     return LoadIconW(NULL, IDI_APPLICATION);
 }
