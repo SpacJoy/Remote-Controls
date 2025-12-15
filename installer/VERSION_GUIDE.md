@@ -29,8 +29,14 @@ Remote-Controls/
 # 方式 A：直接指定版本号
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 3.0.0
 
+# 方式 A2：指定版本号 + 无交互（跳过 Pause，适合 CI/无人值守）
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 3.0.0 -NoPause
+
 # 方式 B：直接运行 installer/build_installer.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\installer\build_installer.ps1 3.0.0
+
+# 方式 B2：直接运行 + 无交互
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\installer\build_installer.ps1 3.0.0 -NoPause
 ```
 
 #### 方式二：交互式输入（推荐）
@@ -133,15 +139,15 @@ GitHub: {program_info['github_url']}
 
 ## 打包流程
 
-当前打包流程（`installer/build_installer.ps1`）包含 7 个步骤：
+当前打包流程（`installer/build_installer.ps1`）包含以下阶段：
 
-1. **检查 Python 环境** - 自动检测虚拟环境
-2. **更新版本信息** - 如果指定了版本参数，自动更新版本文件
-3. **清理旧文件** - 删除 `installer/dist` 和 `installer/build`
-4. **构建 C 主程序** - 运行 `build_main.ps1` 输出 `bin/RC-main.exe`，并复制到 `installer/dist/`
-5. **打包 GUI 程序** - 使用 PyInstaller 打包 `src/python/GUI.py` 输出 `installer/dist/RC-GUI.exe`
-6. **构建 C 托盘程序** - 运行 `build_tray.ps1` 输出 `bin/RC-tray.exe`，并复制到 `installer/dist/`
-7. **生成安装包** - 使用 Inno Setup 6（通过临时脚本注入版本号）
+- **检查 Python 环境**：自动检测虚拟环境
+- **更新版本信息**：如指定版本参数，自动生成/更新版本文件
+- **清理旧文件**：删除 `installer/dist` 和 `installer/build`
+- **构建 C 主程序**：运行 `build_main.ps1` 输出 `bin/RC-main.exe`，并复制到 `installer/dist/`
+- **打包 GUI 程序**：使用 PyInstaller 打包 `src/python/GUI.py` 输出 `installer/dist/RC-GUI.exe`
+- **构建 C 托盘程序**：运行 `build_tray.ps1` 输出 `bin/RC-tray.exe`，并复制到 `installer/dist/`
+- **生成安装包**：使用 Inno Setup 6（通过临时脚本注入版本号）
 
 ## 安装包版本
 

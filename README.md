@@ -20,11 +20,18 @@
 
 1. 下载或构建
 
-- 到 Releases 下载 `RC-main/GUI/tray` 可执行文件 **或 安装包**：`Remote-Controls-Installer-x.x.x.exe` 或在本地构建：
+- 到 Releases 下载 `RC-main/GUI/tray` 可执行文件 **或 安装包**：`Remote-Controls-Installer-x.x.x.exe`。
+- 本地构建前置（仅在你要自己打包时需要）：
+  - C 主程序/托盘：MSYS2 + MinGW64（确保 `gcc`、`windres` 在 PATH 中）
+  - 安装包：Inno Setup 6（默认 `C:\Program Files (x86)\Inno Setup 6\iscc.exe`）
 
 ```powershell
 python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
+# 交互式：会提示输入版本号
 .\build.ps1
+
+# 无交互（推荐 CI/无人值守）：指定版本并跳过 Pause
+.\build.ps1 3.0.0 -NoPause
 ```
 
 2. 配置 MQTT 与主题
@@ -101,10 +108,15 @@ python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.
 - 一键构建（推荐）：
 
 ```powershell
+# 交互式
 .\build.ps1
+
+# 指定版本 + 无交互
+.\build.ps1 3.0.0 -NoPause
 ```
 
 - 产物位置：`installer/dist/RC-*.exe` 与安装包 `installer/dist/installer/*.exe`
+- 构建日志：详见 `logs/*.log`（例如 `logs/pyinstaller.log`、`logs/build_main.log`）。构建失败时优先查看对应日志。
 
 ## GitHub CI/CD
 
