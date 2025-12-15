@@ -15,6 +15,7 @@
 
 #include "rc_actions.h"
 #include "rc_log.h"
+#include "../rc_notify.h"
 
 #include <windows.h>
 #include <shellapi.h>
@@ -38,20 +39,20 @@ static HICON load_main_icon_small(void)
     const int cx = GetSystemMetrics(SM_CXSMICON);
     const int cy = GetSystemMetrics(SM_CYSMICON);
 
-    // 优先：从可执行文件资源加载（main.rc 内嵌 top.ico）。
+    // 优先：从可执行文件资源加载（main.rc 内嵌 icon.ico）。
     HINSTANCE hInst = GetModuleHandleW(NULL);
     HICON h = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(RCMAIN_APP_ICON_ID), IMAGE_ICON, cx, cy, LR_DEFAULTCOLOR);
     if (h)
         return h;
 
-    // 其次：从磁盘 res\top.ico 加载（便于用户替换）。
+    // 其次：从磁盘 res\icon.ico 加载（便于用户替换）。
     wchar_t exePath[MAX_PATH] = {0};
     DWORD n = GetModuleFileNameW(NULL, exePath, MAX_PATH);
     if (n > 0 && n < MAX_PATH)
     {
         PathRemoveFileSpecW(exePath);
         wchar_t iconPathW[MAX_PATH] = {0};
-        _snwprintf(iconPathW, MAX_PATH, L"%s\\res\\top.ico", exePath);
+        _snwprintf(iconPathW, MAX_PATH, L"%s\\res\\icon.ico", exePath);
         iconPathW[MAX_PATH - 1] = 0;
         if (PathFileExistsW(iconPathW))
         {
@@ -67,16 +68,6 @@ static HICON load_main_icon_small(void)
 static HWND g_notifyHwnd = NULL;
 static NOTIFYICONDATAW g_notifyNid;
 static bool g_notifyInited = false;
-
-static BOOL utf8_to_wide0(const char *src, wchar_t *dst, int dstCount)
-{
-    if (!dst || dstCount <= 0)
-        return FALSE;
-    dst[0] = L'\0';
-    if (!src)
-        return TRUE;
-    return MultiByteToWideChar(CP_UTF8, 0, src, -1, dst, dstCount) > 0;
-}
 
 static LRESULT CALLBACK notify_wndproc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -132,8 +123,9 @@ static bool notify_ensure_icon(void)
     }
 
     ZeroMemory(&g_notifyNid, sizeof(g_notifyNid));
-    // 使用 V2 size 兼容不同 Windows 版本对结构体大小的处理。
-    g_notifyNid.cbSize = NOTIFYICONDATA_V2_SIZE;
+    // 需要使用气泡字段（szInfoTitle/szInfo）：cbSize 至少应为 V3。
+    // 使用完整结构体大小，避免因 cbSize 过小导致 NIF_INFO 被系统忽略。
+    g_notifyNid.cbSize = sizeof(g_notifyNid);
     g_notifyNid.hWnd = g_notifyHwnd;
     g_notifyNid.uID = RCMAIN_NOTIFY_ICON_ID;
     g_notifyNid.uCallbackMessage = WM_RCMAIN_NOTIFYICON;
@@ -182,19 +174,7 @@ static void notify_show_utf8(const char *titleUtf8, const char *messageUtf8)
     if (!notify_ensure_icon())
         return;
 
-    // 与托盘端一致：先发“空通知”再发新内容，规避 Windows 忽略更新。
-    g_notifyNid.uFlags = NIF_INFO;
-    g_notifyNid.szInfoTitle[0] = L'\0';
-    g_notifyNid.szInfo[0] = L'\0';
-    g_notifyNid.dwInfoFlags = NIIF_NONE;
-    Shell_NotifyIconW(NIM_MODIFY, &g_notifyNid);
-    Sleep(10);
-
-    g_notifyNid.uFlags = NIF_INFO;
-    utf8_to_wide0(titleUtf8, g_notifyNid.szInfoTitle, (int)_countof(g_notifyNid.szInfoTitle));
-    utf8_to_wide0(messageUtf8, g_notifyNid.szInfo, (int)_countof(g_notifyNid.szInfo));
-    g_notifyNid.dwInfoFlags = NIIF_INFO;
-    Shell_NotifyIconW(NIM_MODIFY, &g_notifyNid);
+    (void)RC_NotifyShowUtf8(&g_notifyNid, titleUtf8, messageUtf8, NIIF_INFO, TRUE);
 }
 
 static void notify_show_utf8_ex(const char *titleUtf8, const char *messageUtf8, DWORD infoFlags)
@@ -202,19 +182,7 @@ static void notify_show_utf8_ex(const char *titleUtf8, const char *messageUtf8, 
     if (!notify_ensure_icon())
         return;
 
-    // 与托盘端一致：先发“空通知”再发新内容，规避 Windows 忽略更新。
-    g_notifyNid.uFlags = NIF_INFO;
-    g_notifyNid.szInfoTitle[0] = L'\0';
-    g_notifyNid.szInfo[0] = L'\0';
-    g_notifyNid.dwInfoFlags = NIIF_NONE;
-    Shell_NotifyIconW(NIM_MODIFY, &g_notifyNid);
-    Sleep(10);
-
-    g_notifyNid.uFlags = NIF_INFO;
-    utf8_to_wide0(titleUtf8, g_notifyNid.szInfoTitle, (int)_countof(g_notifyNid.szInfoTitle));
-    utf8_to_wide0(messageUtf8, g_notifyNid.szInfo, (int)_countof(g_notifyNid.szInfo));
-    g_notifyNid.dwInfoFlags = infoFlags;
-    Shell_NotifyIconW(NIM_MODIFY, &g_notifyNid);
+    (void)RC_NotifyShowUtf8(&g_notifyNid, titleUtf8, messageUtf8, infoFlags, TRUE);
 }
 
 typedef struct

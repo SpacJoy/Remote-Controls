@@ -14,6 +14,7 @@
 #include "rc_main_tray.h"
 
 #include "rc_log.h"
+#include "../rc_notify.h"
 
 #include <windows.h>
 #include <shellapi.h>
@@ -103,14 +104,14 @@ static BOOL is_process_running_w(const wchar_t *exeNameW)
 
 static HICON load_tray_icon(const wchar_t *appDirW)
 {
-    // Prefer embedded icon (main.rc -> top.ico), then res\\top.ico if present, else fall back.
+    // Prefer embedded icon (main.rc -> icon.ico), then res\\icon.ico if present, else fall back.
     HINSTANCE hInst = GetModuleHandleW(NULL);
     HICON hRes = LoadIconW(hInst, MAKEINTRESOURCEW(1));
     if (hRes)
         return hRes;
 
     wchar_t iconPathW[MAX_PATH] = {0};
-    _snwprintf(iconPathW, MAX_PATH, L"%s\\res\\top.ico", appDirW ? appDirW : L"");
+    _snwprintf(iconPathW, MAX_PATH, L"%s\\res\\icon.ico", appDirW ? appDirW : L"");
     iconPathW[MAX_PATH - 1] = 0;
 
     if (PathFileExistsW(iconPathW))
@@ -152,14 +153,7 @@ static void open_config_gui(const wchar_t *appDirW, bool langEnglish)
  */
 static void show_info_balloon(NOTIFYICONDATAW *nid, const wchar_t *titleW, const wchar_t *msgW)
 {
-    if (!nid)
-        return;
-
-    nid->uFlags = NIF_INFO;
-    wcsncpy_s(nid->szInfoTitle, _countof(nid->szInfoTitle), titleW ? titleW : L"RC-main", _TRUNCATE);
-    wcsncpy_s(nid->szInfo, _countof(nid->szInfo), msgW ? msgW : L"", _TRUNCATE);
-    nid->dwInfoFlags = NIIF_INFO;
-    Shell_NotifyIconW(NIM_MODIFY, nid);
+    (void)RC_NotifyShowW(nid, titleW ? titleW : L"RC-main", msgW ? msgW : L"", NIIF_INFO, FALSE);
 }
 
 typedef struct

@@ -82,10 +82,10 @@ New-Item -ItemType Directory -Force -Path (Join-Path $root 'bin') | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $root 'logs') | Out-Null
 
 # Icon
-$iconPath = Join-Path $root 'res\top.ico'
+$iconPath = Join-Path $root 'res\icon.ico'
 Write-Host '检查图标文件...'
 if (-not (Test-Path -LiteralPath $iconPath)) {
-  throw '错误: res\top.ico 不存在'
+  throw '错误: res\icon.ico 不存在'
 }
 
 # Kill old process first (best-effort), so outputs can be overwritten.
@@ -101,6 +101,7 @@ $cleanupFiles = @(
   'src\tray\log_messages.o',
   'src\tray\tray_res.o',
   'src\rc_utils.o',
+  'src\rc_notify_tray.o',
   'bin\RC-tray.exe'
 )
 foreach ($rel in $cleanupFiles) {
@@ -134,6 +135,7 @@ Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\tray\tray.c'
 Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\tray\language.c', '-o', 'src\tray\language.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\tray\log_messages.c', '-o', 'src\tray\log_messages.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\rc_utils.c', '-o', 'src\rc_utils.o'))
+Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\rc_notify.c', '-o', 'src\rc_notify_tray.o'))
 
 # Link
 Write-Host '链接...'
@@ -142,6 +144,7 @@ Invoke-Exe -FilePath 'gcc' -Arguments @(
   'src\tray\language.o',
   'src\tray\log_messages.o',
   'src\rc_utils.o',
+  'src\rc_notify_tray.o',
   'src\tray\tray_res.o',
   '-o', 'bin\RC-tray.exe',
   '-mwindows',

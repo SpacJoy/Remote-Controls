@@ -4,4 +4,4 @@
 // - 用于可执行文件图标
 // - 同时供通知/toast/托盘等运行时 LoadIcon 使用
 #define IDI_APPICON 1
-IDI_APPICON ICON "../../res/top.ico"
+IDI_APPICON ICON "../../res/icon.ico"

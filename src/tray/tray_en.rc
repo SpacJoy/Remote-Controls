@@ -11,7 +11,7 @@
 
 // Icon resource
 #define IDI_TRAYICON 101
-IDI_TRAYICON ICON "../../res/top.ico"
+IDI_TRAYICON ICON "../../res/icon.ico"
 
 // Version information
 VS_VERSION_INFO VERSIONINFO

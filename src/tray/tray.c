@@ -34,6 +34,7 @@
 #include "language.h"     // 添加语言支持头文件
 #include "log_messages.h" // 添加日志消息头文件
 #include "../rc_utils.h"  // 添加工具函数库头文件
+#include "../rc_notify.h" // 通用通知封装
 
 // 版本信息：支持在编译时通过 -DRC_TRAY_VERSION=\"Vx.y.z\" 指定
 #ifndef RC_TRAY_VERSION
@@ -902,7 +903,7 @@ void CreateTrayIcon(HWND hWnd)
 
     // 图标加载策略：
     // 1) 优先从资源（.rc）内加载：便于打包发布。
-    // 2) 若资源加载失败，再从磁盘 res\top.ico 加载：便于用户替换图标。
+    // 2) 若资源加载失败，再从磁盘 res\icon.ico 加载：便于用户替换图标。
     // 3) 再失败则使用系统默认图标。
     //
     // 注意：资源 IDI_TRAYICON 与 windres 编译的资源脚本保持一致。
@@ -912,7 +913,7 @@ void CreateTrayIcon(HWND hWnd)
     if (!hIcon)
     {
         char iconPath[MAX_PATH];
-        sprintf_s(iconPath, MAX_PATH, "%s\\res\\top.ico", g_appDir);
+        sprintf_s(iconPath, MAX_PATH, "%s\\res\\icon.ico", g_appDir);
         wchar_t iconPathW[MAX_PATH];
         if (Utf8ToWide(iconPath, iconPathW, MAX_PATH) && PathFileExistsW(iconPathW))
         {
@@ -947,25 +948,8 @@ void CreateTrayIcon(HWND hWnd)
  */
 void ShowNotificationDirect(const char *title, const char *message)
 {
-    // 通知实现说明：
-    // - 使用 Shell_NotifyIconW(NIM_MODIFY) 更新 NIF_INFO 字段。
-    // - 先发送一次“空通知”再发送新内容，是为了规避 Windows 有时忽略更新的问题。
-    //   （尤其在旧气泡仍显示时，直接覆盖可能不生效）
-    // 强制覆盖旧通知：先清空当前气泡/Toast，再发送新内容。
-    // Windows 在旧通知仍显示时，直接更新内容有时会被忽略。
-    g_nid.uFlags = NIF_INFO;
-    g_nid.szInfoTitle[0] = L'\0';
-    g_nid.szInfo[0] = L'\0';
-    g_nid.dwInfoFlags = NIIF_NONE;
-    Shell_NotifyIconW(NIM_MODIFY, &g_nid);
-    Sleep(10);
-
-    g_nid.uFlags = NIF_INFO;
-    Utf8ToWide(title, g_nid.szInfoTitle, (int)(sizeof(g_nid.szInfoTitle) / sizeof(g_nid.szInfoTitle[0])));
-    Utf8ToWide(message, g_nid.szInfo, (int)(sizeof(g_nid.szInfo) / sizeof(g_nid.szInfo[0])));
-    g_nid.dwInfoFlags = NIIF_INFO;
-
-    Shell_NotifyIconW(NIM_MODIFY, &g_nid);
+    // 统一通知实现：托盘/主程序共用 rc_notify。
+    (void)RC_NotifyShowUtf8(&g_nid, title, message, NIIF_INFO, TRUE);
     LogMessage("INFO", g_logMsg->notification, title, message);
 }
 

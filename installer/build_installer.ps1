@@ -179,7 +179,7 @@ function Remove-FileWithRetry {
 
 # 资源绝对路径（避免 --specpath 导致的相对路径解析到 installer/）
 $ResDir   = Join-Path $Root 'res'
-$IconGUI  = Join-Path $ResDir 'top.ico'
+$IconGUI  = Join-Path $ResDir 'icon_GUI.ico'
 $TopIco   = Join-Path $ResDir 'top.ico'
 # 旧版彩蛋图片 (cd1~cd5) 已不再需要打包，托盘改为仅访问远程随机图片接口。
 
