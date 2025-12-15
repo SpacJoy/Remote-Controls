@@ -608,8 +608,9 @@ static char *normalize_powershell_command(const char *cmd)
         char *out = (char *)malloc(n + 5); // "curl.exe" adds 4 chars
         if (!out)
             return dupstr0(cmd);
-        strcpy(out, "curl.exe");
-        strcat(out, cmd + 4);
+        // out size is exactly enough for: "curl.exe" + (cmd+4) + NUL
+        snprintf(out, n + 5, "curl.exe%s", cmd + 4);
+        out[n + 4] = 0;
         return out;
     }
 

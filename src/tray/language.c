@@ -209,8 +209,8 @@ Language DetectSystemLanguage(void)
 
     // 生成调试信息（目前仅用于开发排查；未输出到日志/调试器，避免引入初始化依赖）
     char debugInfo[100];
-    sprintf(debugInfo, "系统语言ID: 0x%04X, 主语言ID: 0x%04X, 子语言ID: 0x%04X",
-            langID, primaryLangID, subLangID);
+    snprintf(debugInfo, sizeof(debugInfo), "系统语言ID: 0x%04X, 主语言ID: 0x%04X, 子语言ID: 0x%04X",
+             langID, primaryLangID, subLangID);
 
     // 根据主语言ID确定使用哪种语言
     // Determine which language to use based on primary language ID
@@ -272,7 +272,7 @@ void InitializeLanguage(void)
     // 记录检测到的语言（仅生成字符串，避免初始化顺序耦合）
     char *langName = (g_currentLanguage == TRAY_LANG_CHINESE) ? "中文" : "English";
     char logMsg[100];
-    sprintf(logMsg, "系统语言检测结果: %s", langName);
+    snprintf(logMsg, sizeof(logMsg), "系统语言检测结果: %s", langName);
     // 这里无法直接调用LogMessage，因为日志系统可能还未初始化
 }
 

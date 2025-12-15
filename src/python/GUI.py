@@ -1041,25 +1041,55 @@ def set_auto_start() -> None:
         messagebox.showinfo(t("已取消"), t("已取消设置开机自启动"))
         return
 
-    # 在 Windows 下，schtasks /TR 需要用双引号包裹路径即可；不使用 shlex.quote（那是 *nix 风格，可能引入单引号）
+    def _run_schtasks(args: list[str]) -> int:
+        try:
+            cp = subprocess.run(["schtasks", *args], shell=False)
+            return int(getattr(cp, "returncode", 1) or 0)
+        except FileNotFoundError:
+            return 1
+
     exe_cmd = exe_path
     
     if choice == True:  # 选择"是"，对应方案一
         # 方案一：使用Administrators用户组创建任务计划，任何用户登录时运行
-        result = subprocess.call(
-            f'schtasks /Create /SC ONLOGON /TN "{TASK_NAME_MAIN}" /TR "{exe_cmd}" /RU "BUILTIN\\Administrators" /RL HIGHEST /F',
-            shell=True,
+        result = _run_schtasks(
+            [
+                "/Create",
+                "/SC",
+                "ONLOGON",
+                "/TN",
+                TASK_NAME_MAIN,
+                "/TR",
+                exe_cmd,
+                "/RU",
+                r"BUILTIN\Administrators",
+                "/RL",
+                "HIGHEST",
+                "/F",
+            ]
         )
     else:  # 选择"否"，对应方案二
         # 方案二：使用SYSTEM用户在系统启动时运行
-        result = subprocess.call(
-            f'schtasks /Create /SC ONSTART /TN "{TASK_NAME_MAIN}" /TR "{exe_cmd}" /RU "SYSTEM" /RL HIGHEST /F',
-            shell=True,
+        result = _run_schtasks(
+            [
+                "/Create",
+                "/SC",
+                "ONSTART",
+                "/TN",
+                TASK_NAME_MAIN,
+                "/TR",
+                exe_cmd,
+                "/RU",
+                "SYSTEM",
+                "/RL",
+                "HIGHEST",
+                "/F",
+            ]
         )
     # 清理可能存在的旧版中文任务名，忽略失败
     try:
-        subprocess.call('schtasks /Delete /TN "A远程控制" /F', shell=True)
-        subprocess.call('schtasks /Delete /TN "A远程托盘" /F', shell=True)
+        _run_schtasks(["/Delete", "/TN", "A远程控制", "/F"])
+        _run_schtasks(["/Delete", "/TN", "A远程托盘", "/F"])
     except Exception:
         pass
 
@@ -1093,9 +1123,19 @@ def set_auto_start() -> None:
     tray_result = 0
     if os.path.exists(tray_exe_path):
         tray_cmd = tray_exe_path  # 托盘程序使用当前登录用户（最高权限）运行，登录后触发
-        tray_result = subprocess.call(
-            f'schtasks /Create /SC ONLOGON /TN "{TASK_NAME_TRAY}" /TR "{tray_cmd}" /RL HIGHEST /F',
-            shell=True,
+        tray_result = _run_schtasks(
+            [
+                "/Create",
+                "/SC",
+                "ONLOGON",
+                "/TN",
+                TASK_NAME_TRAY,
+                "/TR",
+                tray_cmd,
+                "/RL",
+                "HIGHEST",
+                "/F",
+            ]
         )
         # 同步设置权限和运行级别
         scheduler = win32com.client.Dispatch("Schedule.Service")
@@ -1148,16 +1188,16 @@ def remove_auto_start() -> None:
     中文: 移除开机自启动的计划任务
     """
     if messagebox.askyesno(t("确定？"), t("你确定要删除开机自启动任务吗？")):
-        delete_result = subprocess.call(
-            f'schtasks /Delete /TN "{TASK_NAME_MAIN}" /F', shell=True
-        )
-        tray_delete = subprocess.call(
-            f'schtasks /Delete /TN "{TASK_NAME_TRAY}" /F', shell=True
-        )
+        delete_result = subprocess.run(
+            ["schtasks", "/Delete", "/TN", TASK_NAME_MAIN, "/F"], shell=False
+        ).returncode
+        tray_delete = subprocess.run(
+            ["schtasks", "/Delete", "/TN", TASK_NAME_TRAY, "/F"], shell=False
+        ).returncode
         # 兼容清理旧中文任务名（若存在）
         try:
-            subprocess.call('schtasks /Delete /TN "A远程控制" /F', shell=True)
-            subprocess.call('schtasks /Delete /TN "A远程托盘" /F', shell=True)
+            subprocess.run(["schtasks", "/Delete", "/TN", "A远程控制", "/F"], shell=False)
+            subprocess.run(["schtasks", "/Delete", "/TN", "A远程托盘", "/F"], shell=False)
         except Exception:
             pass
         if delete_result == 0 and tray_delete == 0:
@@ -3070,9 +3110,8 @@ def _decode_bytes_best_effort(data: bytes) -> str:
 def _run_capture_text(args: list[str]) -> tuple[int, str, str]:
     try:
         cp = subprocess.run(args, capture_output=True, text=False, shell=False)
-    except FileNotFoundError:
-        # 某些环境下依赖 shell 才能解析内置命令/路径
-        cp = subprocess.run(" ".join(args), capture_output=True, text=False, shell=True)
+    except FileNotFoundError as e:
+        return 1, "", str(e)
     stdout = _decode_bytes_best_effort(cp.stdout or b"")
     stderr = _decode_bytes_best_effort(cp.stderr or b"")
     return int(getattr(cp, "returncode", 1) or 0), stdout, stderr

@@ -136,7 +136,7 @@ BOOL RC_AdminTaskkill(const char *processName)
     char cmdLine[MAX_PATH];
     sprintf_s(cmdLine, sizeof(cmdLine), "taskkill /im %s /f", processName);
     char params[MAX_PATH * 2];
-    _snprintf(params, sizeof(params), "/c %s", cmdLine);
+    sprintf_s(params, sizeof(params), "/c %s", cmdLine);
     return RC_AdminRunCmd(params, SW_HIDE);
 }
 
@@ -459,7 +459,7 @@ void RC_CloseMainProgram(const char *processName, BOOL (*isRunningFunc)(void),
     if (!RC_IsUserAdmin())
     {
         char params[MAX_PATH * 2];
-        _snprintf(params, sizeof(params), "/c %s", cmdLine);
+        sprintf_s(params, sizeof(params), "/c %s", cmdLine);
         if (!RC_AdminRunCmd(params, SW_HIDE))
         {
             if (logFunc)
@@ -618,7 +618,7 @@ void RC_RestartMainProgram(const char *processName, const char *mainExePath,
         if (!RC_IsUserAdmin())
         {
             char params[MAX_PATH * 2];
-            _snprintf(params, sizeof(params), "/c %s", cmdLine);
+            sprintf_s(params, sizeof(params), "/c %s", cmdLine);
             if (!RC_AdminRunCmd(params, SW_HIDE))
             {
                 if (logFunc)
