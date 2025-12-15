@@ -58,6 +58,10 @@
 #define IDM_TRAY_STATUS 1008
 #define IDM_SWITCH_LANG 1009
 
+// 启动延迟注册托盘图标：避免开机自启时 Explorer/桌面未完全就绪导致托盘图标“注册了但看不见/消失”。
+#define TRAY_REGISTER_DELAY_MS 5000
+#define IDT_TRAY_REGISTER 0x4C01
+
 #define PROJECT_URL "https://github.com/spacjoy/Remote-Controls"
 #define RANDOM_IMAGE_URL "https://rad.spacejoy.top/bz"
 #define REPO_HOST L"api.github.com"
@@ -74,6 +78,8 @@ char g_guiExePath[MAX_PATH];
 FILE *g_logFile = NULL;
 const LanguageStrings *g_lang = NULL; // 语言字符串
 const LogMessages *g_logMsg = NULL;   // 日志消息
+
+static BOOL g_trayIconAdded = FALSE;
 
 #define TRAY_LOG_MAX_BYTES (200 * 1024)
 
@@ -246,6 +252,9 @@ typedef enum
 static volatile VersionStatus g_versionStatus = VERSION_PENDING;
 static char g_latestVersion[64] = {0};
 static time_t g_versionCheckedTime = 0;
+
+// Explorer 重启后会广播 "TaskbarCreated"，需要重新 NIM_ADD 托盘图标。
+static UINT g_taskbarCreatedMsg = 0;
 
 // 函数声明
 BOOL InitTray(HINSTANCE hInstance);
@@ -1087,6 +1096,18 @@ void OpenConfigGui(void)
  */
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    // Explorer/任务栏重启：重新注册托盘图标（否则会“消失”）。
+    // 该消息是通过 RegisterWindowMessageW(L"TaskbarCreated") 获取的动态消息号。
+    if (g_taskbarCreatedMsg != 0 && uMsg == g_taskbarCreatedMsg)
+    {
+        // 复用启动时的延迟注册逻辑，给新启动的 Explorer 一点时间初始化托盘。
+        g_trayIconAdded = FALSE;
+        KillTimer(hWnd, IDT_TRAY_REGISTER);
+        SetTimer(hWnd, IDT_TRAY_REGISTER, TRAY_REGISTER_DELAY_MS, NULL);
+        LogMessage("INFO", "收到 TaskbarCreated：将重新注册托盘图标（延迟 %dms）", TRAY_REGISTER_DELAY_MS);
+        return 0;
+    }
+
     // 托盘窗口过程：
     // - 本窗口通常不可见，仅用于接收托盘回调与菜单命令。
     // - WM_TRAYICON：托盘图标交互（右键弹菜单、双击打开配置）。
@@ -1094,13 +1115,32 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     switch (uMsg)
     {
     case WM_CREATE:
-        CreateTrayIcon(hWnd);
-        LogMessage("INFO", g_logMsg->trayCreated);
+        // 延迟注册托盘图标：先让消息循环跑起来，等待系统托盘可用。
+        // 使用定时器而非 Sleep，避免阻塞窗口创建/消息派发。
+        SetTimer(hWnd, IDT_TRAY_REGISTER, TRAY_REGISTER_DELAY_MS, NULL);
+        LogMessage("INFO", "托盘图标将于启动后 %dms 注册", TRAY_REGISTER_DELAY_MS);
         return 0;
+
+    case WM_TIMER:
+        if (wParam == IDT_TRAY_REGISTER)
+        {
+            KillTimer(hWnd, IDT_TRAY_REGISTER);
+            if (!g_trayIconAdded)
+            {
+                CreateTrayIcon(hWnd);
+                g_trayIconAdded = TRUE;
+                LogMessage("INFO", g_logMsg->trayCreated);
+            }
+            return 0;
+        }
+        break;
 
     case WM_DESTROY:
         // 移除托盘图标
-        Shell_NotifyIconW(NIM_DELETE, &g_nid);
+        if (g_trayIconAdded && g_nid.cbSize == sizeof(NOTIFYICONDATAW))
+        {
+            Shell_NotifyIconW(NIM_DELETE, &g_nid);
+        }
         PostQuitMessage(0);
         return 0;
 
@@ -1316,6 +1356,9 @@ BOOL InitTray(HINSTANCE hInstance)
         LogMessage("ERROR", g_logMsg->createWindowFailed);
         return FALSE;
     }
+
+    // 注册 TaskbarCreated 消息：用于 Explorer 重启后重新添加托盘图标。
+    g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
 
     return TRUE;
 }
