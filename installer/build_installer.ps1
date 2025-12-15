@@ -27,6 +27,22 @@ function Pause-IfNeeded {
     }
 }
 
+function Write-FullLogIfCi {
+    param(
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$LogPath
+    )
+
+    $isCi = ($env:GITHUB_ACTIONS -eq 'true') -or ($env:CI -eq 'true')
+    if (-not $isCi) { return }
+    if (-not (Test-Path -LiteralPath $LogPath)) { return }
+
+    Write-Host "";
+    Write-Host ("===== CI FULL LOG: {0} ({1}) =====" -f $Title, (Split-Path -Leaf $LogPath)) -ForegroundColor Cyan
+    Get-Content -LiteralPath $LogPath -Raw
+    Write-Host ("===== CI FULL LOG END: {0} =====" -f $Title) -ForegroundColor Cyan
+}
+
 Write-Host "========================================"
 Write-Host "远程控制 项目打包脚本"
 Write-Host "========================================"
@@ -281,6 +297,7 @@ if ($CVersion) {
 }
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：C 版主程序构建失败" -ForegroundColor Red
+    Write-FullLogIfCi -Title 'C 主程序构建' -LogPath $MainBuildLog
     Pause-IfNeeded
     exit 1
 }
@@ -362,6 +379,7 @@ Write-Host "  详细日志：logs\pyinstaller.log" -ForegroundColor Cyan
     src\python\GUI.py *>&1 | Out-File -FilePath $PyInstallerLog -Encoding utf8
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：GUI程序打包失败" -ForegroundColor Red
+    Write-FullLogIfCi -Title 'PyInstaller' -LogPath $PyInstallerLog
     Pause-IfNeeded
     exit 1
 }
@@ -380,6 +398,7 @@ if ($CVersion) {
 }
 if ($LASTEXITCODE -ne 0) {
     Write-Host "错误：C 版托盘程序构建失败" -ForegroundColor Red
+    Write-FullLogIfCi -Title 'C 托盘构建' -LogPath $TrayBuildLog
     Pause-IfNeeded
     exit 1
 }
@@ -480,6 +499,7 @@ if (Test-Path $VersionTmpFile) {
 
 if ($ExitCode -ne 0) {
     Write-Host "错误：安装包生成失败" -ForegroundColor Red
+    Write-FullLogIfCi -Title 'Inno Setup' -LogPath $InnoLog
     Pause-IfNeeded
     exit 1
 }

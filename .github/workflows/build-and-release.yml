@@ -263,13 +263,23 @@ jobs:
 
                   # 运行PyInstaller构建脚本
                   echo "开始PyInstaller构建..."
-                  try {
-                    pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_installer.ps1 $version -NoPause
-                    echo "✅ PyInstaller构建完成"
-                  } catch {
-                    echo "❌ PyInstaller构建失败: $_"
-                    exit 1
+                  pwsh -NoProfile -ExecutionPolicy Bypass -File installer/build_installer.ps1 $version -NoPause
+                  $buildExitCode = $LASTEXITCODE
+                  if ($buildExitCode -ne 0) {
+                    echo "❌ build_installer.ps1 失败，退出码: $buildExitCode"
+                    if (Test-Path "logs") {
+                      echo "=== 输出完整日志（logs/*.log）==="
+                      Get-ChildItem -Path "logs" -Filter "*.log" -ErrorAction SilentlyContinue | ForEach-Object {
+                        echo ("\n----- LOG START: {0} -----" -f $_.Name)
+                        Get-Content -LiteralPath $_.FullName -Raw
+                        echo ("----- LOG END: {0} -----\n" -f $_.Name)
+                      }
+                    } else {
+                      echo "(未找到 logs 目录，无法输出日志)"
+                    }
+                    exit $buildExitCode
                   }
+                  echo "✅ build_installer.ps1 执行成功"
 
                   # 验证构建产物
                   if (Test-Path "installer/dist") {
