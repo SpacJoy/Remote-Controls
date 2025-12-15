@@ -235,6 +235,8 @@ typedef struct
     char *offValue;
     char *offPreset; // interrupt/kill/none/custom
     char *window;    // show/hide
+    int valueMin;    // optional: commandN_value_min (default 0)
+    int valueMax;    // optional: commandN_value_max (default 100)
 } RcCommand;
 
 typedef struct
@@ -832,6 +834,7 @@ static void load_commands(RC_Router *r)
     // - commandN_on_value / commandN_off_value: on/off 对应命令
     // - commandN_off_preset: interrupt/kill/none/custom，默认 kill
     // - commandN_window: show/hide，默认 show（决定 PowerShell 窗口行为）
+    // - commandN_value_min / commandN_value_max: {value} 参数范围（默认 0-100）
     for (int i = 1; i < 50; i++)
     {
         char key[64];
@@ -851,12 +854,16 @@ static void load_commands(RC_Router *r)
         char offPresetKey[96];
         char windowKey[96];
         char nameKey[96];
+        char minKey[96];
+        char maxKey[96];
         _snprintf(valueKey, sizeof(valueKey), "%s_value", key);
         _snprintf(onKey, sizeof(onKey), "%s_on_value", key);
         _snprintf(offKey, sizeof(offKey), "%s_off_value", key);
         _snprintf(offPresetKey, sizeof(offPresetKey), "%s_off_preset", key);
         _snprintf(windowKey, sizeof(windowKey), "%s_window", key);
         _snprintf(nameKey, sizeof(nameKey), "%s_name", key);
+        _snprintf(minKey, sizeof(minKey), "%s_value_min", key);
+        _snprintf(maxKey, sizeof(maxKey), "%s_value_max", key);
 
         RcCommand item;
         ZeroMemory(&item, sizeof(item));
@@ -867,6 +874,14 @@ static void load_commands(RC_Router *r)
         item.offValue = dupstr0(cfg_str(r->config, offKey));
         item.offPreset = dupstr0(cfg_str(r->config, offPresetKey));
         item.window = dupstr0(cfg_str(r->config, windowKey));
+        item.valueMin = cfg_int(r->config, minKey, 0);
+        item.valueMax = cfg_int(r->config, maxKey, 100);
+        if (item.valueMin > item.valueMax)
+        {
+            int tmp = item.valueMin;
+            item.valueMin = item.valueMax;
+            item.valueMax = tmp;
+        }
         if (!item.offPreset || !*item.offPreset)
         {
             free(item.offPreset);
@@ -1575,6 +1590,26 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         if (!topic_eq(topicUtf8, c->topic))
             continue;
 
+        // {value} 参数范围（可配置）：默认 0-100。
+        // - 若 hasValue=true 且越界：钳制到范围内并告警。
+        // - 若 min/max 在配置中写反：load_commands 已做交换。
+        int valueLo = c->valueMin;
+        int valueHi = c->valueMax;
+        int appliedValue = value;
+        if (hasValue)
+        {
+            if (appliedValue < valueLo)
+            {
+                RC_LogWarn("命令参数超出范围，将钳制：%d -> %d (range=%d-%d, topic=%s)", appliedValue, valueLo, valueLo, valueHi, c->topic);
+                appliedValue = valueLo;
+            }
+            else if (appliedValue > valueHi)
+            {
+                RC_LogWarn("命令参数超出范围，将钳制：%d -> %d (range=%d-%d, topic=%s)", appliedValue, valueHi, valueLo, valueHi, c->topic);
+                appliedValue = valueHi;
+            }
+        }
+
         // window 字段：决定 PowerShell 窗口行为。
         // - hide：隐藏窗口（更像后台任务）；keep=false 表示不保持窗口。
         // - show：显示窗口（便于调试）。
@@ -1584,14 +1619,9 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
 
         if (_stricmp(base, "on") == 0)
         {
-            if (hasValue && (value < 0 || value > 100))
-            {
-                RC_LogWarn("命令百分比超出范围 0-100：%d (topic=%s)", value, c->topic);
-                return;
-            }
             // 命令选择优先级：on_value 优先，其次 fallback 到 legacy value。
             const char *raw = (c->onValue && *c->onValue) ? c->onValue : c->value;
-            char *applied = apply_value_placeholder(raw, hasValue, value);
+            char *applied = apply_value_placeholder(raw, hasValue, appliedValue);
             char *norm = normalize_powershell_command(applied);
             RC_LogInfo("命令开启：%s (window=%s)", c->topic, window);
             unsigned long pid = 0;
@@ -1609,14 +1639,9 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         }
         else if (_stricmp(base, "off") == 0)
         {
-            if (hasValue && (value < 0 || value > 100))
-            {
-                RC_LogWarn("命令百分比超出范围 0-100：%d (topic=%s)", value, c->topic);
-                return;
-            }
             if (c->offValue && *c->offValue)
             {
-                char *applied = apply_value_placeholder(c->offValue, hasValue, value);
+                char *applied = apply_value_placeholder(c->offValue, hasValue, appliedValue);
                 char *norm = normalize_powershell_command(applied);
                 RC_LogInfo("命令关闭(自定义)：%s (window=%s)", c->topic, window);
                 unsigned long pid = 0;

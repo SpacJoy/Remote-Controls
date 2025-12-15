@@ -119,6 +119,12 @@ _ZH_TO_EN: dict[str, str] = {
     "检查失败": "Check failed",
     "睡眠功能状态": "Sleep status",
     "语言：": "Language:",
+    "参数范围：": "Value range:",
+    "最小：": "Min:",
+    "最大：": "Max:",
+    "请输入整数": "Please enter an integer",
+    "参数超出范围：{lo}-{hi}": "Value out of range: {lo}-{hi}",
+    "请输入 {value} 的值（范围 {lo}-{hi}），例如 {ex}：": "Enter a value for {value} (range {lo}-{hi}), e.g. {ex}:",
 
     # 开机自启
     "设置开机自启": "Enable autostart",
@@ -1316,6 +1322,20 @@ def load_custom_themes() -> None:
             on_cmd = config.get(f"{cmd_key}_on_value", legacy_cmd)
             off_cmd = config.get(f"{cmd_key}_off_value", "")
             off_preset = config.get(f"{cmd_key}_off_preset", "kill")
+
+            _min_raw = config.get(f"{cmd_key}_value_min", 0)
+            _max_raw = config.get(f"{cmd_key}_value_max", 100)
+            try:
+                _vmin = int(_min_raw)
+            except Exception:
+                _vmin = 0
+            try:
+                _vmax = int(_max_raw)
+            except Exception:
+                _vmax = 100
+            if _vmin > _vmax:
+                _vmin, _vmax = _vmax, _vmin
+
             theme = {
                 "type": "命令",
                 "checked": config.get(f"{cmd_key}_checked", 0),
@@ -1325,6 +1345,8 @@ def load_custom_themes() -> None:
                 "off_value": off_cmd,
                 "off_preset": off_preset,
                 "window": config.get(f"{cmd_key}_window", "show"),
+                "value_min": _vmin,
+                "value_max": _vmax,
             }
             custom_themes.append(theme)
             status = "开" if theme["checked"] else "关"
@@ -1506,7 +1528,7 @@ Sleep:
 
 命令：
     “打开(on)”为 PowerShell 片段，可随时点击测试按钮；
-    支持 on#数字(0-100)，命令中使用 {value} 占位符获取参数。
+    支持 on#数字（默认 0-100，可在 config.json 中通过 commandN_value_min/commandN_value_max 自定义范围），命令中使用 {value} 占位符获取参数。
     关闭预设默认“中断”(CTRL+BREAK)，可改为强制结束或自定义并独立测试。
 
 按键(Hotkey)：
@@ -1526,7 +1548,7 @@ Service (admin):
 
 Command:
     On is a PowerShell snippet; you can click the test button at any time.
-    Supports on#number (0-100). Use the {value} placeholder in your command.
+    Supports on#number (default 0-100; configurable via commandN_value_min/commandN_value_max in config.json). Use the {value} placeholder in your command.
     Off preset defaults to Interrupt (CTRL+BREAK); you can change it to Force kill or Custom and test separately.
 
 Hotkey:
@@ -1901,18 +1923,91 @@ def modify_custom_theme() -> None:
             except Exception as e:
                 messagebox.showerror(t("错误"), t("无法打开服务管理器: {err}").format(err=e))
 
+    # 命令类型：{value} 参数范围（默认 0-100，可配置）
+    cmd_value_min_var_add = tk.StringVar(value="0")
+    cmd_value_max_var_add = tk.StringVar(value="100")
+
+    def _get_cmd_value_range_add() -> tuple[int, int]:
+        try:
+            lo = int((cmd_value_min_var_add.get() or "0").strip())
+            hi = int((cmd_value_max_var_add.get() or "100").strip())
+        except Exception:
+            messagebox.showwarning(t("提示"), t("请输入整数"))
+            return 0, 100
+        if lo > hi:
+            lo, hi = hi, lo
+        return lo, hi
+
+    def _ask_value_for_placeholder_add(parent_win: tk.Misc) -> str | None:
+        lo, hi = _get_cmd_value_range_add()
+        ex = 50
+        if ex < lo or ex > hi:
+            ex = lo
+        s = simpledialog.askstring(
+            t("输入参数"),
+            t("请输入 {value} 的值（范围 {lo}-{hi}），例如 {ex}：").format(value="{value}", lo=lo, hi=hi, ex=ex),
+            initialvalue=str(ex),
+            parent=parent_win,
+        )
+        if s is None:
+            return None
+        s = str(s).strip()
+        try:
+            v = int(s)
+        except Exception:
+            messagebox.showwarning(t("提示"), t("请输入整数"))
+            return None
+        if v < lo or v > hi:
+            messagebox.showwarning(t("提示"), t("参数超出范围：{lo}-{hi}").format(lo=lo, hi=hi))
+            return None
+        return str(v)
+
+    # 命令类型：{value} 参数范围（默认 0-100，可配置）
+    cmd_value_min_var = tk.StringVar(value=str(int(theme.get("value_min", 0) or 0)))
+    cmd_value_max_var = tk.StringVar(value=str(int(theme.get("value_max", 100) or 100)))
+
+    def _get_cmd_value_range_mod() -> tuple[int, int]:
+        try:
+            lo = int((cmd_value_min_var.get() or "0").strip())
+            hi = int((cmd_value_max_var.get() or "100").strip())
+        except Exception:
+            messagebox.showwarning(t("提示"), t("请输入整数"))
+            return 0, 100
+        if lo > hi:
+            lo, hi = hi, lo
+        return lo, hi
+
+    def _ask_value_for_placeholder_mod(parent_win: tk.Misc) -> str | None:
+        lo, hi = _get_cmd_value_range_mod()
+        ex = 50
+        if ex < lo or ex > hi:
+            ex = lo
+        s = simpledialog.askstring(
+            t("输入参数"),
+            t("请输入 {value} 的值（范围 {lo}-{hi}），例如 {ex}：").format(value="{value}", lo=lo, hi=hi, ex=ex),
+            initialvalue=str(ex),
+            parent=parent_win,
+        )
+        if s is None:
+            return None
+        s = str(s).strip()
+        try:
+            v = int(s)
+        except Exception:
+            messagebox.showwarning(t("提示"), t("请输入整数"))
+            return None
+        if v < lo or v > hi:
+            messagebox.showwarning(t("提示"), t("参数超出范围：{lo}-{hi}").format(lo=lo, hi=hi))
+            return None
+        return str(v)
+
     def test_command_in_powershell():
         cmd = on_value_text.get("1.0", "end-1c").strip()
         if not cmd:
             messagebox.showwarning(t("提示"), t("请先在“值”中输入要测试的命令"))
             return
         if "{value}" in cmd:
-            val = simpledialog.askstring(
-                t("输入参数"),
-                t("请输入 {value} 的值，例如 50："),
-                initialvalue="50",
-                parent=theme_window,
-            )
+            val = _ask_value_for_placeholder_mod(theme_window)
             if val is None:
                 return
             cmd = cmd.replace("{value}", val)
@@ -1975,12 +2070,7 @@ def modify_custom_theme() -> None:
             messagebox.showwarning(t("提示"), t("请先在“关闭(off)”中输入要测试的命令"))
             return
         if "{value}" in cmd:
-            val = simpledialog.askstring(
-                t("输入参数"),
-                t("请输入 {value} 的值，例如 50："),
-                initialvalue="50",
-                parent=theme_window,
-            )
+            val = _ask_value_for_placeholder_mod(theme_window)
             if val is None:
                 return
             cmd = cmd.replace("{value}", val)
@@ -2026,6 +2116,15 @@ def modify_custom_theme() -> None:
     # 命令类型：命令窗口显示/隐藏 -> 改为复选框，放在“状态”后面
     cmd_window_var = tk.IntVar(value=0 if theme.get("window", "show") == "hide" else 1)
     cmd_window_check = ttk.Checkbutton(theme_window, text="显示窗口", variable=cmd_window_var)
+
+    cmd_range_frame_mod = ttk.Frame(theme_window)
+    ttk.Label(cmd_range_frame_mod, text=t("参数范围：")).grid(row=0, column=0, sticky="w")
+    ttk.Label(cmd_range_frame_mod, text=t("最小：")).grid(row=0, column=1, sticky="e", padx=(8, 2))
+    cmd_min_entry_mod = ttk.Entry(cmd_range_frame_mod, textvariable=cmd_value_min_var, width=8)
+    cmd_min_entry_mod.grid(row=0, column=2, sticky="w")
+    ttk.Label(cmd_range_frame_mod, text=t("最大：")).grid(row=0, column=3, sticky="e", padx=(10, 2))
+    cmd_max_entry_mod = ttk.Entry(cmd_range_frame_mod, textvariable=cmd_value_max_var, width=8)
+    cmd_max_entry_mod.grid(row=0, column=4, sticky="w")
 
     # Hotkey 专用设置（修改窗口）
     hotkey_frame_mod = ttk.Labelframe(theme_window, text="按键(Hotkey) 设置")
@@ -2087,8 +2186,11 @@ def modify_custom_theme() -> None:
         type_key = theme_type_key_var.get()
         if type_key == "命令":
             cmd_window_check.grid(row=1, column=1, sticky="n")
+            # 放到“关闭预设”同一行右侧
+            cmd_range_frame_mod.grid(row=6, column=2, columnspan=2, sticky="w", padx=PADX, pady=PADY)
         else:
             cmd_window_check.grid_remove()
+            cmd_range_frame_mod.grid_remove()
         if type_key == "按键(Hotkey)":
             on_label_mod.grid_remove()
             off_label_mod.grid_remove()
@@ -2217,6 +2319,12 @@ def modify_custom_theme() -> None:
             theme["value"] = theme["on_value"]
         if theme["type"] == "命令":
             theme["window"] = "show" if cmd_window_var.get() else "hide"
+            lo, hi = _get_cmd_value_range_mod()
+            theme["value_min"] = lo
+            theme["value_max"] = hi
+        else:
+            theme.pop("value_min", None)
+            theme.pop("value_max", None)
         if theme["type"] == "按键(Hotkey)":
             # 读取临时值以便在保存前校验
             _on_type = hk_on_type_key_var_mod.get() or "keyboard"
@@ -2563,12 +2671,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             messagebox.showwarning(t("提示"), t("请先在“值”中输入要测试的命令"))
             return
         if "{value}" in cmd:
-            val = simpledialog.askstring(
-                t("输入参数"),
-                t("请输入 {value} 的值，例如 50："),
-                initialvalue="50",
-                parent=theme_window,
-            )
+            val = _ask_value_for_placeholder_add(theme_window)
             if val is None:
                 return
             cmd = cmd.replace("{value}", val)
@@ -2630,12 +2733,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             messagebox.showwarning(t("提示"), t("请先在“关闭(off)”中输入要测试的命令"))
             return
         if "{value}" in cmd:
-            val = simpledialog.askstring(
-                t("输入参数"),
-                t("请输入 {value} 的值，例如 50："),
-                initialvalue="50",
-                parent=theme_window,
-            )
+            val = _ask_value_for_placeholder_add(theme_window)
             if val is None:
                 return
             cmd = cmd.replace("{value}", val)
@@ -2738,12 +2836,24 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     cmd_window_var = tk.IntVar(value=1)
     cmd_window_check = ttk.Checkbutton(theme_window, text="显示窗口", variable=cmd_window_var)
 
+    cmd_range_frame_add = ttk.Frame(theme_window)
+    ttk.Label(cmd_range_frame_add, text=t("参数范围：")).grid(row=0, column=0, sticky="w")
+    ttk.Label(cmd_range_frame_add, text=t("最小：")).grid(row=0, column=1, sticky="e", padx=(8, 2))
+    cmd_min_entry_add = ttk.Entry(cmd_range_frame_add, textvariable=cmd_value_min_var_add, width=8)
+    cmd_min_entry_add.grid(row=0, column=2, sticky="w")
+    ttk.Label(cmd_range_frame_add, text=t("最大：")).grid(row=0, column=3, sticky="e", padx=(10, 2))
+    cmd_max_entry_add = ttk.Entry(cmd_range_frame_add, textvariable=cmd_value_max_var_add, width=8)
+    cmd_max_entry_add.grid(row=0, column=4, sticky="w")
+
     def _update_type_specific_add(*_):
         type_key = theme_type_key_var.get()
         if type_key == "命令":
             cmd_window_check.grid(row=1, column=1, sticky="n")
+            # 放到“关闭预设”同一行右侧
+            cmd_range_frame_add.grid(row=6, column=2, columnspan=2, sticky="w", padx=PADX, pady=PADY)
         else:
             cmd_window_check.grid_remove()
+            cmd_range_frame_add.grid_remove()
         # Hotkey 面板显示控制；同时隐藏/显示 值 文本和选择按钮
         if type_key == "按键(Hotkey)":
             on_label_add.grid_remove()
@@ -2860,6 +2970,9 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             theme["value"] = theme["on_value"]
         if theme["type"] == "命令":
             theme["window"] = "show" if cmd_window_var.get() else "hide"
+            lo, hi = _get_cmd_value_range_add()
+            theme["value_min"] = lo
+            theme["value_max"] = hi
         if theme["type"] == "按键(Hotkey)":
             _on_type = hk_on_type_key_var_add.get() or "keyboard"
             _on_value = hk_on_val_var_add.get().strip()
@@ -3023,6 +3136,20 @@ def generate_config() -> None:
             config[f"{prefix}_off_preset"] = theme.get("off_preset", "interrupt")
             # 保存命令窗口显示/隐藏设置，默认显示
             config[f"{prefix}_window"] = theme.get("window", "show")
+
+            # {value} 参数范围（默认 0-100，可自定义）
+            try:
+                vmin = int(theme.get("value_min", 0) or 0)
+            except Exception:
+                vmin = 0
+            try:
+                vmax = int(theme.get("value_max", 100) or 100)
+            except Exception:
+                vmax = 100
+            if vmin > vmax:
+                vmin, vmax = vmax, vmin
+            config[f"{prefix}_value_min"] = vmin
+            config[f"{prefix}_value_max"] = vmax
             command_index += 1
         elif theme["type"] == "按键(Hotkey)":
             prefix = f"hotkey{hotkey_index}"
