@@ -4,6 +4,31 @@
 
 ---
 
+# V3.0.1 (2025-12-15)
+
+**MQTT TLS 增强、构建链路更稳、GUI 体验优化**  
+Full Changelog (相对于 3.0.0): <https://github.com/SpacJoy/Remote-Controls/compare/V3.0.0...V3.0.1>
+
+## 🔐 MQTT / TLS
+
+- 支持 MQTT `ssl://` 连接配置（TLS 开关与地址/端口配置保持兼容）。
+- 新增 TLS 证书校验开关与 CA 文件路径配置（`mqtt_tls_verify` / `mqtt_tls_ca_file`）。
+- MQTT 实现收敛：移除内置 MQTT 客户端逻辑，主程序强制使用 Paho MQTT C，减少实现分叉与行为不一致。
+
+## 🖥 GUI
+
+- MQTT TLS 相关控件联动：未启用 TLS/证书校验时自动禁用 CA 路径输入，避免误配置。
+
+## 🧰 构建与 CI
+
+- GitHub Actions Release 环境安装 `paho-mqtt-c` 并设置 `PAHO_MQTT_C_ROOT`，避免干净环境构建失败。
+- 本地 `build_main.ps1` 支持自动探测 MSYS2 常见前缀（`mingw64` / `ucrt64`），降低环境变量依赖。
+
+## 📖 文档与示例
+
+- 补充配置字段与 MQTT TLS 连接说明（README 与相关文档同步更新）。
+- 更新示例配置（`dome_config.json`）以覆盖 TLS 相关键。
+
 # V3.0.0 (2025-12-15)
 
 **C 版主程序/托盘重构、全面多语言与安全增强**  
