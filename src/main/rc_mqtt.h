@@ -14,7 +14,7 @@ extern "C"
      * - 负责连接 broker、订阅 topic、接收消息并转交给 Router。
      * - 内部包含自动重连（reconnectMinSeconds ~ reconnectMaxSeconds 退避）。
      *
-     * 注意：本项目同时支持不同 MQTT 实现（例如 Paho），具体实现细节见 rc_mqtt.c。
+     * 注意：本项目仅使用 Paho MQTT C（同步客户端 MQTTClient），具体实现细节见 rc_mqtt.c。
      */
 
     typedef struct RC_MqttConfig
