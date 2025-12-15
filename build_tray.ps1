@@ -148,9 +148,4 @@ Invoke-Exe -FilePath 'gcc' -Arguments @(
   '-lpsapi', '-lshlwapi', '-lshell32', '-lgdi32', '-luser32', '-ladvapi32', '-lcomctl32', '-lwinhttp'
 )
 
-# Copy runtime files
-Write-Host '复制资源...'
-New-Item -ItemType Directory -Force -Path (Join-Path $root 'bin\res') | Out-Null
-Copy-Item -LiteralPath $iconPath -Destination (Join-Path $root 'bin\res\') -Force
-
 Write-Host '构建成功: bin\RC-tray.exe'

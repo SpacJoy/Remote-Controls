@@ -23,7 +23,7 @@ DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
 OutputDir=dist\installer
 OutputBaseFilename=Remote-Controls-Installer-{#MyAppVersion}
-SetupIconFile=..\res\icon.ico
+SetupIconFile=..\res\top.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -43,7 +43,9 @@ Name: "autostart_tray"; Description: "用户登录时运行托盘（当前用户
 Source: "dist\RC-GUI.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\RC-main.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\RC-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\res\icon.ico"; DestDir: "{app}\res"; Flags: ignoreversion
+#if FileExists("dist\\libpaho-mqtt3c.dll")
+Source: "dist\libpaho-mqtt3c.dll"; DestDir: "{app}"; Flags: ignoreversion
+#endif
 ; Optional: ship default config, but do not overwrite user changes
 ; Source: "..\config.json"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
 

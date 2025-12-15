@@ -156,10 +156,30 @@ function Invoke-ChildBuildScript {
     }
 }
 
+function Remove-FileWithRetry {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [int]$Retries = 10,
+        [int]$DelayMs = 300
+    )
+
+    for ($i = 0; $i -lt $Retries; $i++) {
+        try {
+            if (Test-Path -LiteralPath $Path) {
+                Remove-Item -LiteralPath $Path -Force -ErrorAction Stop
+            }
+            return $true
+        } catch {
+            Start-Sleep -Milliseconds $DelayMs
+        }
+    }
+
+    return (-not (Test-Path -LiteralPath $Path))
+}
+
 # 资源绝对路径（避免 --specpath 导致的相对路径解析到 installer/）
 $ResDir   = Join-Path $Root 'res'
-$IconIco  = Join-Path $ResDir 'icon.ico'
-$IconGUI  = Join-Path $ResDir 'icon_GUI.ico'
+$IconGUI  = Join-Path $ResDir 'top.ico'
 $TopIco   = Join-Path $ResDir 'top.ico'
 # 旧版彩蛋图片 (cd1~cd5) 已不再需要打包，托盘改为仅访问远程随机图片接口。
 
@@ -228,8 +248,9 @@ Write-Host "完成清理" -ForegroundColor Green
 # 为 dist 准备目录
 $DistDir = (Join-Path $InstallerDir 'dist')
 New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $DistDir 'res') | Out-Null
-Copy-Item -LiteralPath $IconIco -Destination (Join-Path $DistDir 'res\icon.ico') -Force
+
+# 注意：不再把 res\top.ico 安装到 {app} 目录。
+# 安装器本身的图标仍由 Remote-Controls.iss 的 SetupIconFile=..\res\top.ico 提供。
 
 # 构建 C 版主程序（RC-main.exe）
 Write-Host ""
@@ -266,6 +287,58 @@ if (-not (Test-Path $BuiltMainExe)) {
     exit 1
 }
 Copy-Item -LiteralPath $BuiltMainExe -Destination (Join-Path $DistDir 'RC-main.exe') -Force
+
+# ---- 打包 C 主程序的运行时依赖 DLL（例如 Paho MQTT C）----
+function Copy-RuntimeDllIfImported {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExePath,
+        [Parameter(Mandatory = $true)][string]$DllName,
+        [Parameter(Mandatory = $true)][string]$DestDir
+    )
+
+    try {
+        $objdumpCmd = Get-Command objdump -ErrorAction SilentlyContinue
+        $need = $true
+        if ($objdumpCmd) {
+            $imports = & $objdumpCmd.Path -p $ExePath 2>$null |
+                Select-String -Pattern 'DLL Name:' -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty Line
+
+            $need = $false
+            foreach ($line in @($imports)) {
+                if ($line -match ([regex]::Escape($DllName))) { $need = $true; break }
+            }
+        }
+        if (-not $need) { return }
+
+        $candidates = @()
+        if ($env:PAHO_MQTT_C_ROOT) {
+            $candidates += (Join-Path $env:PAHO_MQTT_C_ROOT (Join-Path 'bin' $DllName))
+        }
+        if ($objdumpCmd) {
+            $candidates += (Join-Path (Split-Path -Parent $objdumpCmd.Path) $DllName)
+        }
+        $candidates += (Join-Path 'C:\msys64\mingw64\bin' $DllName)
+        $candidates += (Join-Path 'C:\msys64\ucrt64\bin' $DllName)
+
+        $found = $null
+        foreach ($p in $candidates) {
+            if ($p -and (Test-Path -LiteralPath $p)) { $found = $p; break }
+        }
+
+        if (-not $found) {
+            Write-Host ("  警告：检测到依赖 DLL '{0}'，但未找到可复制文件。请确认已安装/可访问 Paho MQTT C (MSYS2) 或设置 PAHO_MQTT_C_ROOT。" -f $DllName) -ForegroundColor Yellow
+            return
+        }
+
+        Copy-Item -LiteralPath $found -Destination (Join-Path $DestDir $DllName) -Force
+        Write-Host ("  已打包依赖 DLL：{0}" -f $DllName) -ForegroundColor Green
+    } catch {
+        Write-Host ("  警告：尝试打包依赖 DLL '{0}' 失败：{1}" -f $DllName, $_.Exception.Message) -ForegroundColor Yellow
+    }
+}
+
+Copy-RuntimeDllIfImported -ExePath $BuiltMainExe -DllName 'libpaho-mqtt3c.dll' -DestDir $DistDir
 
 # 打包GUI程序
 Write-Host ""
@@ -372,6 +445,19 @@ $IssEncoding = if ($PSVersionTable.PSVersion.Major -ge 6) { 'utf8BOM' } else { '
 Set-Content -Path $TempIssPath -Value $IssContentWithVersion -Encoding $IssEncoding
 
 Write-Host "  生成临时Inno Setup脚本，版本：$FinalVersion" -ForegroundColor Cyan
+
+# 若上一次生成的安装包仍被占用（例如被打开/正在运行），iscc.exe 会以 Error 32 失败。
+# 这里提前尝试删除目标输出文件，失败则给出明确提示。
+$ExpectedInstallerExe = Join-Path $InstallerDir ("dist\installer\Remote-Controls-Installer-{0}.exe" -f $FinalVersion)
+if (Test-Path -LiteralPath $ExpectedInstallerExe) {
+    if (-not (Remove-FileWithRetry -Path $ExpectedInstallerExe -Retries 12 -DelayMs 400)) {
+        Write-Host "错误：无法覆盖安装包（文件被占用）：$ExpectedInstallerExe" -ForegroundColor Red
+        Write-Host "请关闭/退出正在运行的安装程序或资源管理器预览后重试。" -ForegroundColor Yellow
+        Pause-IfNeeded
+        exit 1
+    }
+}
+
 $InnoLog = Join-Path $LogDir 'inno_setup.log'
 Write-Host "  详细日志：logs\inno_setup.log" -ForegroundColor Cyan
 & $InnoPath $TempIssPath *>&1 | Out-File -FilePath $InnoLog -Encoding utf8
