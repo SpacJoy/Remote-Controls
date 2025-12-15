@@ -201,13 +201,25 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
         conn_opts.password = cfg->password;
 
     // TLS/SSL：只在 cfg->useTls 时启用。
-    // 默认不强制校验证书（enableServerCertAuth=0），避免要求用户额外配置 CA 文件。
-    // 若需要“严格验证”，可在后续扩展 trustStore 等字段。
+    // 用户可通过 cfg->tlsVerifyServerCert 控制是否校验证书；
+    // 如需校验，通常还应提供 cfg->tlsCaFile（CA 文件路径）。
 #ifdef MQTTClient_SSLOptions_initializer
     MQTTClient_SSLOptions ssl_opts = MQTTClient_SSLOptions_initializer;
     if (useTls)
     {
-        ssl_opts.enableServerCertAuth = 0;
+        ssl_opts.enableServerCertAuth = (cfg->tlsVerifyServerCert ? 1 : 0);
+        if (cfg->tlsCaFile && *cfg->tlsCaFile)
+        {
+            // Paho/OpenSSL: trustStore is a file containing trusted CA certificates.
+            ssl_opts.trustStore = cfg->tlsCaFile;
+        }
+        else if (cfg->tlsVerifyServerCert)
+        {
+            if (RC_RouterIsEnglish(router))
+                RC_LogWarn("MQTT(Paho) TLS verify is enabled but mqtt_tls_ca_file is empty; connection may fail if no default trust store is available.");
+            else
+                RC_LogWarn("MQTT(Paho) 已启用证书校验，但未配置 mqtt_tls_ca_file；若环境无默认信任库，连接可能失败。");
+        }
 #ifdef MQTT_SSL_VERSION_TLS_1_2
         ssl_opts.sslVersion = MQTT_SSL_VERSION_TLS_1_2;
 #endif

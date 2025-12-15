@@ -3115,6 +3115,8 @@ def generate_config() -> None:
         "broker": broker,
         "port": port,
         "mqtt_tls": tls_var.get(),
+        "mqtt_tls_verify": tls_verify_var.get(),
+        "mqtt_tls_ca_file": (tls_ca_entry.get() or "").strip(),
         "test": test_var.get(),
         "notify": notify_var.get(),
         "auth_mode": auth_mode_var.get(),
@@ -3713,7 +3715,7 @@ _sync_language_combo()
 # MQTT认证配置部分
 auth_frame = ttk.LabelFrame(root, text=t("MQTT认证配置"))
 auth_frame.grid(row=1, column=0, padx=PADX, pady=PADY, sticky="nsew")
-for i in range(4):
+for i in range(6):
     auth_frame.rowconfigure(i, weight=1)
 for j in range(3):
     auth_frame.columnconfigure(j, weight=1)
@@ -3743,13 +3745,42 @@ tls_var = tk.IntVar(value=int(config.get("mqtt_tls", 0) or 0))
 tls_check = ttk.Checkbutton(auth_frame, text=t("启用TLS/SSL"), variable=tls_var)
 tls_check.grid(row=3, column=0, columnspan=2, sticky="w", padx=PADX, pady=PADY)
 
+# TLS 证书校验与 CA 文件（可选）
+tls_verify_var = tk.IntVar(value=int(config.get("mqtt_tls_verify", 0) or 0))
+tls_verify_check = ttk.Checkbutton(auth_frame, text=t("校验证书"), variable=tls_verify_var)
+tls_verify_check.grid(row=3, column=1, columnspan=2, sticky="n", padx=PADX, pady=PADY)
+
+ttk.Label(auth_frame, text=t("CA证书：")).grid(row=5, column=0, sticky="e", padx=PADX, pady=PADY)
+tls_ca_entry = ttk.Entry(auth_frame)
+tls_ca_entry.grid(row=5, column=1, sticky="ew", padx=PADX, pady=PADY)
+tls_ca_entry.insert(0, config.get("mqtt_tls_ca_file", "") or "")
+
+def choose_tls_ca_file() -> None:
+    path = filedialog.askopenfilename(
+        title=t("选择CA证书文件"),
+        filetypes=[
+            (t("证书文件"), "*.pem *.crt *.cer"),
+            (t("所有文件"), "*.*"),
+        ],
+    )
+    if path:
+        try:
+            tls_ca_entry.delete(0, tk.END)
+            tls_ca_entry.insert(0, path)
+        except Exception:
+            pass
+
+ttk.Button(auth_frame, text=t("选择文件"), command=choose_tls_ca_file).grid(
+    row=5, column=2, sticky="w", padx=PADX, pady=PADY
+)
+
 # 认证模式说明
 auth_info_label = ttk.Label(
     auth_frame,
     text=t("私钥模式：\n        使用客户端ID作为私钥\n账密模式：\n        兼容大多数IoT平台"),
     justify="left"
 )
-auth_info_label.grid(row=0, column=2, rowspan=4, sticky="n", padx=PADX, pady=PADY)
+auth_info_label.grid(row=0, column=2, rowspan=6, sticky="n", padx=PADX, pady=PADY)
 
 def toggle_auth_mode(*args):
     """根据MQTT认证模式切换界面显示"""

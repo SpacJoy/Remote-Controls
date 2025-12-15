@@ -8,8 +8,15 @@
 
 配置入口：推荐使用 `RC-GUI.exe` 配置并保存，程序会生成/更新同目录的 `config.json`。
 
-重要说明：当前主程序默认使用 **TCP** 连接（`tcp://broker:port`），不启用 TLS（SSL）。
-如果你的平台只提供 `8883`（TLS）端口，默认版本将无法连接；请改用该平台的非 TLS 端口，或自建支持 TCP 的 MQTT 服务。
+重要说明：主程序默认使用 **TCP** 连接（`tcp://broker:port`），TLS（SSL）默认关闭。
+
+如需连接 `8883/TLS` 端口：
+
+- `mqtt_tls`: 1（启用 `ssl://`）
+- `mqtt_tls_verify`: 0/1（是否校验证书）
+- `mqtt_tls_ca_file`: CA 证书文件路径（用于证书校验）
+
+注意：启用 TLS 需要构建时链接 Paho SSL 库（如 `paho-mqtt3cs`）。
 
 ## 方式一：私钥模式
 

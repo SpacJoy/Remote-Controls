@@ -29,6 +29,16 @@ extern "C"
         // 注意：这要求构建时链接 Paho SSL 版本库（例如 paho-mqtt3cs）。
         bool useTls;
 
+        // 是否校验服务器证书。
+        // - 0：不校验（默认，兼容大多数“无证书配置”的使用场景）。
+        // - 1：校验（更安全；通常需要配置 CA 文件）。
+        bool tlsVerifyServerCert;
+
+        // CA 证书文件路径（PEM/CRT），用于服务器证书校验。
+        // - 为空表示不指定（部分环境可能仍能使用系统/默认信任库；也可能导致校验失败）。
+        // - 建议使用绝对路径；相对路径以程序工作目录为基准（RC-main 启动时会切到程序目录）。
+        const char *tlsCaFile;
+
         /*
          * 鉴权模式：
          * - "private_key"：由上层转换/填充为 username/password（如果实现需要）。

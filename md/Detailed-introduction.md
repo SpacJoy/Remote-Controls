@@ -99,8 +99,15 @@
 
 确保 `broker` 与 `port` 正确；认证失败会弹窗并停止重试，请修正配置后重启。
 
-补充：当前主程序默认使用 TCP 连接（形如 `tcp://broker:port`），不启用 TLS（SSL）。
-若你的 MQTT 平台只提供 8883/TLS 端口，请选择该平台的非 TLS 端口或自建支持 TCP 的 MQTT 服务。
+补充：主程序默认使用 TCP 连接（形如 `tcp://broker:port`），TLS（SSL）默认关闭。
+
+如需启用 TLS：
+
+- `mqtt_tls`: 1（启用 `ssl://broker:port`）
+- `mqtt_tls_verify`: 0/1（是否校验证书；默认 0）
+- `mqtt_tls_ca_file`: CA 证书文件路径（建议绝对路径；相对路径以程序目录为基准）
+
+注意：启用 TLS 需要构建时链接 Paho SSL 库（如 `paho-mqtt3cs`）。
 
 ## 配置文件字段说明（config.json）
 
@@ -114,6 +121,9 @@
   - `username_password`：账号密码模式（填写 `mqtt_username` / `mqtt_password`）
 - `client_id`：MQTT Client ID（私钥模式下即“私钥”）
 - `mqtt_username` / `mqtt_password`：账号密码模式的用户名与密码
+- `mqtt_tls`：是否启用 TLS/SSL（0/1；启用后使用 `ssl://`）
+- `mqtt_tls_verify`：是否校验服务器证书（0/1；启用后建议配置 CA 文件）
+- `mqtt_tls_ca_file`：CA 证书文件路径（PEM/CRT），用于证书校验
 - `test`：测试模式（一般用于调试；为 1 时可不启用主题也运行）
 - `language`：界面语言（`zh` / `en`）
 - `notify`：通知开关（0/1）

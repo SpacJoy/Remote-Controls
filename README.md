@@ -131,7 +131,7 @@ python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.
 ## 常见问题（精简）
 
 - MQTT 连接失败：检查地址/端口/认证，程序会在弱网下自动重连
-- MQTT 8883/TLS：当前默认构建使用 TCP（`tcp://`），不支持 TLS（`ssl://`）；请使用非 TLS 端口或自建 MQTT
+- MQTT 8883/TLS：默认关闭 TLS。可在 `config.json` 设置 `mqtt_tls=1` 启用 `ssl://`；若需要校验证书，可设置 `mqtt_tls_verify=1` 并指定 `mqtt_tls_ca_file`（CA 证书文件路径）。注意：启用 TLS 需要构建时链接 Paho SSL 库（如 `paho-mqtt3cs`）。
 - 休眠不可用：以管理员运行并启用休眠 `powercfg /hibernate on`
 - 托盘找不到主程序：以管理员运行托盘；或直接运行 `RC-main.exe`
 - 脚本执行策略：PowerShell 需允许脚本 `Set-ExecutionPolicy RemoteSigned`
