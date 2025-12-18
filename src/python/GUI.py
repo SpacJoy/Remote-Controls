@@ -4066,7 +4066,12 @@ def open_builtin_settings():
                 except Exception:
                     pass
 
-        target_mode_key = tm_key_var.get() or "monitor_num"
+        # NOTE: Combobox 会先更新 textvariable（twinkle_target_mode_var），再触发 <<ComboboxSelected>>。
+        # 如果这里只依赖 tm_key_var，可能读到旧值，导致“全部显示器”时输入框未及时禁用。
+        target_mode_key = _tm_key_by_label(twinkle_target_mode_var.get()) or (tm_key_var.get() or "monitor_num")
+        if tm_key_var.get() != target_mode_key:
+            tm_key_var.set(target_mode_key)
+
         if use_twinkle and target_mode_key == "all":
             twinkle_target_entry.state(["disabled"])
         elif use_twinkle:
