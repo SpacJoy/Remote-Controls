@@ -432,6 +432,31 @@ jobs:
                         if ($body) {
                           echo "已从 CHANGELOG.md 提取版本更新内容"
                           $changelogContent = $body
+
+                          # 测试标签（如 V3.0.2-test2）发布时：保持文案复用，但将 compare 链接末尾改为完整 tag
+                          # 例如：.../compare/V3.0.1...V3.0.2  ->  .../compare/V3.0.1...V3.0.2-test2
+                          $isTestTag = "${{ steps.version.outputs.is_test_tag }}"
+                          if ($isTestTag -eq 'true' -and $tagName -and $previousTag -and $version) {
+                            $stableTag = "V$version"
+                            if ($tagName -ne $stableTag) {
+                              $escapedPrev = [regex]::Escape($previousTag)
+                              $escapedStable = [regex]::Escape($stableTag)
+                              $escapedTagName = [regex]::Escape($tagName)
+
+                              # 处理绝对 compare URL
+                              $changelogContent = [regex]::Replace(
+                                $changelogContent,
+                                "(https://github\\.com/[^/\\s]+/[^/\\s]+/compare/)$escapedPrev\\.\\.\\.$escapedStable\\b",
+                                "`$1$previousTag...$tagName"
+                              )
+                              # 处理相对 compare URL（防止未来文档写成相对路径）
+                              $changelogContent = [regex]::Replace(
+                                $changelogContent,
+                                "(/compare/)$escapedPrev\\.\\.\\.$escapedStable\\b",
+                                "`$1$previousTag...$tagName"
+                              )
+                            }
+                          }
                         }
                       }
                     }
