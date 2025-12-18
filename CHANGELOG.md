@@ -29,6 +29,9 @@ Full Changelog (相对于 3.0.1): <https://github.com/SpacJoy/Remote-Controls/co
 - GitHub Actions 发布流程支持多测试版标签：`V3.0.2-test1`、`V3.0.2-test2` 等，自动创建预发布（Pre-release）。
 - 预发布的更新日志仍复用正式版 `V3.0.2` 在 `CHANGELOG.md` 中的段落，保证说明一致性。
 - 手动触发工作流的版本输入说明已更新，支持 `3.0.2-test1` 等格式。
+- 完善版本号解析与错误提示：支持 `X.Y.Z` / `X.Y.Z.B`，并允许追加 `-test` / `-testN`（同时兼容带/不带 `V` 前缀输入）。
+- 更新日志生成增强：补充 `Full Changelog` 链接生成逻辑，并在测试标签发布时将 compare 链接指向完整测试标签（如 `...V3.0.2-test2`）。
+- 修正 CI/工作流配置中的细节问题（如版本输入描述缩进）。
 
 # V3.0.1 (2025-12-15)
 
