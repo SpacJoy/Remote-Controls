@@ -4,7 +4,7 @@
 
 ---
 
-# V3.0.2 (2025-12-16)
+# V3.0.2 (2025-12-19)
 
 **图标更新与通知显示一致性优化**  
 Full Changelog (相对于 3.0.1): <https://github.com/SpacJoy/Remote-Controls/compare/V3.0.1...V3.0.2>
@@ -14,6 +14,21 @@ Full Changelog (相对于 3.0.1): <https://github.com/SpacJoy/Remote-Controls/co
 - 更新应用图标资源（`icon.ico`），统一托盘/主程序/安装包的视觉识别，并解决深色背景下看不清（看不见）图标的问题。
 - 安装包图标引用调整为 `icon.ico`，避免与旧图标混用。
 - 优化主程序通知/Toast 图标加载顺序：优先使用磁盘 `res\icon.ico`（便于用户替换），失败再回退到内嵌资源。
+
+## 🖥 GUI / Twinkle Tray
+
+- 设置项新增“下载”按钮，直达微软应用商店（Twinkle Tray）：<https://apps.microsoft.com/detail/9pljwwsv01lk?hl=zh-cn&gl=CN>。
+- 当路径为空时，输入框默认显示 `Twinkle Tray`，便于采用自动解析（常见安装位置 / PATH 别名）。
+- 修复禁用逻辑：切换到“系统接口(WMI)”后立即禁用 Twinkle Tray 相关输入（无需再次点击）。
+- 缩短路径输入框宽度，避免因新增按钮导致窗口被撑宽。
+- “浏览/下载”按钮与模式联动：与其它控件一起同步禁用/启用。
+- 收紧“浏览/下载”按钮间距：使用内嵌容器并排布局，视觉更紧凑。
+
+## 🧰 构建与发布
+
+- GitHub Actions 发布流程支持多测试版标签：`V3.0.2-test1`、`V3.0.2-test2` 等，自动创建预发布（Pre-release）。
+- 预发布的更新日志仍复用正式版 `V3.0.2` 在 `CHANGELOG.md` 中的段落，保证说明一致性。
+- 手动触发工作流的版本输入说明已更新，支持 `3.0.2-test1` 等格式。
 
 # V3.0.1 (2025-12-15)
 
