@@ -14,7 +14,7 @@ on:
     workflow_dispatch:
         inputs:
             version:
-              description: "版本号（如：2.2.8 或 2.2.8-test1）"
+                description: "版本号（如：2.2.8 或 2.2.8-test1）"
                 required: true
                 default: "2.2.8"
                 type: string
