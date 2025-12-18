@@ -14,7 +14,7 @@ on:
     workflow_dispatch:
         inputs:
             version:
-                description: "版本号（如：2.2.8）"
+              description: "版本号（如：2.2.8 或 2.2.8-test1）"
                 required: true
                 default: "2.2.8"
                 type: string
@@ -105,15 +105,15 @@ jobs:
                     $isTest = $false
                     $buildVersion = $raw
 
-                    # 支持 tag 形式：V3.0.0-test / V3.0.0.8-test
-                    if ($raw -match '^(?<base>\d+\.\d+\.\d+(?:\.\d+)?)-test$') {
+                    # 支持 tag 形式：V3.0.0-test / V3.0.0-test1 / V3.0.0.8-test2
+                    if ($raw -match '^(?<base>\d+\.\d+\.\d+(?:\.\d+)?)-test\d*$') {
                       $buildVersion = $matches.base
                       $isTest = $true
                     }
 
                     # 版本号必须是纯数字点分段（update_version.py 需要）
                     if ($buildVersion -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
-                      throw "错误：版本号格式不正确: $raw（构建版本解析为: $buildVersion）。正确格式: X.Y.Z 或 X.Y.Z.B；测试 tag 允许追加 -test。"
+                      throw "错误：版本号格式不正确: $raw（构建版本解析为: $buildVersion）。正确格式: X.Y.Z 或 X.Y.Z.B；测试 tag 允许追加 -test 或 -testN（例如 V3.0.2-test1）。"
                     }
 
                     return [pscustomobject]@{
@@ -129,7 +129,7 @@ jobs:
                     $tagName = "${{ github.ref_name }}"
                     $isTagPush = $true
                   } else {
-                    # 手动触发：允许输入带/不带 V 前缀，以及可选的 -test 后缀
+                    # 手动触发：允许输入带/不带 V 前缀，以及可选的 -test / -testN 后缀
                     $input = "${{ github.event.inputs.version }}"
                     if ($input -match '^V') { $tagName = $input } else { $tagName = "V$input" }
                     $isTagPush = $false
