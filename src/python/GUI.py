@@ -4007,16 +4007,18 @@ def open_builtin_settings():
                 twinkle_path_var.set(path)
         except Exception as e:
             messagebox.showerror(t("错误"), t(f"选择文件失败: {e}"))
-    browse_btn = ttk.Button(win, text="浏览", command=browse_twinkle_path)
-    browse_btn.grid(row=row_i, column=2, sticky="w", padx=6)
+    btns_frame = ttk.Frame(win)
+    btns_frame.grid(row=row_i, column=2, columnspan=2, sticky="w", padx=6)
+    browse_btn = ttk.Button(btns_frame, text="浏览", command=browse_twinkle_path)
+    browse_btn.grid(row=0, column=0, sticky="w")
     def open_twinkle_store():
         try:
             import webbrowser
             webbrowser.open("https://apps.microsoft.com/detail/9pljwwsv01lk?hl=zh-cn&gl=CN")
         except Exception as e:
             messagebox.showerror(t("错误"), t(f"打开微软应用商店失败: {e}"))
-    download_btn = ttk.Button(win, text="下载", command=open_twinkle_store)
-    download_btn.grid(row=row_i, column=3, sticky="w", padx=6)
+    download_btn = ttk.Button(btns_frame, text="下载", command=open_twinkle_store)
+    download_btn.grid(row=0, column=1, sticky="w", padx=(6, 0))
     row_i += 1
 
     ttk.Label(win, text="目标显示器：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
