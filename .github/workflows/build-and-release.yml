@@ -369,6 +369,7 @@ jobs:
 
                   $version = "${{ steps.version.outputs.version }}"
                   $tagName = "${{ steps.version.outputs.tag_name }}"
+                  $isTestTag = ("${{ steps.version.outputs.is_test_tag }}" -eq "true")
 
                   # 获取上一个标签
                   $previousTag = ""
@@ -432,6 +433,16 @@ jobs:
                         if ($body) {
                           echo "已从 CHANGELOG.md 提取版本更新内容"
                           $changelogContent = $body
+
+                          # 对于测试标签（例如 V3.0.2-test2）：将 CHANGELOG 中 compare 链接的右侧版本替换为完整 tag
+                          # 例如：/compare/V3.0.1...V3.0.2  =>  /compare/V3.0.1...V3.0.2-test2
+                          if ($isTestTag) {
+                            $changelogContent = [regex]::Replace(
+                              $changelogContent,
+                              "(/compare/[^)\s]*?\.\.\.)V$escapedVersion\\b",
+                              { param($m) $m.Groups[1].Value + $tagName }
+                            )
+                          }
                         }
                       }
                     }
