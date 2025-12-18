@@ -3993,9 +3993,9 @@ def open_builtin_settings():
     row_i += 1
 
     ttk.Label(win, text="Twinkle Tray 路径：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
-    twinkle_path_var = tk.StringVar(value=config.get("twinkle_tray_path", ""))
-    twinkle_path_entry = ttk.Entry(win, textvariable=twinkle_path_var, width=36)
-    twinkle_path_entry.grid(row=row_i, column=1, columnspan=2, sticky="ew")
+    twinkle_path_var = tk.StringVar(value=(config.get("twinkle_tray_path", "") or "Twinkle Tray"))
+    twinkle_path_entry = ttk.Entry(win, textvariable=twinkle_path_var, width=24)
+    twinkle_path_entry.grid(row=row_i, column=1, columnspan=1, sticky="w")
 
     def browse_twinkle_path():
         try:
@@ -4007,8 +4007,16 @@ def open_builtin_settings():
                 twinkle_path_var.set(path)
         except Exception as e:
             messagebox.showerror(t("错误"), t(f"选择文件失败: {e}"))
-
-    ttk.Button(win, text="浏览", command=browse_twinkle_path).grid(row=row_i, column=3, sticky="w", padx=6)
+    browse_btn = ttk.Button(win, text="浏览", command=browse_twinkle_path)
+    browse_btn.grid(row=row_i, column=2, sticky="w", padx=6)
+    def open_twinkle_store():
+        try:
+            import webbrowser
+            webbrowser.open("https://apps.microsoft.com/detail/9pljwwsv01lk?hl=zh-cn&gl=CN")
+        except Exception as e:
+            messagebox.showerror(t("错误"), t(f"打开微软应用商店失败: {e}"))
+    download_btn = ttk.Button(win, text="下载", command=open_twinkle_store)
+    download_btn.grid(row=row_i, column=3, sticky="w", padx=6)
     row_i += 1
 
     ttk.Label(win, text="目标显示器：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
@@ -4044,10 +4052,10 @@ def open_builtin_settings():
     row_i += 1
 
     def _toggle_twinkle_fields(*_args):
-        mode_key = bm_key_var.get() or "wmi"
+        mode_key = _bm_key_by_label(brightness_mode_var.get()) or "wmi"
         use_twinkle = mode_key == "twinkle_tray"
         state = "normal" if use_twinkle else "disabled"
-        for w in (twinkle_path_entry, twinkle_target_mode_combo, twinkle_target_entry, overlay_cb):
+        for w in (twinkle_path_entry, twinkle_target_mode_combo, twinkle_target_entry, overlay_cb, browse_btn, download_btn):
             try:
                 w.state(["!disabled"] if use_twinkle else ["disabled"])
             except Exception:
