@@ -3993,7 +3993,8 @@ def open_builtin_settings():
     row_i += 1
 
     ttk.Label(win, text="Twinkle Tray 路径：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
-    twinkle_path_var = tk.StringVar(value=(config.get("twinkle_tray_path", "") or "Twinkle Tray"))
+    default_twinkle_path = r"%LocalAppData%\Programs\twinkle-tray\Twinkle Tray.exe"
+    twinkle_path_var = tk.StringVar(value=(config.get("twinkle_tray_path", "") or default_twinkle_path))
     twinkle_path_entry = ttk.Entry(win, textvariable=twinkle_path_var, width=24)
     twinkle_path_entry.grid(row=row_i, column=1, columnspan=1, sticky="w")
 
@@ -4014,9 +4015,9 @@ def open_builtin_settings():
     def open_twinkle_store():
         try:
             import webbrowser
-            webbrowser.open("https://apps.microsoft.com/detail/9pljwwsv01lk?hl=zh-cn&gl=CN")
+            webbrowser.open("https://twinkletray.com/")
         except Exception as e:
-            messagebox.showerror(t("错误"), t(f"打开微软应用商店失败: {e}"))
+            messagebox.showerror(t("错误"), t(f"打开下载链接失败: {e}"))
     download_btn = ttk.Button(btns_frame, text="下载", command=open_twinkle_store)
     download_btn.grid(row=0, column=1, sticky="w", padx=(6, 0))
     row_i += 1
