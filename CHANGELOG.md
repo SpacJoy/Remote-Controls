@@ -4,9 +4,9 @@
 
 ---
 
-# V3.0.2 (2025-12-19)
+# V3.0.2 (2025-12-20)
 
-**图标更新与通知显示一致性优化**  
+**图标更新、Twinkle Tray 适配优化与构建链路增强**  
 Full Changelog (相对于 3.0.1): <https://github.com/SpacJoy/Remote-Controls/compare/V3.0.1...V3.0.2>
 
 ## 🎨 图标与通知
@@ -17,8 +17,8 @@ Full Changelog (相对于 3.0.1): <https://github.com/SpacJoy/Remote-Controls/co
 
 ## 🖥 GUI / Twinkle Tray
 
-- 设置项新增“下载”按钮，直达微软应用商店（Twinkle Tray）：<https://apps.microsoft.com/detail/9pljwwsv01lk?hl=zh-cn&gl=CN>。
-- 当路径为空时，输入框默认显示 `Twinkle Tray`，便于采用自动解析（常见安装位置 / PATH 别名）。
+- 更新 Twinkle Tray 下载链接，改为直达 Twinkle Tray 官方网站，解决部分环境下无法访问微软应用商店的问题。
+- 优化 Twinkle Tray 默认路径检测，新增对常见安装位置 `%LocalAppData%\Programs\twinkle-tray\Twinkle Tray.exe` 的自动识别支持。
 - 修复禁用逻辑：切换到“系统接口(WMI)”后立即禁用 Twinkle Tray 相关输入（无需再次点击）。
 - 缩短路径输入框宽度，避免因新增按钮导致窗口被撑宽。
 - “浏览/下载”按钮与模式联动：与其它控件一起同步禁用/启用。
