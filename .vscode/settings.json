@@ -4,7 +4,8 @@
     "python.terminal.activateEnvInCurrentTerminal": true,
     "python.terminal.useEnvFile": true,
     "terminal.integrated.accessibleViewFocusOnCommandExecution": true,
-    "accessibility.verbosity.terminal": false
+    "accessibility.verbosity.terminal": false,
+    "commentTranslate.hover.enabled": true
     // 指定虚拟环境的解释器路径（适配不同系统）
     // "python.pythonPath": "${workspaceFolder}/.venv/bin/python", // Linux/Mac
     // "python.pythonPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",  // Windows
