@@ -1,0 +1,24 @@
+{
+    "code-runner.saveAllFilesBeforeRun": true,
+    "code-runner.saveFileBeforeRun": true,
+    "python.terminal.activateEnvInCurrentTerminal": true,
+    "python.terminal.useEnvFile": true,
+    "terminal.integrated.accessibleViewFocusOnCommandExecution": true,
+    "accessibility.verbosity.terminal": false
+    // 指定虚拟环境的解释器路径（适配不同系统）
+    // "python.pythonPath": "${workspaceFolder}/.venv/bin/python", // Linux/Mac
+    // "python.pythonPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",  // Windows
+    // // 终端自动激活虚拟环境（可选）
+    // "terminal.integrated.env.linux": {
+    //     "VIRTUAL_ENV": "${workspaceFolder}/.venv",
+    //     "PATH": "${workspaceFolder}/.venv/bin:${PATH}"
+    // },
+    // "terminal.integrated.env.osx": {
+    //     "VIRTUAL_ENV": "${workspaceFolder}/.venv",
+    //     "PATH": "${workspaceFolder}/.venv/bin:${PATH}"
+    // },
+    // "terminal.integrated.env.windows": {
+    //     // "VIRTUAL_ENV": "${workspaceFolder}\\.venv",
+    //     "PATH": "${workspaceFolder}\\.venv\\Scripts;${PATH}"
+    // }
+}
