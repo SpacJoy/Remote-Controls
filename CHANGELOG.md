@@ -6,7 +6,7 @@
 
 # V3.0.2 (2025-12-20)
 
-**图标更新、Twinkle Tray 适配优化与构建链路增强**  
+**图标更新、亮度优先策略增强、Twinkle Tray 适配优化与构建链路增强**  
 Full Changelog (相对于 3.0.1): <https://github.com/SpacJoy/Remote-Controls/compare/V3.0.1...V3.0.2>
 
 ## 🎨 图标与通知
@@ -23,6 +23,19 @@ Full Changelog (相对于 3.0.1): <https://github.com/SpacJoy/Remote-Controls/co
 - 缩短路径输入框宽度，避免因新增按钮导致窗口被撑宽。
 - “浏览/下载”按钮与模式联动：与其它控件一起同步禁用/启用。
 - 收紧“浏览/下载”按钮间距：使用内嵌容器并排布局，视觉更紧凑。
+- 内置主题「屏幕亮度」新增多种控制策略，适配更多显示器与使用习惯：
+  - **WMI (仅系统接口)**：仅使用系统 WMI 接口。
+  - **Twinkle Tray (仅命令行)**：仅调用 Twinkle Tray 命令行，**不回退**到 WMI。
+  - **WMI 优先**：先尝试 WMI，失败则回退到 Twinkle Tray。
+  - **Twinkle Tray 优先**：先尝试 Twinkle Tray，失败则回退到 WMI。
+  - **同时控制**：依次执行 WMI 与 Twinkle Tray（无论 WMI 是否成功都会继续执行）。
+
+## 📝 说明文案与细节信息
+
+- 优化「详细信息」窗口的内置主题/自定义主题/提示说明文案，术语更统一，中英文表达更准确。
+- 提示说明更新：
+  - 日志收集建议由 `logs/RC.log` 调整为 `logs/*.log`，便于排查多模块日志。
+  - 配置变更提示调整：GUI 保存后需重启主程序以重新加载配置。
 
 ## 🧰 构建与发布
 

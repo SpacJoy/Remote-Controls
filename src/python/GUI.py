@@ -75,24 +75,24 @@ _ZH_TO_EN: dict[str, str] = {
     "远程控制-": "Remote Controls - ",
     "(管理员)": "(Admin)",
     "系统配置": "System Settings",
-    "MQTT认证配置": "MQTT Auth",
+    "MQTT认证配置": "MQTT Authentication",
     "主题配置": "Themes",
-    "网站：": "Broker:",
+    "网站：": "Broker Address:",
     "端口：": "Port:",
-    "认证模式：": "Auth mode:",
-    "私钥模式": "Private key",
+    "认证模式：": "Auth Mode:",
+    "私钥模式": "Secret Key",
     "账密模式": "Username/Password",
-    "test模式": "Test mode",
+    "test模式": "Test Mode",
     "通知提示": "Notifications",
     "点击打开任务计划": "Open Task Scheduler",
-    "需要管理员权限才能设置": "Admin required",
-    "开机自启/启用睡眠(休眠)功能": "Autostart / Sleep (Hibernate)",
-    "获取权限": "Request admin",
+    "需要管理员权限才能设置": "Administrator Privileges Required",
+    "开机自启/启用睡眠(休眠)功能": "Autostart / Sleep & Hibernate",
+    "获取权限": "Request Admin Rights",
     "用户名：": "Username:",
     "密码：": "Password:",
     "客户端ID：": "Client ID:",
     "启用TLS/SSL": "Use TLS/SSL",
-    "私钥模式：\n        使用客户端ID作为私钥\n账密模式：\n        兼容大多数IoT平台": "Private key:\n        Client ID is used as the secret\nUsername/Password:\n        Works with most IoT platforms",
+    "私钥模式：\n        使用客户端ID作为私钥\n账密模式：\n        兼容大多数IoT平台": "Secret Key:\n        Client ID is used as the security secret\nUsername/Password:\n        Compatible with most IoT platforms",
     "内置": "Built-in",
     "计算机": "Computer",
     "屏幕": "Screen",
@@ -121,18 +121,18 @@ _ZH_TO_EN: dict[str, str] = {
     "管理员权限": "Administrator",
     "管理员权限确认": "Administrator confirmation",
     "权限提醒": "Permission notice",
-    "UAC提权": "UAC elevation",
+    "UAC提权": "UAC Elevation",
     "检查失败": "Check failed",
     "睡眠功能状态": "Sleep status",
     "语言：": "Language:",
     "参数范围：": "Value range:",
         # 命令主题 {value} 范围
-        "value 参数范围：": "Value range:",
+        "value 参数范围：": "Parameter Range:",
     "最小：": "Min:",
     "最大：": "Max:",
     "请输入整数": "Please enter an integer",
     "参数超出范围：{lo}-{hi}": "Value out of range: {lo}-{hi}",
-    "请输入 {value} 的值（范围 {lo}-{hi}），例如 {ex}：": "Enter a value for {value} (range {lo}-{hi}), e.g. {ex}:",
+    "请输入 {value} 的值（范围 {lo}-{hi}），例如 {ex}：": "Enter a value for {value} ({lo}-{hi}), e.g. {ex}:",
 
     # 开机自启
     "设置开机自启": "Enable autostart",
@@ -1503,36 +1503,60 @@ def show_detail_window():
 
         builtin_content_zh = """
 【内置主题概览】
-屏幕：
-    灯类型；调节系统亮度 (0-100)。
+显示器亮度：
+    接口：支持 WMI (系统原生) 与 Twinkle Tray (第三方命令行) 接口。
+    功能：实现 0-100% 亮度调节，支持优先策略切换及多端同步控制。
+    策略说明：
+        - WMI (仅系统接口)：仅使用系统 WMI 接口；适用于支持 WMI 亮度的显示设备。
+        - Twinkle Tray (仅命令行)：仅调用 Twinkle Tray 命令行；不回退到 WMI。
+        - WMI 优先：先尝试 WMI；失败时再调用 Twinkle Tray。
+        - Twinkle Tray 优先：先尝试 Twinkle Tray；失败时再调用 WMI。
+        - 同时控制：依次执行 WMI 与 Twinkle Tray（不论 WMI 是否成功都会继续执行）。
 
-音量：
-    窗帘类型；调节系统总音量 (0-100)，pause=静音。
+系统音量：
+    类型：窗帘 (Curtain) 接口；调节系统全局主音量 (0-100%)。
+    控制：支持精确百分比调节，发送 pause 指令可快速切换静音。
 
-媒体控制：
-    窗帘类型；控制多媒体：
-        on=上一曲  off=下一曲  pause=播放/暂停
-        on#百分比：1-33 下一曲 / 34-66 播放暂停 / 67-100 上一曲。
+多媒体控制：
+    类型：窗帘 (Curtain) 接口；模拟多媒体按键实现播放流转：
+        打开(on)：上一曲
+        关闭(off)：下一曲
+        暂停(pause)：播放/暂停。
+        进阶：支持 on#百分比 (1-33 下一曲 / 34-66 播放暂停 / 67-100 上一曲)。
 
-睡眠主题：
-    sleep / hibernate / display_off / display_on / lock；支持 on/off 延时。
+睡眠/电源控制：
+    功能：执行系统级电源与安全操作。
+    动作：支持 睡眠(sleep) / 休眠(hibernate) / 关闭显示器(display_off) / 开启显示器(display_on) / 锁屏(lock)。
+    特性：支持为“打开”与“关闭”动作配置独立的执行延时（秒）。
 """
 
         builtin_content_en = """
 【Built-in Themes Overview】
-Screen:
-    Light-type; adjust system brightness (0-100).
+Monitor Brightness:
+    Interfaces: Supports WMI (Native) and Twinkle Tray (Third-party CLI).
+    Features: 0-100% brightness adjustment with priority strategies and multi-monitor sync.
+    Strategy Notes:
+        - WMI (Native API): Uses WMI only; suitable for devices that support WMI brightness.
+        - Twinkle Tray (CLI): Uses Twinkle Tray CLI only; no fallback to WMI.
+        - WMI Priority: Try WMI first; fall back to Twinkle Tray on failure.
+        - Twinkle Tray Priority: Try Twinkle Tray first; fall back to WMI on failure.
+        - Both: Run WMI and Twinkle Tray sequentially (Twinkle Tray runs regardless of WMI result).
 
-Volume:
-    Curtain-type; adjust system master volume (0-100); pause = mute.
+System Volume:
+    Type: Curtain interface; adjust system-wide master volume (0-100%).
+    Control: Precise percentage adjustment; 'pause' command toggles mute status.
 
-Media:
-    Curtain-type; multimedia control:
-        on=Previous  off=Next  pause=Play/Pause
-        on#percent: 1-33 Next / 34-66 Play/Pause / 67-100 Previous.
+Media Control:
+    Type: Curtain interface; simulates multimedia keys for playback:
+        On: Previous
+        Off: Next
+        Pause: Play/Pause.
+        Advanced: Supports on#percent (1-33 Next / 34-66 Play/Pause / 67-100 Previous).
 
-Sleep:
-    sleep / hibernate / display_off / display_on / lock; supports On/Off delay.
+Sleep/Power Control:
+    Function: Perform system-level power and security actions.
+    Actions: sleep / hibernate / display_off / display_on / lock.
+    Features: Supports independent action delay (seconds) for both On and Off triggers.
 """
 
         custom_content_zh = """
@@ -1558,57 +1582,57 @@ Sleep:
         custom_content_en = """
 【Custom Theme Types】
 Program/Script:
-    On supports selecting EXE/.py/.ps1/.bat/.cmd etc; interpreters may be auto-completed when needed.
-    Off can use presets (Force kill/Ignore) or a custom script. When switching to Custom, you can pick a separate file.
+    Supports execution of EXE, .py, .ps1, .bat, and .cmd files. Interpreters are automatically detected and configured.
+    Off Trigger: Choose from presets (Force Kill, Ignore) or define a custom script. A separate file can be specified for the shutdown action.
 
-Service (admin):
-    Enter a Windows service name. On starts it; Off preset defaults to Stop service (can be Ignore or Custom command).
-    Running main/tray as admin may be required; the UI will warn if permissions are insufficient.
+Windows Service:
+    Provide the exact service name. The 'On' action starts the service, while the 'Off' action stops it by default (customizable to Ignore or a custom command).
+    Admin Rights: Management of services requires administrative privileges. The application will notify you if elevation is needed.
 
-Command:
-    On is a PowerShell snippet; you can click the test button at any time.
-    Supports on#number (default 0-100; configurable via commandN_value_min/commandN_value_max in config.json). Use the {value} placeholder in your command.
-    Off preset defaults to Interrupt (CTRL+BREAK); you can change it to Force kill or Custom and test separately.
+PowerShell Command:
+    The 'On' trigger executes a PowerShell snippet. Use the 'Test' button to verify your script instantly.
+    Parameterized Commands: Supports 'on#number' syntax (default range 0-100). Use the {value} placeholder within your command to dynamically inject parameters.
+    Off Preset: Defaults to 'Interrupt' (CTRL+BREAK). Can be reconfigured to 'Force Kill' or a custom script.
 
-Hotkey:
-    Supports ctrl/alt/shift/win combos; supports {down}/{up} suffixes.
-    Char-by-char sending can be delayed (>=0); saving may warn about non-ASCII risks.
+Keyboard Shortcuts:
+    Supports standard modifier combinations (Ctrl, Alt, Shift, Win) and specific key states using {down} or {up} suffixes.
+    Sequential Typing: Configure delays (ms) between characters. Note: Using non-ASCII characters may trigger a warning.
 """
 
         tips_content_zh = """
 【使用与提示】
-日志：
-    issues 时附 logs/RC.log 便于排查。
+日志记录：
+    如遇问题，请提供 logs/*.log 文件以便排错。
 
-更新：
-    版本托盘菜单可手动检查；未知版本显示为 'V未知版本' 并提示升级。
+版本更新：
+    可通过托盘菜单手动检查更新。未知版本将显示为 'V未知版本' 并提示升级。
 
-权限：
-    部分功能（服务/亮度/计划任务）需管理员；不足时界面会提示。
+权限说明：
+    部分功能（如服务管理、亮度调节、计划任务）需要管理员权限。
 
-配置：
-    GUI 保存后主程序自动读取；残留互斥体会自动忽略并继续。
+配置同步：
+    在 GUI 保存后，主程序需要重启来重新加载配置。
 
-多实例：
-    主程序具互斥 + 进程确认；脚本模式可选择结束/忽略/退出。
+实例管理：
+    主程序使用互斥体防止多开。在脚本模式下，可配置对已有进程的处理方式（结束/忽略/退出）。
 """
 
         tips_content_en = """
 【Usage & Tips】
-Logs:
-    When reporting issues, attach logs/RC.log for troubleshooting.
+Logging:
+    For troubleshooting and issue reporting, please provide the log files under 'logs/*.log'.
 
 Updates:
-    You can manually check updates from the tray menu. Unknown versions show as 'VUnknown' with an upgrade prompt.
+    Check for the latest version manually via the system tray menu. If the version is unrecognized, an upgrade prompt will be displayed.
 
-Permissions:
-    Some features (Service/Brightness/Scheduled tasks) require admin; the UI will warn if missing.
+Privileges:
+    Certain features such as Service Management, Brightness Control, and Task Scheduling require Administrator access.
 
-Config:
-    After saving in the GUI, the main program reads it automatically; leftover mutexes are ignored and it continues.
+Configuration:
+    After saving settings in the GUI, restart the main application to reload the configuration.
 
-Multiple instances:
-    The main program uses a mutex and process check; script mode can choose Kill/Ignore/Exit.
+Instance Management:
+    The application uses mutexes to prevent multiple instances. In script mode, you can configure the behavior to Kill, Ignore, or Exit.
 """
 
         _detail_entries: list[dict] = []
