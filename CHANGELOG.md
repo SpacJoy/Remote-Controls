@@ -4,7 +4,7 @@
 
 ---
 
-# V3.0.2 (2025-12-20)
+# V3.0.2 (2025-12-27)
 
 **图标更新、亮度优先策略增强、Twinkle Tray 适配优化与构建链路增强**  
 Full Changelog (相对于 3.0.1): <https://github.com/SpacJoy/Remote-Controls/compare/V3.0.1...V3.0.2>
