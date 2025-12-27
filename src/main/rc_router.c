@@ -1464,6 +1464,62 @@ static bool topic_eq(const char *a, const char *b)
     return strcmp(a, b) == 0;
 }
 
+static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8, const char *payloadUtf8)
+{
+    const char *mode = cfg_str(r->config, "brightness_mode");
+    int v = (value < 0) ? 0 : (value > 100 ? 100 : value);
+
+    if (!mode || _stricmp(mode, "wmi") == 0)
+    {
+        RC_ActionSetBrightnessPercent(v);
+    }
+    else if (_stricmp(mode, "twinkle_tray") == 0)
+    {
+        const char *path = cfg_str(r->config, "twinkle_tray_path");
+        const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
+        const char *tval = cfg_str(r->config, "twinkle_tray_target_value");
+        bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
+        bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
+        RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, path, tmode, tval, overlay, panel);
+    }
+    else if (_stricmp(mode, "wmi_priority") == 0)
+    {
+        if (!RC_ActionSetBrightnessPercent(v))
+        {
+            const char *path = cfg_str(r->config, "twinkle_tray_path");
+            const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
+            const char *tval = cfg_str(r->config, "twinkle_tray_target_value");
+            bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
+            bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
+            RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, path, tmode, tval, overlay, panel);
+        }
+    }
+    else if (_stricmp(mode, "twinkle_priority") == 0)
+    {
+        const char *path = cfg_str(r->config, "twinkle_tray_path");
+        const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
+        const char *tval = cfg_str(r->config, "twinkle_tray_target_value");
+        bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
+        bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
+        if (!RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, path, tmode, tval, overlay, panel))
+        {
+            RC_ActionSetBrightnessPercent(v);
+        }
+    }
+    else if (_stricmp(mode, "both") == 0)
+    {
+        RC_ActionSetBrightnessPercent(v);
+        const char *path = cfg_str(r->config, "twinkle_tray_path");
+        const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
+        const char *tval = cfg_str(r->config, "twinkle_tray_target_value");
+        bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
+        bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
+        RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, path, tmode, tval, overlay, panel);
+    }
+
+    router_notify_action(r, topicUtf8, payloadUtf8);
+}
+
 void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf8)
 {
     // RouterHandle：根据 topic 与 payload 分发动作。
@@ -1788,25 +1844,9 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
 
     if (r->checkedScreen && r->topicScreen && topic_eq(topicUtf8, r->topicScreen))
     {
-        const char *mode = cfg_str(r->config, "brightness_mode");
-
         if (_stricmp(base, "off") == 0)
         {
-            if (mode && _stricmp(mode, "twinkle_tray") == 0)
-            {
-                const char *path = cfg_str(r->config, "twinkle_tray_path");
-                const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
-                const char *tval = cfg_str(r->config, "twinkle_tray_target_value");
-                bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
-                bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
-                if (RC_ActionSetBrightnessTwinkleTrayPercentUtf8(0, path, tmode, tval, overlay, panel))
-                {
-                    router_notify_action(r, topicUtf8, payloadUtf8);
-                    return;
-                }
-                RC_LogWarn("Twinkle Tray 亮度调整失败；回退到 DDC/CI");
-            }
-            RC_ActionSetBrightnessPercent(0);
+            _do_brightness_action(r, 0, topicUtf8, payloadUtf8);
         }
         else if (_stricmp(base, "on") == 0)
         {
@@ -1817,48 +1857,16 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                     RC_LogWarn("亮度百分比超出范围 0-100：%d (topic=%s)", value, r->topicScreen);
                     return;
                 }
-
-                if (mode && _stricmp(mode, "twinkle_tray") == 0)
-                {
-                    const char *path = cfg_str(r->config, "twinkle_tray_path");
-                    const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
-                    const char *tval = cfg_str(r->config, "twinkle_tray_target_value");
-                    bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
-                    bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
-                    if (RC_ActionSetBrightnessTwinkleTrayPercentUtf8(value, path, tmode, tval, overlay, panel))
-                    {
-                        router_notify_action(r, topicUtf8, payloadUtf8);
-                        return;
-                    }
-                    RC_LogWarn("Twinkle Tray 亮度调整失败；回退到 DDC/CI");
-                }
-
-                RC_ActionSetBrightnessPercent(value);
+                _do_brightness_action(r, value, topicUtf8, payloadUtf8);
             }
             else
             {
-                if (mode && _stricmp(mode, "twinkle_tray") == 0)
-                {
-                    const char *path = cfg_str(r->config, "twinkle_tray_path");
-                    const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
-                    const char *tval = cfg_str(r->config, "twinkle_tray_target_value");
-                    bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
-                    bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
-                    if (RC_ActionSetBrightnessTwinkleTrayPercentUtf8(100, path, tmode, tval, overlay, panel))
-                    {
-                        router_notify_action(r, topicUtf8, payloadUtf8);
-                        return;
-                    }
-                    RC_LogWarn("Twinkle Tray 亮度调整失败；回退到 DDC/CI");
-                }
-
-                RC_ActionSetBrightnessPercent(100);
+                _do_brightness_action(r, 100, topicUtf8, payloadUtf8);
             }
         }
         else
             RC_LogWarn("未知屏幕指令：%s", payloadUtf8);
 
-        router_notify_action(r, topicUtf8, payloadUtf8);
         return;
     }
 

@@ -208,31 +208,34 @@ _ZH_TO_EN: dict[str, str] = {
     "删除": "Delete",
 
     # 内置主题设置窗口
-    "内置主题设置": "Built-in settings",
-    "计算机(Computer) 主题动作": "Computer theme actions",
-    "延时(秒)：": "Delay (s):",
-    "提示：计算机主题延时仅对关机/重启有效，其它动作忽略延时。": "Note: Computer delays only apply to shutdown/restart.",
-    "屏幕亮度控制方案": "Brightness control",
-    "控制方式：": "Mode:",
-    "系统接口(WMI)": "System (WMI)",
-    "Twinkle Tray (命令行)": "Twinkle Tray (CLI)",
-    "显示叠加层(Overlay)": "Show overlay",
-    "Twinkle Tray 路径：": "Twinkle Tray path:",
+    "内置主题设置": "Built-in Theme Settings",
+    "系统 (Computer) 控制": "System (Computer) Control",
+    "动作延时 (秒)：": "Action Delay (s):",
+    "提示：延时仅在执行关机或重启时生效，其它动作将立即执行。": "Note: Delay only applies to shutdown/restart, other actions execute immediately.",
+    "显示器亮度调节方案": "Monitor Brightness Control",
+    "控制接口：": "Control Interface:",
+    "WMI (仅系统接口)": "WMI (System Only)",
+    "Twinkle Tray (仅命令行)": "Twinkle Tray (CLI Only)",
+    "WMI 优先 (失败则使用 Twinkle Tray)": "WMI Priority (Fallback to Twinkle Tray)",
+    "Twinkle Tray 优先 (失败则使用 WMI)": "Twinkle Tray Priority (Fallback to WMI)",
+    "同时控制 (WMI 和 Twinkle Tray)": "Simultaneous (WMI & Twinkle Tray)",
+    "显示亮度叠加层(Overlay)": "Show Brightness Overlay",
+    "Twinkle Tray 路径：": "Twinkle Tray Path:",
     "选择 Twinkle Tray 可执行文件": "Select Twinkle Tray executable",
     "可执行文件": "Executable",
     "所有文件": "All files",
     "浏览": "Browse",
-    "目标显示器：": "Target monitor:",
-    "按编号(MonitorNum)": "By number (MonitorNum)",
-    "按ID(MonitorID)": "By ID (MonitorID)",
-    "全部显示器(All)": "All monitors",
-    "睡眠(sleep) 主题动作": "Sleep theme actions",
-    "提示：睡眠主题延时将在执行动作前等待指定秒数。": "Note: Sleep delays wait before executing.",
-    "系统睡眠功能开关：": "System sleep toggle:",
-    "注：需要管理员权限": "Note: admin required",
-    " 启用 睡眠(休眠)功能": "Enable sleep/hibernate",
-    " 关闭 睡眠(休眠)功能": "Disable sleep/hibernate",
-    "检查睡眠功能状态": "Check sleep status",
+    "目标显示器：": "Target Monitor:",
+    "按编号 (MonitorNum)": "By Number (MonitorNum)",
+    "按 ID (MonitorID)": "By ID (MonitorID)",
+    "全部显示器 (All)": "All Monitors (All)",
+    "睡眠/电源 (Sleep) 动作": "Sleep/Power (Sleep) Actions",
+    "提示：动作将在等待指定的延时秒数后执行。": "Note: Action will be performed after the specified delay.",
+    "系统休眠/睡眠功能开关：": "System Sleep/Hibernate Toggle:",
+    "注：此操作需要管理员权限": "Note: Admin privileges required",
+    " 启用 系统睡眠/休眠功能": " Enable System Sleep/Hibernate",
+    " 关闭 系统睡眠/休眠功能": " Disable System Sleep/Hibernate",
+    "检查功能可用性状态": "Check Availability Status",
 
     # 其它提示/弹窗
     "确定？": "Confirm?",
@@ -240,7 +243,15 @@ _ZH_TO_EN: dict[str, str] = {
     "请先选择一个自定义主题": "Please select a custom theme first.",
     "确认删除": "Confirm delete",
     "确定要删除这个自定义主题吗？": "Delete this custom theme?",
-    "确认包含中文字符": "Confirm non-ASCII",
+    "确认启用？": "Confirm Enable?",
+    "确认关闭": "Confirm Disable",
+    "睡眠功能状态": "Sleep/Power Status",
+    "检查失败": "Check Failed",
+    "休眠/睡眠状态：{status_text}\n\n详细信息：\n{output.strip()}": "Sleep/Hibernate Status: {status_text}\n\nDetails:\n{output.strip()}",
+    "休眠/睡眠功能已启用": "Sleep/Hibernate functions enabled",
+    "休眠/睡眠功能已关闭": "Sleep/Hibernate functions disabled",
+    "需要管理员权限才能启用休眠/睡眠功能": "Admin privileges required to enable Sleep/Hibernate",
+    "需要管理员权限才能关闭休眠/睡眠功能": "Admin privileges required to disable Sleep/Hibernate",
 
     # 动作/选项通用
     "不执行": "None",
@@ -3421,6 +3432,13 @@ def check_brightness_support():
             brightness_status_message = "Twinkle Tray 模式：未找到可执行文件，请在“更多”中设置路径或安装应用。"
         return
 
+    if mode == "wmi_priority":
+        brightness_status_message = "WMI 优先模式：优先 WMI，失败则回退 Twinkle Tray。"
+    elif mode == "twinkle_priority":
+        brightness_status_message = "Twinkle Tray 优先模式：优先 Twinkle Tray，失败则回退 WMI。"
+    elif mode == "both":
+        brightness_status_message = "同时控制模式：WMI 和 Twinkle Tray 将同时执行。"
+
     if not ("config" in globals() and config.get("test", 0) == 1):
         try:
             import wmi
@@ -3925,49 +3943,52 @@ def open_builtin_settings():
     cur_off_delay = int(config.get("computer_off_delay", 0) or 0)
 
     row_i = 0
-    ttk.Label(win, text="计算机(Computer) 主题动作").grid(row=row_i, column=0, columnspan=3, padx=10, pady=(10, 6), sticky="w")
+    ttk.Label(win, text=t("系统 (Computer) 控制")).grid(row=row_i, column=0, columnspan=3, padx=10, pady=(10, 6), sticky="w")
     row_i += 1
 
-    ttk.Label(win, text="打开(on)：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(win, text=t("打开(on)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     on_key_var = tk.StringVar(value=cur_on)
     on_var = tk.StringVar(value=_action_label_by_key(cur_on, "lock"))
     on_combo = ttk.Combobox(win, values=_action_labels(), textvariable=on_var, state="readonly", width=18)
     on_combo.bind("<<ComboboxSelected>>", lambda e: on_key_var.set(_action_key_by_label(on_var.get())))
     on_combo.grid(row=row_i, column=1, sticky="w")
-    ttk.Label(win, text="延时(秒)：").grid(row=row_i, column=2, sticky="e", padx=8)
+    ttk.Label(win, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
     on_delay_var = tk.StringVar(value=str(cur_on_delay))
     on_delay_entry = ttk.Entry(win, textvariable=on_delay_var, width=8)
     on_delay_entry.grid(row=row_i, column=3, sticky="w")
     row_i += 1
 
-    ttk.Label(win, text="关闭(off)：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(win, text=t("关闭(off)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     off_key_var = tk.StringVar(value=cur_off)
     off_var = tk.StringVar(value=_action_label_by_key(cur_off, "restart"))
     off_combo = ttk.Combobox(win, values=_action_labels(), textvariable=off_var, state="readonly", width=18)
     off_combo.bind("<<ComboboxSelected>>", lambda e: off_key_var.set(_action_key_by_label(off_var.get())))
     off_combo.grid(row=row_i, column=1, sticky="w")
-    ttk.Label(win, text="延时(秒)：").grid(row=row_i, column=2, sticky="e", padx=8)
+    ttk.Label(win, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
     off_delay_var = tk.StringVar(value=str(cur_off_delay))
     off_delay_entry = ttk.Entry(win, textvariable=off_delay_var, width=8)
     off_delay_entry.grid(row=row_i, column=3, sticky="w")
     row_i += 1
 
-    tip = ttk.Label(win, text="提示：计算机主题延时仅对关机/重启有效，其它动作忽略延时。")
+    tip = ttk.Label(win, text=t("提示：延时仅在执行关机或重启时生效，其它动作将立即执行。"))
     tip.grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
     row_i += 1
 
     # 亮度控制方案
-    ttk.Label(win, text="屏幕亮度控制方案").grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
+    ttk.Label(win, text=t("显示器亮度调节方案")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
     row_i += 1
 
     brightness_modes = [
-        ("wmi", "系统接口(WMI)"),
-        ("twinkle_tray", "Twinkle Tray (命令行)")
+        ("wmi", "WMI (仅系统接口)"),
+        ("twinkle_tray", "Twinkle Tray (仅命令行)"),
+        ("wmi_priority", "WMI 优先 (失败则使用 Twinkle Tray)"),
+        ("twinkle_priority", "Twinkle Tray 优先 (失败则使用 WMI)"),
+        ("both", "同时控制 (WMI 和 Twinkle Tray)")
     ]
     bm_key_to_label_zh = {k: v for k, v in brightness_modes}
     cur_bm_key = config.get("brightness_mode", "wmi")
     bm_key_var = tk.StringVar(value=cur_bm_key)
-    brightness_mode_var = tk.StringVar(value=t(bm_key_to_label_zh.get(cur_bm_key, "系统接口(WMI)")))
+    brightness_mode_var = tk.StringVar(value=t(bm_key_to_label_zh.get(cur_bm_key, "WMI (仅系统接口)")))
 
     def _bm_labels() -> list[str]:
         return [t(label) for _, label in brightness_modes]
@@ -3977,9 +3998,9 @@ def open_builtin_settings():
         return m.get(label, "wmi")
 
     def _bm_label_by_key(key: str) -> str:
-        return t(bm_key_to_label_zh.get(key, "系统接口(WMI)"))
+        return t(bm_key_to_label_zh.get(key, "WMI (仅系统接口)"))
 
-    ttk.Label(win, text="控制方式：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(win, text=t("控制接口：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     brightness_mode_combo = ttk.Combobox(win, values=_bm_labels(), textvariable=brightness_mode_var, state="readonly", width=22)
     brightness_mode_combo.bind(
         "<<ComboboxSelected>>",
@@ -3988,11 +4009,11 @@ def open_builtin_settings():
     brightness_mode_combo.grid(row=row_i, column=1, sticky="w")
 
     twinkle_overlay_var = tk.IntVar(value=int(config.get("twinkle_tray_overlay", 1) or 0))
-    overlay_cb = ttk.Checkbutton(win, text="显示叠加层(Overlay)", variable=twinkle_overlay_var)
+    overlay_cb = ttk.Checkbutton(win, text=t("显示亮度叠加层(Overlay)"), variable=twinkle_overlay_var)
     overlay_cb.grid(row=row_i, column=2, columnspan=2, sticky="w")
     row_i += 1
 
-    ttk.Label(win, text="Twinkle Tray 路径：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(win, text=t("Twinkle Tray 路径：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     default_twinkle_path = r"%LocalAppData%\Programs\twinkle-tray\Twinkle Tray.exe"
     twinkle_path_var = tk.StringVar(value=(config.get("twinkle_tray_path", "") or default_twinkle_path))
     twinkle_path_entry = ttk.Entry(win, textvariable=twinkle_path_var, width=24)
@@ -4010,7 +4031,7 @@ def open_builtin_settings():
             messagebox.showerror(t("错误"), t(f"选择文件失败: {e}"))
     btns_frame = ttk.Frame(win)
     btns_frame.grid(row=row_i, column=2, columnspan=2, sticky="w", padx=6)
-    browse_btn = ttk.Button(btns_frame, text="浏览", command=browse_twinkle_path)
+    browse_btn = ttk.Button(btns_frame, text=t("浏览"), command=browse_twinkle_path)
     browse_btn.grid(row=0, column=0, sticky="w")
     def open_twinkle_store():
         try:
@@ -4018,19 +4039,19 @@ def open_builtin_settings():
             webbrowser.open("https://twinkletray.com/")
         except Exception as e:
             messagebox.showerror(t("错误"), t(f"打开下载链接失败: {e}"))
-    download_btn = ttk.Button(btns_frame, text="下载", command=open_twinkle_store)
+    download_btn = ttk.Button(btns_frame, text=t("下载"), command=open_twinkle_store)
     download_btn.grid(row=0, column=1, sticky="w", padx=(6, 0))
     row_i += 1
 
-    ttk.Label(win, text="目标显示器：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(win, text=t("目标显示器：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     target_modes = [
-        ("monitor_num", "按编号(MonitorNum)"),
-        ("monitor_id", "按ID(MonitorID)"),
-        ("all", "全部显示器(All)")
+        ("monitor_num", "按编号 (MonitorNum)"),
+        ("monitor_id", "按 ID (MonitorID)"),
+        ("all", "全部显示器 (All)")
     ]
     tm_key_to_label_zh = {k: v for k, v in target_modes}
     tm_key_var = tk.StringVar(value=str(config.get("twinkle_tray_target_mode", "monitor_num") or "monitor_num"))
-    twinkle_target_mode_var = tk.StringVar(value=t(tm_key_to_label_zh.get(tm_key_var.get(), "按编号(MonitorNum)")))
+    twinkle_target_mode_var = tk.StringVar(value=t(tm_key_to_label_zh.get(tm_key_var.get(), "按编号 (MonitorNum)")))
     twinkle_target_value_var = tk.StringVar(value=str(config.get("twinkle_tray_target_value", "1") or ""))
 
     def _tm_labels() -> list[str]:
@@ -4056,7 +4077,7 @@ def open_builtin_settings():
 
     def _toggle_twinkle_fields(*_args):
         mode_key = _bm_key_by_label(brightness_mode_var.get()) or "wmi"
-        use_twinkle = mode_key == "twinkle_tray"
+        use_twinkle = mode_key in ("twinkle_tray", "wmi_priority", "twinkle_priority", "both")
         state = "normal" if use_twinkle else "disabled"
         for w in (twinkle_path_entry, twinkle_target_mode_combo, twinkle_target_entry, overlay_cb, browse_btn, download_btn):
             try:
@@ -4126,32 +4147,32 @@ def open_builtin_settings():
     s_cur_on_delay = int(config.get("sleep_on_delay", 0) or 0)
     s_cur_off_delay = int(config.get("sleep_off_delay", 0) or 0)
 
-    ttk.Label(win, text="睡眠(sleep) 主题动作").grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
+    ttk.Label(win, text=t("睡眠/电源 (Sleep) 动作")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
     row_i += 1
 
-    ttk.Label(win, text="打开(on)：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(win, text=t("打开(on)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     s_on_key_var = tk.StringVar(value=s_cur_on)
     s_on_var = tk.StringVar(value=_s_on_label_by_key(s_cur_on))
     s_on_combo = ttk.Combobox(win, values=_s_on_labels(), textvariable=s_on_var, state="readonly", width=18)
     s_on_combo.grid(row=row_i, column=1, sticky="w")
     s_on_combo.bind("<<ComboboxSelected>>", lambda e: s_on_key_var.set(_s_on_key_by_label(s_on_var.get())))
-    ttk.Label(win, text="延时(秒)：").grid(row=row_i, column=2, sticky="e", padx=8)
+    ttk.Label(win, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
     s_on_delay_var = tk.StringVar(value=str(s_cur_on_delay))
     ttk.Entry(win, textvariable=s_on_delay_var, width=8).grid(row=row_i, column=3, sticky="w")
     row_i += 1
 
-    ttk.Label(win, text="关闭(off)：").grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(win, text=t("关闭(off)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     s_off_key_var = tk.StringVar(value=s_cur_off)
     s_off_var = tk.StringVar(value=_s_off_label_by_key(s_cur_off))
     s_off_combo = ttk.Combobox(win, values=_s_off_labels(), textvariable=s_off_var, state="readonly", width=18)
     s_off_combo.grid(row=row_i, column=1, sticky="w")
     s_off_combo.bind("<<ComboboxSelected>>", lambda e: s_off_key_var.set(_s_off_key_by_label(s_off_var.get())))
-    ttk.Label(win, text="延时(秒)：").grid(row=row_i, column=2, sticky="e", padx=8)
+    ttk.Label(win, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
     s_off_delay_var = tk.StringVar(value=str(s_cur_off_delay))
     ttk.Entry(win, textvariable=s_off_delay_var, width=8).grid(row=row_i, column=3, sticky="w")
     row_i += 1
 
-    ttk.Label(win, text="提示：睡眠主题延时将在执行动作前等待指定秒数。").grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
+    ttk.Label(win, text=t("提示：动作将在等待指定的延时秒数后执行。")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
     row_i += 1
 
     # 分隔线（睡眠动作 与 睡眠功能开关）
@@ -4161,11 +4182,11 @@ def open_builtin_settings():
     # 睡眠支持操作：将启用/关闭睡眠功能搬到“更多”中
     op_frame = ttk.Frame(win)
     op_frame.grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 10), sticky="w")
-    ttk.Label(op_frame, text="系统睡眠功能开关：").grid(row=0, column=0, sticky="w")
-    ttk.Label(op_frame, text="注：需要管理员权限").grid(row=0, column=1, sticky="n")
-    ttk.Button(op_frame, text=" 启用 睡眠(休眠)功能", command=enable_sleep_window).grid(row=1, column=0, padx=(0, 8))
-    ttk.Button(op_frame, text=" 关闭 睡眠(休眠)功能", command=disable_sleep_window).grid(row=1, column=1, padx=(0, 8))
-    ttk.Button(op_frame, text="检查睡眠功能状态", command=check_sleep_status_window).grid(row=1, column=2, padx=(0, 8))
+    ttk.Label(op_frame, text=t("系统休眠/睡眠功能开关：")).grid(row=0, column=0, sticky="w")
+    ttk.Label(op_frame, text=t("注：此操作需要管理员权限")).grid(row=0, column=1, sticky="n")
+    ttk.Button(op_frame, text=t(" 启用 系统睡眠/休眠功能"), command=enable_sleep_window).grid(row=1, column=0, padx=(0, 8))
+    ttk.Button(op_frame, text=t(" 关闭 系统睡眠/休眠功能"), command=disable_sleep_window).grid(row=1, column=1, padx=(0, 8))
+    ttk.Button(op_frame, text=t("检查功能可用性状态"), command=check_sleep_status_window).grid(row=1, column=2, padx=(0, 8))
     row_i += 1
 
     # 分隔线
