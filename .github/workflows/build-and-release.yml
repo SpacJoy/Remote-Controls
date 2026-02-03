@@ -37,7 +37,154 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+    prepare:
+        runs-on: windows-latest
+        outputs:
+            version: ${{ steps.version.outputs.version }}
+            tag_name: ${{ steps.version.outputs.tag_name }}
+            is_tag_push: ${{ steps.version.outputs.is_tag_push }}
+            is_test_tag: ${{ steps.version.outputs.is_test_tag }}
+            skip_job: ${{ steps.version.outputs.skip_job }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4.2.2
+              with:
+                  fetch-depth: 0
+
+            - name: Extract version from tag or input
+              id: version
+              shell: pwsh
+              env:
+                  PYTHONIOENCODING: utf-8
+                  PYTHONUTF8: 1
+              run: |
+                  # 设置PowerShell输出编码为UTF-8
+                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+
+                  function Resolve-VersionFromTagName {
+                    param([Parameter(Mandatory = $true)][string]$TagName)
+
+                    $raw = ($TagName -replace '^V', '')
+                    $isTest = $false
+                    $buildVersion = $raw
+
+                    # 支持 tag 形式：V3.0.0-test / V3.0.0-test1 / V3.0.0.8-test2
+                    if ($raw -match '^(?<base>\d+\.\d+\.\d+(?:\.\d+)?)-test\d*$') {
+                      $buildVersion = $matches.base
+                      $isTest = $true
+                    }
+
+                    # 版本号必须是纯数字点分段（update_version.py 需要）
+                    if ($buildVersion -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
+                      throw "错误：版本号格式不正确: $raw（构建版本解析为: $buildVersion）。正确格式: X.Y.Z 或 X.Y.Z.B；测试 tag 允许追加 -test 或 -testN（例如 V3.0.2-test1）。"
+                    }
+
+                    return [pscustomobject]@{
+                      Raw = $raw
+                      Build = $buildVersion
+                      IsTest = $isTest
+                    }
+                  }
+
+                  $tagName = ""
+                  $isTagPush = $false
+                  $skipJob = "false"
+                  $resolved = $null
+
+                  if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref_type }}" -eq "tag") {
+                    $tagName = "${{ github.ref_name }}"
+                    $isTagPush = $true
+                    
+                    # 需求 2：如果 dev 分支推送的标签不带 test，则强制加上
+                    $onDev = $false
+                    try {
+                      $branches = git branch -r --contains ${{ github.sha }}
+                      if ($branches -match 'origin/dev') {
+                        $onDev = $true
+                      }
+                    } catch {
+                      echo "无法确定分支信息"
+                    }
+
+                    if ($onDev -and ($tagName -notmatch '-test')) {
+                      $tagName = "$tagName-test"
+                      echo "检测到在 dev 分支推送了正式标签，强制追加 -test 后缀: $tagName"
+                    }
+
+                    $resolved = Resolve-VersionFromTagName -TagName $tagName
+                  } elseif ("${{ github.event_name }}" -eq "workflow_dispatch") {
+                    $input = "${{ github.event.inputs.version }}"
+                    if ($input -match '^V') { $tagName = $input } else { $tagName = "V$input" }
+                    $isTagPush = $false
+                    $resolved = Resolve-VersionFromTagName -TagName $tagName
+                  } else {
+                    $tagName = "Build-${{ github.ref_name }}"
+                    $isTagPush = $false
+                    
+                    # 需求 1：如果当前 commit 已有版本标签，则跳过 dev 分支触发的构建
+                    if ("${{ github.ref_name }}" -eq "dev") {
+                      $tags = git tag --points-at HEAD
+                      if ($tags -match 'V\d+') {
+                        echo "检测到当前 commit 已有版本标签 ($tags)，跳过 dev 分支触发的构建以避免重复"
+                        $skipJob = "true"
+                      }
+                    }
+
+                    $buildVersion = "0.0.0"
+                    if ("${{ github.ref_name }}" -eq "dev" -and $skipJob -eq "false") {
+                      # 获取最新标签作为基准
+                      $latestTag = ""
+                      try {
+                        $latestTag = git tag --sort=-v:refname | Select-Object -First 1
+                      } catch {
+                        $latestTag = ""
+                      }
+
+                      if ($latestTag) {
+                        # 去掉 V 前缀和 -test 等后缀
+                        $baseVersion = ($latestTag -replace '^V', '') -replace '-.*$', ''
+                        $parts = $baseVersion.Split('.')
+                        if ($parts.Length -eq 3) {
+                          # 1.0.0 -> 1.0.0.1
+                          $buildVersion = "$($parts[0]).$($parts[1]).$($parts[2]).1"
+                        } elseif ($parts.Length -ge 4) {
+                          # 1.0.0.1 -> 1.0.0.2
+                          $lastPart = [int]$parts[3] + 1
+                          $buildVersion = "$($parts[0]).$($parts[1]).$($parts[2]).$lastPart"
+                        } else {
+                          $buildVersion = "1.0.0.1"
+                        }
+                      } else {
+                        $buildVersion = "1.0.0.1"
+                      }
+                      echo "检测到 dev 分支推送，自动根据最新标签 ($latestTag) 递增版本号为: $buildVersion"
+                    }
+
+                    $resolved = [pscustomobject]@{
+                      Raw = $tagName
+                      Build = $buildVersion
+                      IsTest = $true
+                    }
+                    if ($skipJob -eq "false") {
+                      echo "检测到分支推送 (${{ github.ref_name }})，执行构建测试而不发布"
+                    }
+                  }
+
+                  echo "version=$($resolved.Build)" >> $env:GITHUB_OUTPUT
+                  echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
+                  echo "is_tag_push=$($isTagPush.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+                  echo "is_test_tag=$($resolved.IsTest.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+                  echo "skip_job=$skipJob" >> $env:GITHUB_OUTPUT
+
+                  echo "构建版本: $($resolved.Build)"
+                  echo "标签名称: $tagName"
+                  echo "是否测试标签: $($resolved.IsTest)"
+                  echo "是否跳过任务: $skipJob"
+
     build-and-release:
+        needs: prepare
+        if: needs.prepare.outputs.skip_job != 'true'
         timeout-minutes: 10
         runs-on: windows-latest
         permissions:
@@ -89,106 +236,6 @@ jobs:
                 Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -OutFile "is.exe"
                 Start-Process -FilePath "is.exe" -ArgumentList "/VERYSILENT /NORESTART" -Wait
               shell: pwsh
-
-            - name: Extract version from tag or input
-              id: version
-              shell: pwsh
-              env:
-                  PYTHONIOENCODING: utf-8
-                  PYTHONUTF8: 1
-              run: |
-                  # 设置PowerShell输出编码为UTF-8
-                  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-                  $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-
-                  function Resolve-VersionFromTagName {
-                    param([Parameter(Mandatory = $true)][string]$TagName)
-
-                    $raw = ($TagName -replace '^V', '')
-                    $isTest = $false
-                    $buildVersion = $raw
-
-                    # 支持 tag 形式：V3.0.0-test / V3.0.0-test1 / V3.0.0.8-test2
-                    if ($raw -match '^(?<base>\d+\.\d+\.\d+(?:\.\d+)?)-test\d*$') {
-                      $buildVersion = $matches.base
-                      $isTest = $true
-                    }
-
-                    # 版本号必须是纯数字点分段（update_version.py 需要）
-                    if ($buildVersion -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
-                      throw "错误：版本号格式不正确: $raw（构建版本解析为: $buildVersion）。正确格式: X.Y.Z 或 X.Y.Z.B；测试 tag 允许追加 -test 或 -testN（例如 V3.0.2-test1）。"
-                    }
-
-                    return [pscustomobject]@{
-                      Raw = $raw
-                      Build = $buildVersion
-                      IsTest = $isTest
-                    }
-                  }
-
-                  $tagName = ""
-                  $isTagPush = $false
-                  $resolved = $null
-
-                  if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref_type }}" -eq "tag") {
-                    $tagName = "${{ github.ref_name }}"
-                    $isTagPush = $true
-                    $resolved = Resolve-VersionFromTagName -TagName $tagName
-                  } elseif ("${{ github.event_name }}" -eq "workflow_dispatch") {
-                    $input = "${{ github.event.inputs.version }}"
-                    if ($input -match '^V') { $tagName = $input } else { $tagName = "V$input" }
-                    $isTagPush = $false
-                    $resolved = Resolve-VersionFromTagName -TagName $tagName
-                  } else {
-                    $tagName = "Build-${{ github.ref_name }}"
-                    $isTagPush = $false
-                    $buildVersion = "0.0.0"
-
-                    if ("${{ github.ref_name }}" -eq "dev") {
-                      # 获取最新标签作为基准
-                      $latestTag = ""
-                      try {
-                        $latestTag = git tag --sort=-v:refname | Select-Object -First 1
-                      } catch {
-                        $latestTag = ""
-                      }
-
-                      if ($latestTag) {
-                        # 去掉 V 前缀和 -test 等后缀
-                        $baseVersion = ($latestTag -replace '^V', '') -replace '-.*$', ''
-                        $parts = $baseVersion.Split('.')
-                        if ($parts.Length -eq 3) {
-                          # 1.0.0 -> 1.0.0.1
-                          $buildVersion = "$($parts[0]).$($parts[1]).$($parts[2]).1"
-                        } elseif ($parts.Length -ge 4) {
-                          # 1.0.0.1 -> 1.0.0.2
-                          $lastPart = [int]$parts[3] + 1
-                          $buildVersion = "$($parts[0]).$($parts[1]).$($parts[2]).$lastPart"
-                        } else {
-                          $buildVersion = "1.0.0.1"
-                        }
-                      } else {
-                        $buildVersion = "1.0.0.1"
-                      }
-                      echo "检测到 dev 分支推送，自动根据最新标签 ($latestTag) 递增版本号为: $buildVersion"
-                    }
-
-                    $resolved = [pscustomobject]@{
-                      Raw = $tagName
-                      Build = $buildVersion
-                      IsTest = $true
-                    }
-                    echo "检测到分支推送 (${{ github.ref_name }})，执行构建测试而不发布"
-                  }
-
-                  echo "version=$($resolved.Build)" >> $env:GITHUB_OUTPUT
-                  echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
-                  echo "is_tag_push=$($isTagPush.ToString().ToLower())" >> $env:GITHUB_OUTPUT
-                  echo "is_test_tag=$($resolved.IsTest.ToString().ToLower())" >> $env:GITHUB_OUTPUT
-
-                  echo "构建版本(用于打包/写入版本文件): $($resolved.Build)"
-                  echo "标签名称(用于发布): $tagName"
-                  echo "是否测试标签(-test): $($resolved.IsTest)"
 
             - name: Set up Python
               uses: actions/setup-python@v5.4.0
@@ -254,7 +301,7 @@ jobs:
                   $env:PYTHONUTF8 = "1"
 
                   .\.venv\Scripts\Activate.ps1
-                  $version = "${{ steps.version.outputs.version }}"
+                  $version = "${{ needs.prepare.outputs.version }}"
 
                   # 执行前再次确认编码设置
                   python -c "import sys; print('Python encoding:', sys.stdout.encoding)"
@@ -319,7 +366,7 @@ jobs:
                   $env:PYTHONUTF8 = "1"
 
                   .\.venv\Scripts\Activate.ps1
-                  $version = "${{ steps.version.outputs.version }}"
+                  $version = "${{ needs.prepare.outputs.version }}"
 
                   # 运行PyInstaller构建脚本
                   echo "开始PyInstaller构建..."
@@ -392,7 +439,7 @@ jobs:
             - name: Upload build artifacts
               uses: actions/upload-artifact@v4.6.0
               with:
-                  name: remote-controls-v${{ steps.version.outputs.version }}
+                  name: remote-controls-v${{ needs.prepare.outputs.version }}
                   path: |
                       installer/dist/*.exe
                       installer/dist/installer/*.exe
@@ -400,7 +447,7 @@ jobs:
 
             # 【修改】添加发布流程专属条件：仅标签推送/ main分支手动触发 执行更新日志
             - name: Generate changelog
-              if: ${{ steps.version.outputs.is_tag_push == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
+              if: ${{ needs.prepare.outputs.is_tag_push == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
               id: changelog
               shell: pwsh
               env:
@@ -412,8 +459,8 @@ jobs:
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
 
-                  $version = "${{ steps.version.outputs.version }}"
-                  $tagName = "${{ steps.version.outputs.tag_name }}"
+                  $version = "${{ needs.prepare.outputs.version }}"
+                  $tagName = "${{ needs.prepare.outputs.tag_name }}"
 
                   # 获取上一个标签
                   $previousTag = ""
@@ -480,7 +527,7 @@ jobs:
 
                           # 测试标签（如 V3.0.2-test2）发布时：保持文案复用，但将 compare 链接末尾改为完整 tag
                           # 例如：.../compare/V3.0.1...V3.0.2  ->  .../compare/V3.0.1...V3.0.2-test2
-                          $isTestTag = "${{ steps.version.outputs.is_test_tag }}"
+                          $isTestTag = "${{ needs.prepare.outputs.is_test_tag }}"
                           if ($isTestTag -eq 'true' -and $tagName -and $version) {
                             $stableTag = "V$version"
                             if ($tagName -ne $stableTag) {
@@ -652,20 +699,20 @@ jobs:
 
             # 原条件保留：仅发布流程执行发行版创建
             - name: Create Release
-              if: ${{ steps.version.outputs.is_tag_push == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
+              if: ${{ needs.prepare.outputs.is_tag_push == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
               id: create_release
               uses: softprops/action-gh-release@v2.1.0
               with:
-                  tag_name: ${{ steps.version.outputs.tag_name }}
-                  name: Remote Controls ${{ steps.version.outputs.tag_name }}
+                  tag_name: ${{ needs.prepare.outputs.tag_name }}
+                  name: Remote Controls ${{ needs.prepare.outputs.tag_name }}
                   body: ${{ steps.changelog.outputs.changelog }}
                   draft: false
-                  prerelease: ${{ steps.version.outputs.is_test_tag == 'true' }}
+                  prerelease: ${{ needs.prepare.outputs.is_test_tag == 'true' }}
                   files: |
                       installer/dist/RC-main.exe
                       installer/dist/RC-GUI.exe
                       installer/dist/RC-tray.exe
-                      installer/dist/installer/Remote-Controls-Installer-${{ steps.version.outputs.version }}.exe
+                      installer/dist/installer/Remote-Controls-Installer-${{ needs.prepare.outputs.version }}.exe
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -673,7 +720,7 @@ jobs:
               if: failure()
               uses: actions/upload-artifact@v4.6.0
               with:
-                  name: logs-v${{ steps.version.outputs.version }}
+                  name: logs-v${{ needs.prepare.outputs.version }}
                   path: |
                       logs/**/*.log
                       installer/build/**/warn-*.txt
@@ -690,8 +737,8 @@ jobs:
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
 
                   echo "=== 构建总结 ==="
-                  echo "版本: ${{ steps.version.outputs.version }}"
-                  echo "标签: ${{ steps.version.outputs.tag_name }}"
+                  echo "版本: ${{ needs.prepare.outputs.version }}"
+                  echo "标签: ${{ needs.prepare.outputs.tag_name }}"
                   echo "Python: ${{ env.PYTHON_VERSION }}"
                   echo "触发方式: ${{ github.event_name }}"
                   if ("${{ github.event_name }}" -eq "push") {
