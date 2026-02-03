@@ -155,11 +155,17 @@ jobs:
                         $runCount = 0
                         try {
                           # 获取自该标签创建以来，dev 分支上成功的 Actions 运行次数
-                          $runs = gh run list --workflow "${{ github.workflow }}" --branch dev --status success --created ">$tagDate" --limit 100 --json id | ConvertFrom-Json
-                          $runCount = @($runs).Count
-                          echo "自标签 $latestTag ($tagDate) 以来，检测到 $runCount 次成功的 dev 运行记录"
+                          # 注意：gh run list 的 JSON 字段名为 databaseId 而非 id
+                          $runJson = gh run list --workflow "${{ github.workflow }}" --branch dev --status success --created ">$tagDate" --limit 100 --json databaseId
+                          if ($LASTEXITCODE -eq 0) {
+                            $runs = $runJson | ConvertFrom-Json
+                            $runCount = @($runs).Count
+                            echo "自标签 $latestTag ($tagDate) 以来，检测到 $runCount 次成功的 dev 运行记录"
+                          } else {
+                            echo "警告：gh run list 执行失败，退出代码: $LASTEXITCODE"
+                          }
                         } catch {
-                          echo "警告：获取 Actions 运行记录失败，将仅基于标签进行递增"
+                          echo "警告：解析 Actions 运行记录失败，将仅基于标签进行递增"
                         }
 
                         if ($parts.Length -ge 3) {
