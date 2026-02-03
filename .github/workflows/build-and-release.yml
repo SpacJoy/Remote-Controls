@@ -155,13 +155,19 @@ jobs:
                         $runCount = 0
                         try {
                           # 获取自该标签创建以来，dev 分支上成功的 Actions 运行次数
-                          # 逻辑优化：排除掉与标签本身关联的那次运行（通常是 main 分支合并），并增加 created 时间偏移以避免临界点重复
+                          # 逻辑优化：排除当前运行 ID，并排除与标签本身关联的运行
+                          $currentRunId = "${{ github.run_id }}"
                           $tagSha = git rev-parse $latestTag
-                          $runJson = gh run list --workflow "${{ github.workflow }}" --branch dev --status success --created ">$tagDate" --limit 100 --json databaseId,headSha
+                          $runJson = gh run list --workflow "${{ github.workflow }}" --branch dev --status success --created ">$tagDate" --limit 100 --json databaseId,headSha,displayTitle
                           if ($LASTEXITCODE -eq 0) {
                             $runs = $runJson | ConvertFrom-Json
-                            # 过滤掉 headSha 等于标签 Sha 的记录（如果是合并触发的）
-                            $filteredRuns = @($runs) | Where-Object { $_.headSha -ne $tagSha }
+                            # 过滤：1. 不是当前任务；2. SHA 不等于标签 SHA
+                            $filteredRuns = @($runs) | Where-Object { 
+                              $_.databaseId -ne $currentRunId -and $_.headSha -ne $tagSha 
+                            }
+                            # 打印调试信息
+                            $filteredRuns | ForEach-Object { echo "计入统计的历史任务: ID=$($_.databaseId), Title=$($_.displayTitle)" }
+                            
                             $runCount = $filteredRuns.Count
                             echo "自标签 $latestTag ($tagDate) 以来，检测到 $runCount 次有效的成功 dev 运行记录"
                           } else {
