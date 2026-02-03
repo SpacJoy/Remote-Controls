@@ -3,14 +3,17 @@
 name: Build and Release Remote Controls
 
 on:
-    # 当推送标签时触发（如 V2.2.8）
+    # 触发规则：dev/main分支推送（仅构建）、版本标签推送（构建+发布）
     push:
         tags:
             - "V*.*.*.*"
             - "V*.*.*"
             - "V*"
+        branches:
+            - "main"
+            - "dev"
 
-    # 允许手动触发工作流（用于测试）
+    # 手动触发：仅main分支可执行发布，dev分支手动触发仅构建
     workflow_dispatch:
         inputs:
             version:
@@ -125,17 +128,27 @@ jobs:
 
                   $tagName = ""
                   $isTagPush = $false
-                  if ("${{ github.event_name }}" -eq "push") {
+                  $resolved = $null
+
+                  if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref_type }}" -eq "tag") {
                     $tagName = "${{ github.ref_name }}"
                     $isTagPush = $true
-                  } else {
-                    # 手动触发：允许输入带/不带 V 前缀，以及可选的 -test / -testN 后缀
+                    $resolved = Resolve-VersionFromTagName -TagName $tagName
+                  } elseif ("${{ github.event_name }}" -eq "workflow_dispatch") {
                     $input = "${{ github.event.inputs.version }}"
                     if ($input -match '^V') { $tagName = $input } else { $tagName = "V$input" }
                     $isTagPush = $false
+                    $resolved = Resolve-VersionFromTagName -TagName $tagName
+                  } else {
+                    $tagName = "Build-${{ github.ref_name }}"
+                    $isTagPush = $false
+                    $resolved = [pscustomobject]@{
+                      Raw = $tagName
+                      Build = "0.0.0"
+                      IsTest = $true
+                    }
+                    echo "检测到分支推送 (${{ github.ref_name }})，执行构建测试而不发布"
                   }
-
-                  $resolved = Resolve-VersionFromTagName -TagName $tagName
 
                   echo "version=$($resolved.Build)" >> $env:GITHUB_OUTPUT
                   echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
@@ -256,8 +269,7 @@ jobs:
                     echo "❌ 关键依赖缺失，停止构建"
                     exit 1
                   }
-
-                  echo "✅ 关键依赖验证通过，跳过源文件导入测试（PyInstaller构建时会自动验证）"
+                  echo "✅ 关键依赖验证通过，跳过源文件导入测试"
 
             - name: Build with PyInstaller
               shell: pwsh
@@ -355,7 +367,9 @@ jobs:
                       installer/dist/installer/*.exe
                   retention-days: 90
 
+            # 【修改】添加发布流程专属条件：仅标签推送/ main分支手动触发 执行更新日志
             - name: Generate changelog
+              if: ${{ steps.version.outputs.is_tag_push == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
               id: changelog
               shell: pwsh
               env:
@@ -605,8 +619,9 @@ jobs:
                   toTag: ${{ github.sha }}
                   token: ${{ secrets.GITHUB_TOKEN }}
 
+            # 原条件保留：仅发布流程执行发行版创建
             - name: Create Release
-              if: ${{ steps.version.outputs.is_tag_push == 'true' || github.event_name == 'workflow_dispatch' }}
+              if: ${{ steps.version.outputs.is_tag_push == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
               id: create_release
               uses: softprops/action-gh-release@v2
               with:
@@ -649,8 +664,8 @@ jobs:
                   echo "Python: ${{ env.PYTHON_VERSION }}"
                   echo "触发方式: ${{ github.event_name }}"
                   if ("${{ github.event_name }}" -eq "push") {
-                    echo "标签推送: ${{ github.ref_name }}"
+                    echo "推送对象: ${{ github.ref_name }} (${{ github.ref_type }})"
                   } else {
-                    echo "手动触发: ${{ github.event.inputs.version }}"
+                    echo "手动触发版本: ${{ github.event.inputs.version }}"
                   }
                   echo "构建完成 ✅"
