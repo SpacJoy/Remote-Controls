@@ -3,14 +3,13 @@
 name: Build and Release Remote Controls
 
 on:
-    # 触发规则：dev/main分支推送（仅构建）、版本标签推送（构建+发布）
+    # 触发规则：dev分支推送（仅构建）、版本标签推送（构建+发布）
     push:
         tags:
             - "V*.*.*.*"
             - "V*.*.*"
             - "V*"
         branches:
-            - "main"
             - "dev"
 
     # 手动触发：仅main分支可执行发布，dev分支手动触发仅构建
