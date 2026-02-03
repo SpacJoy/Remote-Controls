@@ -2,7 +2,7 @@
 
 让 Windows 电脑接入智能家居：通过 MQTT 控制开关、脚本、媒体/亮度/音量、热键等，一键配置、托盘管理、支持 EXE 打包与自启。
 
-[快速开始](#快速开始) • [使用教程](#使用教程) • [图文教程](https://blog.spacjoy.top/posts/remote-control-tutorial) • [项目结构](#项目结构) • [更新日志](CHANGELOG.md) • [贡献指南](CONTRIBUTING.md)
+[使用教程](#使用教程) • [图文教程](https://blog.spacjoy.top/posts/remote-control-tutorial) • [项目结构](#项目结构) • [更新日志](CHANGELOG.md) • [贡献指南](CONTRIBUTING.md)
 
 提醒与声明：仅供学习交流，请勿用于非法用途。
 
@@ -15,34 +15,6 @@
 - 托盘管理：一键启动/重启/关闭主程序，显示权限与运行模式
 - 打包与发布：一键构建（github actions），安装器自动注入版本
 - Windows Toast 通知，可开关；异常保护与弱网自动重连
-
-## 快速开始
-
-1. 下载或构建
-
-- 到 Releases 下载 `RC-main/GUI/tray` 可执行文件 **或 安装包**：`Remote-Controls-Installer-x.x.x.exe`。
-- 本地构建前置（仅在你要自己打包时需要）：
-  - C 主程序/托盘：MSYS2 + MinGW64（确保 `gcc`、`windres` 在 PATH 中）
-  - 安装包：Inno Setup 6（默认 `C:\Program Files (x86)\Inno Setup 6\iscc.exe`）
-
-```powershell
-python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
-# 交互式：会提示输入版本号
-.\build.ps1
-
-# 无交互（推荐 CI/无人值守）：指定版本并跳过 Pause
-.\build.ps1 3.0.0 -NoPause
-```
-
-2. 配置 MQTT 与主题
-
-- 运行 `RC-GUI.exe`，填写 MQTT（密钥或用户名/密码、服务器、端口），保存生成 `config.json`
-- 在 GUI 启用需要的主题（内置 + 自定义）
-
-3. 运行与控制
-
-- 运行 `RC-tray.exe`（推荐）或 `RC-main.exe`；托盘可管理主程序并显示状态
-- 需要接入小爱/米家：参考下方“教程”绑定巴法云账号并同步设备
 
 ## 使用教程
 
