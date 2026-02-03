@@ -48,12 +48,12 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+              uses: actions/checkout@v4.2.2
               with:
                   fetch-depth: 0
 
             - name: Set up MSYS2 (MinGW-w64)
-              uses: msys2/setup-msys2@247e589e47761007bc9969966d649987b925925e # v2.29.0
+              uses: msys2/setup-msys2@v2.29.0
               id: msys2
               with:
                   msystem: MINGW64
@@ -160,7 +160,7 @@ jobs:
                   echo "是否测试标签(-test): $($resolved.IsTest)"
 
             - name: Set up Python
-              uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+              uses: actions/setup-python@v5.4.0
               with:
                   python-version: ${{ env.PYTHON_VERSION }}
                   cache: "pip"
@@ -359,7 +359,7 @@ jobs:
                   }
 
             - name: Upload build artifacts
-              uses: actions/upload-artifact@4ced5828ee5ad3e730b50091095ee8e18f7d5197 # v4.6.0
+              uses: actions/upload-artifact@v4.6.0
               with:
                   name: remote-controls-v${{ steps.version.outputs.version }}
                   path: |
@@ -623,7 +623,7 @@ jobs:
             - name: Create Release
               if: ${{ steps.version.outputs.is_tag_push == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
               id: create_release
-              uses: softprops/action-gh-release@c85243a3d2e26920626359709da84221199a0930 # v2.1.0
+              uses: softprops/action-gh-release@v2.1.0
               with:
                   tag_name: ${{ steps.version.outputs.tag_name }}
                   name: Remote Controls ${{ steps.version.outputs.tag_name }}
@@ -640,7 +640,7 @@ jobs:
 
             - name: Upload logs (on failure)
               if: failure()
-              uses: actions/upload-artifact@4ced5828ee5ad3e730b50091095ee8e18f7d5197 # v4.6.0
+              uses: actions/upload-artifact@v4.6.0
               with:
                   name: logs-v${{ steps.version.outputs.version }}
                   path: |
