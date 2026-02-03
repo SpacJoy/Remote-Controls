@@ -477,10 +477,24 @@ $VersionTmpFile = (Join-Path $InstallerDir 'version.tmp')
 Set-Content -Path $VersionTmpFile -Value $FinalVersion -Encoding ASCII -NoNewline
 Write-Host "  版本信息已写入临时文件：$FinalVersion" -ForegroundColor Green
 
-$InnoPath = "C:\Program Files (x86)\Inno Setup 6\iscc.exe"
-if (-not (Test-Path $InnoPath)) {
-    Write-Host "错误：未找到 Inno Setup 6，请确保已安装到默认路径" -ForegroundColor Red
-    Write-Host "或手动运行：& '$InnoPath' 'installer\Remote-Controls.iss'" -ForegroundColor Yellow
+# 检查 Inno Setup 是否安装，支持多种默认安装路径
+$PossibleInnoPaths = @(
+    "C:\Program Files (x86)\Inno Setup 6\iscc.exe",
+    "$env:LOCALAPPDATA\Programs\Inno Setup 6\iscc.exe",
+)
+
+$InnoPath = ""
+foreach ($p in $PossibleInnoPaths) {
+    if (Test-Path $p) {
+        $InnoPath = $p
+        break
+    }
+}
+
+if (-not $InnoPath) {
+    Write-Host "错误：未找到 Inno Setup 6，请确保已安装到以下路径之一：" -ForegroundColor Red
+    $PossibleInnoPaths | ForEach-Object { Write-Host "  - $_" -ForegroundColor Yellow }
+    Write-Host "或将其添加到系统 PATH 中。" -ForegroundColor Yellow
     Pause-IfNeeded
     exit 1
 }
