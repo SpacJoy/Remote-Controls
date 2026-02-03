@@ -168,9 +168,8 @@ jobs:
                             # 打印调试信息
                             $filteredRuns | ForEach-Object { echo "计入统计的历史任务: ID=$($_.databaseId), Title=$($_.displayTitle)" }
                             
-                            # 需求：结果-1次，以修正计数偏差
-                            $runCount = [Math]::Max(0, $filteredRuns.Count - 1)
-                            echo "自标签 $latestTag ($tagDate) 以来，检测到 $($filteredRuns.Count) 次有效的成功 dev 运行记录，修正后计入次数为 $runCount"
+                            $runCount = $filteredRuns.Count
+                            echo "自标签 $latestTag ($tagDate) 以来，检测到 $runCount 次有效的成功 dev 运行记录"
                           } else {
                             echo "警告：gh run list 执行失败，退出代码: $LASTEXITCODE"
                           }
