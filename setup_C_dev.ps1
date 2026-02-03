@@ -1,5 +1,5 @@
 # Remote Controls 开发环境一键部署脚本 (仅限 C 语言与构建工具)
-# 用法: .\setup_dev.ps1 (需要管理员权限以安装软件)
+# 用法: .\setup_C_dev.ps1 (需要管理员权限以安装软件)
 
 $ErrorActionPreference = 'Stop'
 $Root = $PSScriptRoot
@@ -266,4 +266,4 @@ if ($Iscc) { Write-Host "Inno Setup (ISCC): OK ($($Iscc.Source))" -ForegroundCol
 
 Write-Host "`n===== 部署完成 =====" -ForegroundColor Cyan
 Write-Host "提示: 如果这是您第一次运行，建议关闭并重新打开 Terminal 以应用所有环境变量。" -ForegroundColor Gray
-Write-Host "Python 环境与依赖请手动管理，本脚本不再干涉。" -ForegroundColor White
+Write-Host "Python 环境与依赖请使用 setup_python_env.ps1 管理" -ForegroundColor White

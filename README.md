@@ -44,59 +44,76 @@
 
 ```text
 Remote-Controls/
-├─ build_main.ps1  # 构建 C 版主程序（输出 bin/RC-main.exe）
-├─ build_tray.ps1  # 构建 C 版托盘（输出 bin/RC-tray.exe）
-├─ config.json     # 运行配置（GUI 首次保存生成）
-├─ dome_config.json# 配置示例
-├─ installer/      # 构建与安装脚本（PyInstaller）
-├─ res/            # 资源（图标等）
+├─ build.ps1            # 顶层一键打包入口（调用 installer/ 下脚本）
+├─ build_main.ps1       # 构建 C 版主程序（输出 bin/RC-main.exe）
+├─ build_tray.ps1       # 构建 C 版托盘（输出 bin/RC-tray.exe）
+├─ setup_python_env.ps1 # Python 虚拟环境部署脚本（支持多版本选择）
+├─ setup_C_dev.ps1      # C 语言开发环境一键部署（MinGW/Paho/Inno Setup）
+├─ dome_config.json     # 配置示例
+├─ installer/           # 构建、版本管理与安装包脚本
+│  ├─ build_installer.ps1 # PyInstaller 打包与 Inno Setup 逻辑
+│  └─ update_version.py   # 版本号同步工具
+├─ res/                 # 图标、图片等静态资源
 ├─ src/
-│  ├─ main/        # C 版主程序源码
-│  ├─ tray/        # C 版托盘源码
-│  └─ python/      # Python 版源码（当前保留 GUI）
-└─ scripts/        # 清理等辅助脚本
+│  ├─ main/             # C 版主程序源码（核心逻辑、MQTT、指令转发）
+│  ├─ tray/             # C 版托盘源码（Win32 托盘、菜单、进程管理）
+│  ├─ python/           # Python 源码（当前主要为配置 GUI）
+│  └─ *.c/h             # 跨模块共用组件（JSON 解析、通知等）
+└─ scripts/             # 辅助工具脚本
 ```
-
-
-## 托盘与权限
-
-- 推荐以管理员权限运行 `RC-tray.exe`；未运行独立托盘时，主程序会启用“内置托盘”
-- 托盘菜单：打开配置、启动/重启/关闭主程序、查看版本与权限状态
-- 提权与自启：GUI 一键设置/移除开机自启；需要服务控制等操作时请以管理员运行主程序
-
-![Star History Chart](https://api.star-history.com/svg?repos=spacjoy/Remote-Controls&type=Date)
 
 ## 安装与构建
 
-- 环境：Windows 10/11；Python 3.12.10+（开发/本地构建时）
-- 构建前置（本地）：
-  - C 主程序/托盘：需要 MSYS2 + MinGW64（确保 `gcc`、`windres` 在 PATH 中；Actions 里使用 `msys2/setup-msys2@v2` 同款方案）
-  - 安装包：需要 Inno Setup 6（默认路径 `C:\Program Files (x86)\Inno Setup 6\iscc.exe`）
-- 依赖安装：
+项目采用 C (Win32) 作为核心运行程序，Python 作为配置界面。
+
+### 1. 开发环境部署 (推荐)
+
+我们提供了自动化脚本，帮助您快速配置所需环境：
+
+- **Python 环境**：运行 `.\setup_python_env.ps1`。它会扫描系统中的 Python 解释器，由您选择一个版本来创建 `.venv` 并自动安装 `requirements.txt` 中的依赖。
+- **C 语言环境**：以管理员权限运行 `.\setup_C_dev.ps1`。它会检查并尝试通过 `winget` 安装 MSYS2/MinGW、Paho MQTT C 库以及 Inno Setup 6。
+
+### 2. 手动配置
+
+- **Python**: 3.12.10+。手动创建虚拟环境并安装依赖。
+- **C 工具链**: 需要 MinGW-w64。确保 `gcc` 和 `windres` 在系统 PATH 中。
+- **MQTT 库**: 依赖 [Paho MQTT C](https://github.com/eclipse/paho.mqtt.c)。需设置环境变量 `PAHO_MQTT_C_ROOT` 指向其安装目录。
+- **安装包工具**: Inno Setup 6。
+
+### 3. 一键构建
+
+运行根目录下的 `build.ps1` 即可完成全流程构建：
 
 ```powershell
-python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
-```
-
-- 一键构建（推荐）：
-
-```powershell
-# 交互式
+# 交互式运行：手动输入版本号并查看过程
 .\build.ps1
 
-# 指定版本 + 无交互
-.\build.ps1 3.0.0 -NoPause
+# 自动化构建：指定版本并跳过暂停
+.\build.ps1 3.0.2.1 -NoPause
 ```
 
-- 产物位置：`installer/dist/RC-*.exe` 与安装包 `installer/dist/installer/*.exe`
-- 构建日志：详见 `logs/*.log`（例如 `logs/pyinstaller.log`、`logs/build_main.log`）。构建失败时优先查看对应日志。
+- **产物位置**：
+    - 独立程序：`installer/dist/*.exe`
+    - 安装包：`installer/dist/installer/Remote-Controls-Installer-*.exe`
+- **构建日志**：详细日志保存在 `logs/` 目录下（如 `build_main.log`）。
 
 ## GitHub CI/CD
 
-- CI：PR / 推送到 `main` 会触发 `.github/workflows/ci.yml`，做依赖安装与最小自检（`compileall` + 关键依赖导入 + `pip check`）。
-- Release：推送标签 `V*` 或手动触发会运行 `.github/workflows/build-and-release.yml`，完成构建并上传产物/创建 Release。
+项目集成了完善的自动化流水线，确保代码质量与发布效率：
 
-更多工作流说明见：`.github/workflows/README.md`。
+- **代码检查 (CI)**：[ci.yml](file:///d:/Code/Python/Remote-Controls/.github/workflows/ci.yml)
+    - 触发条件：`main` 分支推送或 Pull Request。
+    - 操作：安装 Python 依赖、静态语法检查 (`compileall`)、关键模块导入测试。
+- **构建与发布 (Release)**：[build-and-release.yml](file:///d:/Code/Python/Remote-Controls/.github/workflows/build-and-release.yml)
+    - 触发条件：推送以 `V` 开头的标签（如 `V3.0.2`）或手动触发。
+    - 操作：
+        1. 自动配置 MSYS2/MinGW 和 Paho MQTT C 环境。
+        2. 安装 Inno Setup 并注入版本号。
+        3. 编译 C 语言主程序与托盘。
+        4. 使用 PyInstaller 打包 Python GUI。
+        5. 生成最终安装包并自动创建 GitHub Release 上传产物。
+
+更多工作流细节请参考 [.github/workflows/README.md](file:///d:/Code/Python/Remote-Controls/.github/workflows/README.md)。
 
 更多细节见 `installer/` 目录与 `CHANGELOG.md`。
 
