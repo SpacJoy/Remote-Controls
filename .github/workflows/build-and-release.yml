@@ -142,9 +142,40 @@ jobs:
                   } else {
                     $tagName = "Build-${{ github.ref_name }}"
                     $isTagPush = $false
+                    $buildVersion = "0.0.0"
+
+                    if ("${{ github.ref_name }}" -eq "dev") {
+                      # 获取最新标签作为基准
+                      $latestTag = ""
+                      try {
+                        $latestTag = git tag --sort=-v:refname | Select-Object -First 1
+                      } catch {
+                        $latestTag = ""
+                      }
+
+                      if ($latestTag) {
+                        # 去掉 V 前缀和 -test 等后缀
+                        $baseVersion = ($latestTag -replace '^V', '') -replace '-.*$', ''
+                        $parts = $baseVersion.Split('.')
+                        if ($parts.Length -eq 3) {
+                          # 1.0.0 -> 1.0.0.1
+                          $buildVersion = "$($parts[0]).$($parts[1]).$($parts[2]).1"
+                        } elseif ($parts.Length -ge 4) {
+                          # 1.0.0.1 -> 1.0.0.2
+                          $lastPart = [int]$parts[3] + 1
+                          $buildVersion = "$($parts[0]).$($parts[1]).$($parts[2]).$lastPart"
+                        } else {
+                          $buildVersion = "1.0.0.1"
+                        }
+                      } else {
+                        $buildVersion = "1.0.0.1"
+                      }
+                      echo "检测到 dev 分支推送，自动根据最新标签 ($latestTag) 递增版本号为: $buildVersion"
+                    }
+
                     $resolved = [pscustomobject]@{
                       Raw = $tagName
-                      Build = "0.0.0"
+                      Build = $buildVersion
                       IsTest = $true
                     }
                     echo "检测到分支推送 (${{ github.ref_name }})，执行构建测试而不发布"
