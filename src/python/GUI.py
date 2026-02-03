@@ -4084,13 +4084,28 @@ def open_builtin_settings():
         list_frame.grid(row=adv_row, column=0, columnspan=3, padx=10, pady=0, sticky="ew")
         
         custom_list_str = config.get("brightness_custom_list", "wmi,dxva2,twinkle_tray") or "wmi,dxva2,twinkle_tray"
-        current_order = [x.strip() for x in custom_list_str.split(",") if x.strip()]
-        all_methods = ["wmi（系统 WMI 接口）", "dxva2（物理显示器 DDC/CI）", "twinkle_tray（第三方接口）"]
-        for m in all_methods:
-            if m not in current_order: current_order.append(m)
+        # Map keys to display names
+        display_map = {
+            "wmi": "wmi（系统 WMI 接口）",
+            "dxva2": "dxva2（物理显示器 DDC/CI）",
+            "twinkle_tray": "twinkle_tray（第三方接口）"
+        }
+        rev_display_map = {v: k for k, v in display_map.items()}
+        
+        current_order_keys = [x.strip() for x in custom_list_str.split(",") if x.strip()]
+        # Filter and maintain order
+        current_order_display = []
+        for k in current_order_keys:
+            if k in display_map:
+                current_order_display.append(display_map[k])
+        
+        # Add missing ones
+        for k in ["wmi", "dxva2", "twinkle_tray"]:
+            if display_map[k] not in current_order_display:
+                current_order_display.append(display_map[k])
             
         lb = tk.Listbox(list_frame, height=3, selectmode="single")
-        for m in current_order: lb.insert(tk.END, m)
+        for m in current_order_display: lb.insert(tk.END, m)
         lb.pack(side="left", fill="x", expand=True)
         
         btn_frame = ttk.Frame(list_frame)
@@ -4130,13 +4145,19 @@ def open_builtin_settings():
         # 3. Targets
         ttk.Label(adv_win, text="WMI " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
         wmi_target = tk.StringVar(value=config.get("wmi_target", "all"))
-        ttk.Entry(adv_win, textvariable=wmi_target).grid(row=adv_row, column=1, padx=10, sticky="ew")
+        wmi_target_frame = ttk.Frame(adv_win)
+        wmi_target_frame.grid(row=adv_row, column=1, padx=10, sticky="w")
+        ttk.Entry(wmi_target_frame, textvariable=wmi_target, width=15).pack(side="left", padx=(0, 5))
+        ttk.Button(wmi_target_frame, text=t("所有"), width=5, command=lambda: wmi_target.set("all")).pack(side="left")
         ttk.Label(adv_win, text=t("('all'（全部） 或 索引 0, 1...)")).grid(row=adv_row, column=2, padx=5, sticky="w")
         adv_row += 1
         
         ttk.Label(adv_win, text="Dxva2 " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
         dxva2_target = tk.StringVar(value=config.get("dxva2_target", "all"))
-        ttk.Entry(adv_win, textvariable=dxva2_target).grid(row=adv_row, column=1, padx=10, sticky="ew")
+        dxva2_target_frame = ttk.Frame(adv_win)
+        dxva2_target_frame.grid(row=adv_row, column=1, padx=10, sticky="w")
+        ttk.Entry(dxva2_target_frame, textvariable=dxva2_target, width=15).pack(side="left", padx=(0, 5))
+        ttk.Button(dxva2_target_frame, text=t("所有"), width=5, command=lambda: dxva2_target.set("all")).pack(side="left")
         ttk.Label(adv_win, text=t("('all'（全部） 或 索引 0, 1...)")).grid(row=adv_row, column=2, padx=5, sticky="w")
         adv_row += 1
 
@@ -4174,19 +4195,28 @@ def open_builtin_settings():
         tm_cb = ttk.Combobox(adv_win, textvariable=tt_mode_lbl, values=[t(l) for k,l in tt_modes], state="readonly")
         tm_cb.grid(row=adv_row, column=1, padx=10, sticky="w")
         
+        tt_val = tk.StringVar(value=config.get("twinkle_tray_target_value", "1"))
+        ttk.Label(adv_win, text=t("目标值:")).grid(row=adv_row + 1, column=0, padx=10, sticky="e")
+        tt_val_entry = ttk.Entry(adv_win, textvariable=tt_val)
+        tt_val_entry.grid(row=adv_row + 1, column=1, padx=10, sticky="ew")
+
+        def _update_tt_val_state(*args):
+            if tt_mode_key.get() == "all":
+                tt_val_entry.configure(state="disabled")
+            else:
+                tt_val_entry.configure(state="normal")
+
         def _on_tt_mode_change(e):
             lbl = tt_mode_lbl.get()
             for k, l in tt_modes:
                 if t(l) == lbl:
                     tt_mode_key.set(k)
+                    _update_tt_val_state()
                     break
         tm_cb.bind("<<ComboboxSelected>>", _on_tt_mode_change)
-        adv_row += 1
+        adv_row += 2
         
-        tt_val = tk.StringVar(value=config.get("twinkle_tray_target_value", "1"))
-        ttk.Label(adv_win, text=t("目标值:")).grid(row=adv_row, column=0, padx=10, sticky="e")
-        ttk.Entry(adv_win, textvariable=tt_val).grid(row=adv_row, column=1, padx=10, sticky="ew")
-        adv_row += 1
+        _update_tt_val_state() # Initial state
         
         tt_overlay = tk.IntVar(value=int(config.get("twinkle_tray_overlay", 1) or 0))
         ttk.Checkbutton(adv_win, text=t("显示亮度叠加层(Overlay)"), variable=tt_overlay).grid(row=adv_row, column=1, sticky="w", padx=10)
@@ -4226,7 +4256,13 @@ def open_builtin_settings():
 
             # Determine order from listbox
             current_lb_order = lb.get(0, tk.END)
-            final_order = [x for x in current_lb_order if x in selected]
+            # Map back to keys
+            final_order = []
+            for item in current_lb_order:
+                key = rev_display_map.get(item)
+                if key and key in selected:
+                    final_order.append(key)
+            
             # Append any selected but missing from listbox
             for s in selected:
                 if s not in final_order: final_order.append(s)
@@ -4256,7 +4292,10 @@ def open_builtin_settings():
 
             adv_win.destroy()
             
-        ttk.Button(adv_win, text=t("保存"), command=save).grid(row=adv_row+1, column=0, columnspan=3, pady=20)
+        btn_frame = ttk.Frame(adv_win)
+        btn_frame.grid(row=adv_row+1, column=0, columnspan=3, pady=20)
+        ttk.Button(btn_frame, text=t("保存"), command=save).pack(side="left", padx=10)
+        ttk.Button(btn_frame, text=t("取消"), command=adv_win.destroy).pack(side="left", padx=10)
 
     ttk.Button(win, text=t("打开亮度调节设置"), command=open_advanced_brightness_settings).grid(row=row_i, column=1, columnspan=2, sticky="w", padx=10)
     row_i += 1
