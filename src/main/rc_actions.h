@@ -47,10 +47,16 @@ extern "C"
     void RC_ActionMediaCommand(const char *command);
 
     /*
-     * 设置亮度（0~100）。
-     * - 返回 true 表示调用链执行成功；false 表示失败（例如无权限/无设备/接口不可用）。
+     * 通过 Dxva2 的物理显示器 API 调整亮度（0~100）。
+     * - 该路径依赖显示器/显卡驱动对 DDC/CI 等能力的支持；很多设备不支持或会失败。
      */
-    bool RC_ActionSetBrightnessPercent(int percent0to100);
+    bool RC_ActionSetBrightnessDxva2Percent(int percent0to100);
+
+    /*
+     * 通过 WMI (WmiMonitorBrightnessMethods) 调整亮度（0~100）。
+     * - 适用于大多数笔记本和部分台式机，通常需要管理员权限。
+     */
+    bool RC_ActionSetBrightnessWmiPercent(int percent0to100);
 
     /*
      * 使用 Twinkle Tray CLI 设置亮度（Twinkle Tray 需已安装，通常也需要运行）。
@@ -85,6 +91,11 @@ extern "C"
      * 扩展版 PowerShell：额外返回启动的 pid（若无法获取则为 0）。
      */
     bool RC_ActionRunPowershellCommandUtf8Ex(const char *commandUtf8, bool hideWindow, bool keepWindow, unsigned long *outPid);
+
+    /*
+     * 执行 PowerShell 命令并捕获输出内容（UTF-8）。
+     */
+    bool RC_ActionRunPowershellCommandWithOutput(const char *commandUtf8, char **outStdoutUtf8);
 
     /*
      * 按 PID 结束进程树：taskkill /F /T /PID <pid>

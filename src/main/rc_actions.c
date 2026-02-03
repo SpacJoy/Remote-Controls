@@ -457,7 +457,7 @@ static BOOL CALLBACK enum_monitors_set_brightness(HMONITOR hMonitor, HDC hdc, LP
     return TRUE;
 }
 
-bool RC_ActionSetBrightnessPercent(int percent0to100)
+bool RC_ActionSetBrightnessDxva2Percent(int percent0to100)
 {
     /*
      * 通过 Dxva2 的物理显示器 API 调整亮度（0~100）。
@@ -474,8 +474,60 @@ bool RC_ActionSetBrightnessPercent(int percent0to100)
 
     EnumDisplayMonitors(NULL, NULL, enum_monitors_set_brightness, (LPARAM)&ctx);
     if (!ctx.ok)
-        RC_LogWarn("设置亮度失败或不支持 (percent=%d)", v);
+        RC_LogWarn("Dxva2 设置亮度失败或不支持 (percent=%d)", v);
     return ctx.ok;
+}
+
+bool RC_ActionSetBrightnessWmiPercent(int percent0to100)
+{
+    /*
+     * 使用 WMI (WmiMonitorBrightnessMethods) 调整亮度。
+     * 必须以管理员权限运行，支持大部分笔记本和部分支持 DDC/CI 的台式机。
+     */
+    int v = clamp_int(percent0to100, 0, 100);
+    char psCmd[2048];
+
+    /*
+     * PowerShell 脚本逻辑：
+     * 1. 获取 WmiMonitorBrightnessMethods 实例。
+     * 2. 遍历实例并调用 WmiSetBrightness(0, v)。
+     * 3. 捕获异常。
+     */
+    snprintf(psCmd, sizeof(psCmd),
+             "$ErrorActionPreference = 'Stop'; "
+             "try { "
+             "  $methods = Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods; "
+             "  if ($null -eq $methods) { throw 'No WMI brightness methods found' } "
+             "  if ($methods -is [array]) { "
+             "    foreach ($m in $methods) { $m.WmiSetBrightness(0, %d) } "
+             "  } else { "
+             "    $methods.WmiSetBrightness(0, %d) "
+             "  } "
+             "  Write-Host 'Success' "
+             "} catch { "
+             "  [Console]::Error.WriteLine(\"WMI Failed: $($_.Exception.Message)\"); "
+             "  exit 1; "
+             "}",
+             v, v);
+
+    RC_LogInfo("WMI 亮度调节: %d%%", v);
+    char *output = NULL;
+    bool ok = RC_ActionRunPowershellCommandWithOutput(psCmd, &output);
+    if (ok && output)
+    {
+        // 去除输出末尾的换行符
+        size_t len = strlen(output);
+        while (len > 0 && (output[len - 1] == '\r' || output[len - 1] == '\n' || output[len - 1] == ' '))
+        {
+            output[--len] = '\0';
+        }
+        if (len > 0)
+        {
+            RC_LogInfo("WMI 调节结果: %s", output);
+        }
+        free(output);
+    }
+    return ok;
 }
 
 bool RC_ActionSetVolumePercent(int percent0to100)
@@ -1298,7 +1350,7 @@ bool RC_ActionRunPowershellCommandUtf8(const char *commandUtf8, bool hideWindow,
     if (keepWindow)
     {
         if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
-                               L"-NoProfile -ExecutionPolicy Bypass -NoExit -Command \"%ls\"", escaped))
+                               L"-NoProfile -ExecutionPolicy Bypass -NoExit -Command \"& { %ls }\"", escaped))
         {
             free(escaped);
             free(wcmd);
@@ -1311,7 +1363,7 @@ bool RC_ActionRunPowershellCommandUtf8(const char *commandUtf8, bool hideWindow,
         if (hideWindow)
         {
             if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
-                                   L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -Command \"%ls\"", escaped))
+                                   L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -Command \"& { %ls }\"", escaped))
             {
                 free(escaped);
                 free(wcmd);
@@ -1321,7 +1373,7 @@ bool RC_ActionRunPowershellCommandUtf8(const char *commandUtf8, bool hideWindow,
         else
         {
             if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
-                                   L"-NoProfile -ExecutionPolicy Bypass -Command \"%ls\"", escaped))
+                                   L"-NoProfile -ExecutionPolicy Bypass -Command \"& { %ls }\"", escaped))
             {
                 free(escaped);
                 free(wcmd);
@@ -1336,11 +1388,61 @@ bool RC_ActionRunPowershellCommandUtf8(const char *commandUtf8, bool hideWindow,
 
     DWORD pid = 0;
     bool ok = create_process_ex(L"powershell.exe", args, hideWindow, newConsole, true, &pid);
-    RC_LogInfo("PowerShell 已启动 (pid=%lu)", (unsigned long)pid);
+    if (ok)
+    {
+        RC_LogInfo("PowerShell 已启动 (pid=%lu)", (unsigned long)pid);
+    }
+    else
+    {
+        RC_LogError("PowerShell 启动失败");
+    }
 
     free(escaped);
     free(wcmd);
     return ok;
+}
+
+bool RC_ActionRunPowershellCommandWithOutput(const char *commandUtf8, char **outStdoutUtf8)
+{
+    if (!commandUtf8)
+        return false;
+
+    wchar_t *wcmd = RC_Utf8ToWideAlloc(commandUtf8);
+    if (!wcmd)
+        return false;
+
+    wchar_t *escaped = dup_and_escape_quotes_for_cmdline(wcmd);
+    free(wcmd);
+    if (!escaped)
+        return false;
+
+    wchar_t args[8192];
+    if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
+                           L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -Command \"& { %ls }\"", escaped))
+    {
+        free(escaped);
+        return false;
+    }
+    free(escaped);
+
+    wchar_t *psPath = expand_env_wide_alloc(L"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+    if (!psPath)
+        return false;
+
+    DWORD exitCode = 0;
+    char *outStderr = NULL;
+    bool ok = create_process_capture_output(psPath, args, 10000, &exitCode, outStdoutUtf8, &outStderr);
+    free(psPath);
+
+    if (exitCode != 0 && outStderr && *outStderr)
+    {
+        RC_LogError("PowerShell 执行出错 (exit=%lu): %s", (unsigned long)exitCode, outStderr);
+    }
+
+    if (outStderr)
+        free(outStderr);
+
+    return (ok && exitCode == 0);
 }
 
 bool RC_ActionRunPowershellCommandUtf8Ex(const char *commandUtf8, bool hideWindow, bool keepWindow, unsigned long *outPid)
@@ -1371,7 +1473,7 @@ bool RC_ActionRunPowershellCommandUtf8Ex(const char *commandUtf8, bool hideWindo
     if (keepWindow)
     {
         if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
-                               L"-NoProfile -ExecutionPolicy Bypass -NoExit -Command \"%ls\"", escaped))
+                               L"-NoProfile -ExecutionPolicy Bypass -NoExit -Command \"& { %ls }\"", escaped))
         {
             free(escaped);
             free(wcmd);
@@ -1383,7 +1485,7 @@ bool RC_ActionRunPowershellCommandUtf8Ex(const char *commandUtf8, bool hideWindo
         if (hideWindow)
         {
             if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
-                                   L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -Command \"%ls\"", escaped))
+                                   L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -Command \"& { %ls }\"", escaped))
             {
                 free(escaped);
                 free(wcmd);
@@ -1393,7 +1495,7 @@ bool RC_ActionRunPowershellCommandUtf8Ex(const char *commandUtf8, bool hideWindo
         else
         {
             if (!rc_snwprintf_safe(args, (sizeof(args) / sizeof(args[0])),
-                                   L"-NoProfile -ExecutionPolicy Bypass -Command \"%ls\"", escaped))
+                                   L"-NoProfile -ExecutionPolicy Bypass -Command \"& { %ls }\"", escaped))
             {
                 free(escaped);
                 free(wcmd);
@@ -1408,7 +1510,12 @@ bool RC_ActionRunPowershellCommandUtf8Ex(const char *commandUtf8, bool hideWindo
     bool ok = create_process_ex(L"powershell.exe", args, hideWindow, newConsole, true, &pid);
     if (outPid)
         *outPid = (unsigned long)pid;
-    RC_LogInfo("PowerShell 已启动 (pid=%lu)", (unsigned long)pid);
+    
+    if (ok) {
+        RC_LogInfo("PowerShell 已启动 (pid=%lu, args=%ls)", (unsigned long)pid, args);
+    } else {
+        RC_LogError("PowerShell 启动失败 (args=%ls)", args);
+    }
 
     free(escaped);
     free(wcmd);

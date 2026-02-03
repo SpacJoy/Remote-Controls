@@ -214,11 +214,12 @@ _ZH_TO_EN: dict[str, str] = {
     "提示：延时仅在执行关机或重启时生效，其它动作将立即执行。": "Note: Delay only applies to shutdown/restart, other actions execute immediately.",
     "显示器亮度调节方案": "Monitor Brightness Control",
     "控制接口：": "Control Interface:",
-    "WMI (仅系统接口)": "WMI (System Only)",
+    "WMI (系统 WMI 接口)": "WMI (System WMI)",
+    "Dxva2 (物理显示器 DDC/CI)": "Dxva2 (Physical Monitor DDC/CI)",
     "Twinkle Tray (仅命令行)": "Twinkle Tray (CLI Only)",
     "WMI 优先 (失败则使用 Twinkle Tray)": "WMI Priority (Fallback to Twinkle Tray)",
     "Twinkle Tray 优先 (失败则使用 WMI)": "Twinkle Tray Priority (Fallback to WMI)",
-    "同时控制 (WMI 和 Twinkle Tray)": "Simultaneous (WMI & Twinkle Tray)",
+    "同时控制 (WMI, Dxva2 和 Twinkle Tray)": "Simultaneous (WMI, Dxva2 & Twinkle Tray)",
     "显示亮度叠加层(Overlay)": "Show Brightness Overlay",
     "Twinkle Tray 路径：": "Twinkle Tray Path:",
     "选择 Twinkle Tray 可执行文件": "Select Twinkle Tray executable",
@@ -1504,14 +1505,15 @@ def show_detail_window():
         builtin_content_zh = """
 【内置主题概览】
 显示器亮度：
-    接口：支持 WMI (系统原生) 与 Twinkle Tray (第三方命令行) 接口。
+    接口：支持 WMI (系统 WMI)、Dxva2 (物理 DDC/CI) 与 Twinkle Tray (第三方命令行) 接口。
     功能：实现 0-100% 亮度调节，支持优先策略切换及多端同步控制。
     策略说明：
-        - WMI (仅系统接口)：仅使用系统 WMI 接口；适用于支持 WMI 亮度的显示设备。
+        - WMI (系统 WMI 接口)：使用系统 WMI 接口；适用于笔记本和部分支持的台式机。
+        - Dxva2 (物理显示器 DDC/CI)：使用 Dxva2 接口；依赖驱动支持，可能不稳定。
         - Twinkle Tray (仅命令行)：仅调用 Twinkle Tray 命令行；不回退到 WMI。
         - WMI 优先：先尝试 WMI；失败时再调用 Twinkle Tray。
         - Twinkle Tray 优先：先尝试 Twinkle Tray；失败时再调用 WMI。
-        - 同时控制：依次执行 WMI 与 Twinkle Tray（不论 WMI 是否成功都会继续执行）。
+        - 同时控制：依次执行 WMI、Dxva2 与 Twinkle Tray（不论成功与否都会尝试全部方式）。
 
 系统音量：
     类型：窗帘 (Curtain) 接口；调节系统全局主音量 (0-100%)。
@@ -1533,14 +1535,15 @@ def show_detail_window():
         builtin_content_en = """
 【Built-in Themes Overview】
 Monitor Brightness:
-    Interfaces: Supports WMI (Native) and Twinkle Tray (Third-party CLI).
+    Interfaces: Supports WMI (System WMI), Dxva2 (Physical DDC/CI) and Twinkle Tray (Third-party CLI).
     Features: 0-100% brightness adjustment with priority strategies and multi-monitor sync.
     Strategy Notes:
-        - WMI (Native API): Uses WMI only; suitable for devices that support WMI brightness.
+        - WMI (System WMI): Uses WMI only; suitable for laptops and supported devices.
+        - Dxva2 (DDC/CI): Uses Dxva2 physical monitor API; driver dependent.
         - Twinkle Tray (CLI): Uses Twinkle Tray CLI only; no fallback to WMI.
         - WMI Priority: Try WMI first; fall back to Twinkle Tray on failure.
         - Twinkle Tray Priority: Try Twinkle Tray first; fall back to WMI on failure.
-        - Both: Run WMI and Twinkle Tray sequentially (Twinkle Tray runs regardless of WMI result).
+        - Both: Run WMI, Dxva2 and Twinkle Tray sequentially.
 
 System Volume:
     Type: Curtain interface; adjust system-wide master volume (0-100%).
@@ -3461,7 +3464,7 @@ def check_brightness_support():
     elif mode == "twinkle_priority":
         brightness_status_message = "Twinkle Tray 优先模式：优先 Twinkle Tray，失败则回退 WMI。"
     elif mode == "both":
-        brightness_status_message = "同时控制模式：WMI 和 Twinkle Tray 将同时执行。"
+        brightness_status_message = "同时控制模式：WMI, WinRT 和 Twinkle Tray 将同时执行。"
 
     if not ("config" in globals() and config.get("test", 0) == 1):
         try:
@@ -4003,16 +4006,17 @@ def open_builtin_settings():
     row_i += 1
 
     brightness_modes = [
-        ("wmi", "WMI (仅系统接口)"),
+        ("wmi", "WMI (系统 WMI 接口)"),
+        ("dxva2", "Dxva2 (物理显示器 DDC/CI)"),
         ("twinkle_tray", "Twinkle Tray (仅命令行)"),
         ("wmi_priority", "WMI 优先 (失败则使用 Twinkle Tray)"),
         ("twinkle_priority", "Twinkle Tray 优先 (失败则使用 WMI)"),
-        ("both", "同时控制 (WMI 和 Twinkle Tray)")
+        ("both", "同时控制 (WMI, Dxva2 和 Twinkle Tray)")
     ]
     bm_key_to_label_zh = {k: v for k, v in brightness_modes}
     cur_bm_key = config.get("brightness_mode", "wmi")
     bm_key_var = tk.StringVar(value=cur_bm_key)
-    brightness_mode_var = tk.StringVar(value=t(bm_key_to_label_zh.get(cur_bm_key, "WMI (仅系统接口)")))
+    brightness_mode_var = tk.StringVar(value=t(bm_key_to_label_zh.get(cur_bm_key, "WMI (系统 WMI 接口)")))
 
     def _bm_labels() -> list[str]:
         return [t(label) for _, label in brightness_modes]
@@ -4022,7 +4026,7 @@ def open_builtin_settings():
         return m.get(label, "wmi")
 
     def _bm_label_by_key(key: str) -> str:
-        return t(bm_key_to_label_zh.get(key, "WMI (仅系统接口)"))
+        return t(bm_key_to_label_zh.get(key, "WMI (系统 WMI 接口)"))
 
     ttk.Label(win, text=t("控制接口：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     brightness_mode_combo = ttk.Combobox(win, values=_bm_labels(), textvariable=brightness_mode_var, state="readonly", width=22)

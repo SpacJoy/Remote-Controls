@@ -1471,7 +1471,11 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
 
     if (!mode || _stricmp(mode, "wmi") == 0)
     {
-        RC_ActionSetBrightnessPercent(v);
+        RC_ActionSetBrightnessWmiPercent(v);
+    }
+    else if (_stricmp(mode, "dxva2") == 0)
+    {
+        RC_ActionSetBrightnessDxva2Percent(v);
     }
     else if (_stricmp(mode, "twinkle_tray") == 0)
     {
@@ -1484,7 +1488,7 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
     }
     else if (_stricmp(mode, "wmi_priority") == 0)
     {
-        if (!RC_ActionSetBrightnessPercent(v))
+        if (!RC_ActionSetBrightnessWmiPercent(v))
         {
             const char *path = cfg_str(r->config, "twinkle_tray_path");
             const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
@@ -1503,12 +1507,13 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
         bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
         if (!RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, path, tmode, tval, overlay, panel))
         {
-            RC_ActionSetBrightnessPercent(v);
+            RC_ActionSetBrightnessWmiPercent(v);
         }
     }
     else if (_stricmp(mode, "both") == 0)
     {
-        RC_ActionSetBrightnessPercent(v);
+        RC_ActionSetBrightnessWmiPercent(v);
+        RC_ActionSetBrightnessDxva2Percent(v);
         const char *path = cfg_str(r->config, "twinkle_tray_path");
         const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
         const char *tval = cfg_str(r->config, "twinkle_tray_target_value");
