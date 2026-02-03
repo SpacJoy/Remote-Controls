@@ -1,4 +1,4 @@
-﻿<#
+<#
 Remote Controls 顶层打包入口（PowerShell）
 作用：路径无关地转发到 installer/build_installer.ps1
 用法：

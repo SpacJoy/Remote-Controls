@@ -1,4 +1,4 @@
-﻿param(
+param(
   [Parameter(Mandatory = $false)]
   [string]$Version
 )
@@ -66,6 +66,32 @@ $root = $PSScriptRoot
 Set-Location -LiteralPath $root
 
 Write-Host '开始构建远程控制托盘程序...'
+
+# 自动检测并配置 C 编译工具链路径
+if (-not (Get-Command gcc -ErrorAction SilentlyContinue)) {
+    $CommonGccPaths = @(
+        "C:\msys64\mingw64\bin\gcc.exe",
+        "C:\msys64\ucrt64\bin\gcc.exe",
+        "C:\msys64\mingw32\bin\gcc.exe"
+    )
+    foreach ($path in $CommonGccPaths) {
+        if (Test-Path $path) {
+            $GccDir = Split-Path $path
+            if ($env:PATH -notlike "*$GccDir*") {
+                $env:PATH = "$GccDir;" + $env:PATH
+                Write-Host "已自动发现并配置 GCC 路径: $GccDir" -ForegroundColor Gray
+            }
+            break
+        }
+    }
+}
+
+# 检查基础工具是否存在
+foreach ($tool in @('gcc', 'windres')) {
+    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+        throw "错误：未能在 PATH 中找到 '$tool'。请先运行 .\setup_C_dev.ps1 部署开发环境，或手动将 MinGW/MSYS2 的 bin 目录加入 PATH。"
+    }
+}
 
 if (-not $PSBoundParameters.ContainsKey('Version') -or [string]::IsNullOrWhiteSpace($Version)) {
   $Version = Read-Host '请输入版本号（例如 V1.2.3）'

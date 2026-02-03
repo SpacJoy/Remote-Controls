@@ -478,16 +478,23 @@ Set-Content -Path $VersionTmpFile -Value $FinalVersion -Encoding ASCII -NoNewlin
 Write-Host "  版本信息已写入临时文件：$FinalVersion" -ForegroundColor Green
 
 # 检查 Inno Setup 是否安装，支持多种默认安装路径
-$PossibleInnoPaths = @(
-    "C:\Program Files (x86)\Inno Setup 6\iscc.exe",
-    "$env:LOCALAPPDATA\Programs\Inno Setup 6\iscc.exe",
-)
-
 $InnoPath = ""
-foreach ($p in $PossibleInnoPaths) {
-    if (Test-Path $p) {
-        $InnoPath = $p
-        break
+$IsccInPath = Get-Command iscc -ErrorAction SilentlyContinue
+if ($IsccInPath) {
+    $InnoPath = $IsccInPath.Source
+    Write-Host "  在 PATH 中找到 Inno Setup: $InnoPath" -ForegroundColor Gray
+} else {
+    $PossibleInnoPaths = @(
+        "C:\Program Files (x86)\Inno Setup 6\iscc.exe",
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\iscc.exe"
+    )
+
+    foreach ($p in $PossibleInnoPaths) {
+        if (Test-Path $p) {
+            $InnoPath = $p
+            Write-Host "  在默认路径找到 Inno Setup: $InnoPath" -ForegroundColor Gray
+            break
+        }
     }
 }
 

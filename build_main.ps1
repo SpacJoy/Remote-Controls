@@ -83,6 +83,32 @@ Set-Location -LiteralPath $root
 
 Write-Host '===== 构建 远程控制 主程序（C/Win32） ====='
 
+# 自动检测并配置 C 编译工具链路径
+if (-not (Get-Command gcc -ErrorAction SilentlyContinue)) {
+    $CommonGccPaths = @(
+        "C:\msys64\mingw64\bin\gcc.exe",
+        "C:\msys64\ucrt64\bin\gcc.exe",
+        "C:\msys64\mingw32\bin\gcc.exe"
+    )
+    foreach ($path in $CommonGccPaths) {
+        if (Test-Path $path) {
+            $GccDir = Split-Path $path
+            if ($env:PATH -notlike "*$GccDir*") {
+                $env:PATH = "$GccDir;" + $env:PATH
+                Write-Host "已自动发现并配置 GCC 路径: $GccDir" -ForegroundColor Gray
+            }
+            break
+        }
+    }
+}
+
+# 检查基础工具是否存在
+foreach ($tool in @('gcc', 'windres')) {
+    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+        throw "错误：未能在 PATH 中找到 '$tool'。请先运行 .\setup_C_dev.ps1 部署开发环境，或手动将 MinGW/MSYS2 的 bin 目录加入 PATH。"
+    }
+}
+
 # 强制仅使用 Paho MQTT C。
 # - 不再支持不带 Paho 的构建（rc_mqtt.c 会在编译期要求 RC_USE_PAHO_MQTT）。
 if ($PSBoundParameters.ContainsKey('UsePaho') -and -not $UsePaho) {
