@@ -226,10 +226,37 @@ _ZH_TO_EN: dict[str, str] = {
     "可执行文件": "Executable",
     "所有文件": "All files",
     "浏览": "Browse",
+    "选择": "Select",
     "目标显示器：": "Target Monitor:",
     "按编号 (MonitorNum)": "By Number (MonitorNum)",
     "按 ID (MonitorID)": "By ID (MonitorID)",
     "全部显示器 (All)": "All Monitors (All)",
+    "目标:": "Target:",
+    "('all' 或 索引 0, 1...)": "('all' or index 0, 1...)",
+    "配置:": "Config:",
+    "路径:": "Path:",
+    "目标模式:": "Target Mode:",
+    "目标值:": "Target Value:",
+    "下载 Twinkle Tray": "Download Twinkle Tray",
+    "打开亮度调节设置": "Open Brightness Settings",
+    "亮度调节设置": "Brightness Settings",
+    "控制模式:": "Control Mode:",
+    "测试": "Test",
+    "测试亮度": "Test Brightness",
+    "请输入亮度值 (0-100):": "Enter brightness value (0-100):",
+    "测试成功": "Test Success",
+    "测试失败": "Test Failure",
+    "自定义调节顺序:": "Custom Adjustment Order:",
+    "执行策略:": "Execution Strategy:",
+    "(all=同时执行, fallback=成功即止)": "(all=Simultaneous, fallback=Stop on success)",
+    "请至少选择一种控制模式": "Please select at least one control mode",
+    "wmi（系统 WMI 接口）": "wmi (System WMI Interface)",
+    "dxva2（物理显示器 DDC/CI）": "dxva2 (Physical Monitor DDC/CI)",
+    "twinkle_tray（第三方接口）": "twinkle_tray (Third-party Interface)",
+    "WMI (系统 WMI 接口)": "WMI (System WMI Interface)",
+    "Dxva2 (物理显示器 DDC/CI)": "Dxva2 (Physical Monitor DDC/CI)",
+    "Twinkle Tray (第三方接口)": "Twinkle Tray (Third-party Interface)",
+    "所有": "All",
     "睡眠/电源 (Sleep) 动作": "Sleep/Power (Sleep) Actions",
     "提示：动作将在等待指定的延时秒数后执行。": "Note: Action will be performed after the specified delay.",
     "系统休眠/睡眠功能开关：": "System Sleep/Hibernate Toggle:",
@@ -4191,19 +4218,19 @@ def open_builtin_settings():
         # WMI row
         wmi_row = ttk.Frame(cb_frame)
         wmi_row.pack(fill="x", pady=2)
-        ttk.Checkbutton(wmi_row, text="WMI (系统 WMI 接口)", variable=wmi_var).pack(side="left")
+        ttk.Checkbutton(wmi_row, text=t("WMI (系统 WMI 接口)"), variable=wmi_var).pack(side="left")
         ttk.Button(wmi_row, text=t("测试"), width=5, command=lambda: test_brightness_method("wmi")).pack(side="left", padx=10)
 
         # Dxva2 row
         dxva2_row = ttk.Frame(cb_frame)
         dxva2_row.pack(fill="x", pady=2)
-        ttk.Checkbutton(dxva2_row, text="Dxva2 (物理显示器 DDC/CI)", variable=dxva2_var).pack(side="left")
+        ttk.Checkbutton(dxva2_row, text=t("Dxva2 (物理显示器 DDC/CI)"), variable=dxva2_var).pack(side="left")
         ttk.Button(dxva2_row, text=t("测试"), width=5, command=lambda: test_brightness_method("dxva2")).pack(side="left", padx=10)
 
         # Twinkle Tray row
         tt_row = ttk.Frame(cb_frame)
         tt_row.pack(fill="x", pady=2)
-        ttk.Checkbutton(tt_row, text="Twinkle Tray (第三方接口)", variable=tt_var).pack(side="left")
+        ttk.Checkbutton(tt_row, text=t("Twinkle Tray (第三方接口)"), variable=tt_var).pack(side="left")
         ttk.Button(tt_row, text=t("测试"), width=5, command=lambda: test_brightness_method("twinkle_tray")).pack(side="left", padx=10)
         
         adv_row += 1
@@ -4221,9 +4248,9 @@ def open_builtin_settings():
         custom_list_str = config.get("brightness_custom_list", "wmi,dxva2,twinkle_tray") or "wmi,dxva2,twinkle_tray"
         # Map keys to display names
         display_map = {
-            "wmi": "wmi（系统 WMI 接口）",
-            "dxva2": "dxva2（物理显示器 DDC/CI）",
-            "twinkle_tray": "twinkle_tray（第三方接口）"
+            "wmi": t("wmi（系统 WMI 接口）"),
+            "dxva2": t("dxva2（物理显示器 DDC/CI）"),
+            "twinkle_tray": t("twinkle_tray（第三方接口）")
         }
         rev_display_map = {v: k for k, v in display_map.items()}
         
@@ -4314,7 +4341,7 @@ def open_builtin_settings():
                 if p: tt_path.set(p)
             except Exception as e:
                 messagebox.showerror(t("错误"), str(e))
-        ttk.Button(adv_win, text="选择", width=3, command=browse_tt).grid(row=adv_row, column=2, padx=5, sticky="w")
+        ttk.Button(adv_win, text=t("选择"), width=3, command=browse_tt).grid(row=adv_row, column=2, padx=5, sticky="w")
         adv_row += 1
         
         tt_modes = [("monitor_num", "按编号 (MonitorNum)"), ("monitor_id", "按 ID (MonitorID)"), ("all", "全部显示器 (All)")]
@@ -4577,8 +4604,8 @@ def open_builtin_settings():
 
     btn_frame = ttk.Frame(win)
     btn_frame.grid(row=row_i, column=0, columnspan=4, pady=(0, 10))
-    ttk.Button(btn_frame, text="保存", command=save_builtin_settings).grid(row=0, column=0, padx=6)
-    ttk.Button(btn_frame, text="取消", command=win.destroy).grid(row=0, column=1, padx=6)
+    ttk.Button(btn_frame, text=t("保存"), command=save_builtin_settings).grid(row=0, column=0, padx=6)
+    ttk.Button(btn_frame, text=t("取消"), command=win.destroy).grid(row=0, column=1, padx=6)
 
     def _apply_lang_to_builtin_win() -> None:
         if not win.winfo_exists():
