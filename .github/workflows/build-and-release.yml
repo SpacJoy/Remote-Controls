@@ -39,6 +39,9 @@ concurrency:
 jobs:
     prepare:
         runs-on: windows-latest
+        permissions:
+            contents: read
+            actions: read
         outputs:
             version: ${{ steps.version.outputs.version }}
             tag_name: ${{ steps.version.outputs.tag_name }}
@@ -57,6 +60,7 @@ jobs:
               env:
                   PYTHONIOENCODING: utf-8
                   PYTHONUTF8: 1
+                  GH_TOKEN: ${{ github.token }}
               run: |
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -145,20 +149,39 @@ jobs:
                         # 去掉 V 前缀和 -test 等后缀
                         $baseVersion = ($latestTag -replace '^V', '') -replace '-.*$', ''
                         $parts = $baseVersion.Split('.')
-                        if ($parts.Length -eq 3) {
-                          # 1.0.0 -> 1.0.0.1
-                          $buildVersion = "$($parts[0]).$($parts[1]).$($parts[2]).1"
-                        } elseif ($parts.Length -ge 4) {
-                          # 1.0.0.1 -> 1.0.0.2
-                          $lastPart = [int]$parts[3] + 1
-                          $buildVersion = "$($parts[0]).$($parts[1]).$($parts[2]).$lastPart"
+                        
+                        # 需求 3：除了参考标签，还要参考最近的 Actions 运行记录来决定 build 号
+                        $tagDate = git log -1 --format=%aI $latestTag
+                        $runCount = 0
+                        try {
+                          # 获取自该标签创建以来，dev 分支上成功的 Actions 运行次数
+                          $runs = gh run list --workflow "${{ github.workflow }}" --branch dev --status success --created ">$tagDate" --limit 100 --json id | ConvertFrom-Json
+                          $runCount = @($runs).Count
+                          echo "自标签 $latestTag ($tagDate) 以来，检测到 $runCount 次成功的 dev 运行记录"
+                        } catch {
+                          echo "警告：获取 Actions 运行记录失败，将仅基于标签进行递增"
+                        }
+
+                        if ($parts.Length -ge 3) {
+                          $major = $parts[0]
+                          $minor = $parts[1]
+                          $patch = $parts[2]
+                          
+                          if ($parts.Length -eq 3) {
+                            # 1.0.0 -> 1.0.0.(runCount + 1)
+                            $buildVersion = "$major.$minor.$patch.$($runCount + 1)"
+                          } else {
+                            # 1.0.0.5 -> 1.0.0.(5 + runCount + 1)
+                            $tagBuild = [int]$parts[3]
+                            $buildVersion = "$major.$minor.$patch.$($tagBuild + $runCount + 1)"
+                          }
                         } else {
-                          $buildVersion = "1.0.0.1"
+                          $buildVersion = "1.0.0.$($runCount + 1)"
                         }
                       } else {
                         $buildVersion = "1.0.0.1"
                       }
-                      echo "检测到 dev 分支推送，自动根据最新标签 ($latestTag) 递增版本号为: $buildVersion"
+                      echo "检测到 dev 分支推送，自动根据最新标签 ($latestTag) 及 Actions 记录递增版本号为: $buildVersion"
                     }
 
                     $resolved = [pscustomobject]@{
