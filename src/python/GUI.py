@@ -246,6 +246,8 @@ _ZH_TO_EN: dict[str, str] = {
     "请输入亮度值 (0-100):": "Enter brightness value (0-100):",
     "测试成功": "Test Success",
     "测试失败": "Test Failure",
+    "确认测试": "Confirm Test",
+    "请先确保 Twinkle Tray 正在运行后再测试，否则将未响应，可退出Twinkle Tray解决": "Please ensure Twinkle Tray is running before testing, otherwise it will not respond. You can exit Twinkle Tray to resolve this.",
     "自定义调节顺序:": "Custom Adjustment Order:",
     "执行策略:": "Execution Strategy:",
     "(all=同时执行, fallback=成功即止)": "(all=Simultaneous, fallback=Stop on success)",
@@ -4186,6 +4188,9 @@ def open_builtin_settings():
                     messagebox.showinfo(t("测试成功"), f"Dxva2 亮度已设置为 {val}%")
 
                 elif method == "twinkle_tray":
+                    if not messagebox.askokcancel(t("确认测试"), t("请先确保 Twinkle Tray 正在运行后再测试，否则将未响应，可退出Twinkle Tray解决")):
+                        return
+
                     exe_path = tt_path.get().strip()
                     if not exe_path:
                         exe_path = _resolve_twinkle_tray_path_for_gui() or "Twinkle-Tray.exe"
