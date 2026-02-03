@@ -1469,57 +1469,101 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
     const char *mode = cfg_str(r->config, "brightness_mode");
     int v = (value < 0) ? 0 : (value > 100 ? 100 : value);
 
+    // Read targets for WMI/Dxva2 (default "all")
+    const char *wmiTarget = cfg_str(r->config, "wmi_target");
+    if (!wmiTarget || !*wmiTarget)
+        wmiTarget = "all";
+
+    const char *dxva2Target = cfg_str(r->config, "dxva2_target");
+    if (!dxva2Target || !*dxva2Target)
+        dxva2Target = "all";
+
+    // Read Twinkle Tray config (shared across modes)
+    const char *ttPath = cfg_str(r->config, "twinkle_tray_path");
+    const char *ttMode = cfg_str(r->config, "twinkle_tray_target_mode");
+    const char *ttVal = cfg_str(r->config, "twinkle_tray_target_value");
+    bool ttOverlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
+    bool ttPanel = cfg_bool(r->config, "twinkle_tray_panel", false);
+
     if (!mode || _stricmp(mode, "wmi") == 0)
     {
-        RC_ActionSetBrightnessWmiPercent(v);
+        RC_ActionSetBrightnessWmiPercent(v, wmiTarget);
     }
     else if (_stricmp(mode, "dxva2") == 0)
     {
-        RC_ActionSetBrightnessDxva2Percent(v);
+        RC_ActionSetBrightnessDxva2Percent(v, dxva2Target);
     }
     else if (_stricmp(mode, "twinkle_tray") == 0)
     {
-        const char *path = cfg_str(r->config, "twinkle_tray_path");
-        const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
-        const char *tval = cfg_str(r->config, "twinkle_tray_target_value");
-        bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
-        bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
-        RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, path, tmode, tval, overlay, panel);
+        RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
     }
     else if (_stricmp(mode, "wmi_priority") == 0)
     {
-        if (!RC_ActionSetBrightnessWmiPercent(v))
+        if (!RC_ActionSetBrightnessWmiPercent(v, wmiTarget))
         {
-            const char *path = cfg_str(r->config, "twinkle_tray_path");
-            const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
-            const char *tval = cfg_str(r->config, "twinkle_tray_target_value");
-            bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
-            bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
-            RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, path, tmode, tval, overlay, panel);
+            RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
         }
     }
     else if (_stricmp(mode, "twinkle_priority") == 0)
     {
-        const char *path = cfg_str(r->config, "twinkle_tray_path");
-        const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
-        const char *tval = cfg_str(r->config, "twinkle_tray_target_value");
-        bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
-        bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
-        if (!RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, path, tmode, tval, overlay, panel))
+        if (!RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel))
         {
-            RC_ActionSetBrightnessWmiPercent(v);
+            RC_ActionSetBrightnessWmiPercent(v, wmiTarget);
         }
     }
     else if (_stricmp(mode, "both") == 0)
     {
-        RC_ActionSetBrightnessWmiPercent(v);
-        RC_ActionSetBrightnessDxva2Percent(v);
-        const char *path = cfg_str(r->config, "twinkle_tray_path");
-        const char *tmode = cfg_str(r->config, "twinkle_tray_target_mode");
-        const char *tval = cfg_str(r->config, "twinkle_tray_target_value");
-        bool overlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
-        bool panel = cfg_bool(r->config, "twinkle_tray_panel", false);
-        RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, path, tmode, tval, overlay, panel);
+        // "both" means all enabled methods simultaneously (WMI + Dxva2 + Twinkle)
+        RC_ActionSetBrightnessWmiPercent(v, wmiTarget);
+        RC_ActionSetBrightnessDxva2Percent(v, dxva2Target);
+        RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+    }
+    else if (_stricmp(mode, "custom") == 0)
+    {
+        // Custom order and strategy
+        // brightness_custom_list: e.g. "wmi,dxva2,twinkle_tray"
+        // brightness_custom_strategy: "all" (simultaneous) or "fallback" (stop on success)
+        const char *list = cfg_str(r->config, "brightness_custom_list");
+        const char *strategy = cfg_str(r->config, "brightness_custom_strategy");
+        bool fallback = (strategy && _stricmp(strategy, "fallback") == 0);
+
+        if (list && *list)
+        {
+            char *copy = dupstr0(list);
+            if (copy)
+            {
+                char *ctx = NULL;
+                char *token = strtok_s(copy, ",", &ctx);
+                bool success = false;
+                while (token)
+                {
+                    // trim whitespace
+                    while (*token == ' ') token++;
+                    size_t len = strlen(token);
+                    while (len > 0 && token[len - 1] == ' ') token[--len] = 0;
+
+                    bool ok = false;
+                    if (_stricmp(token, "wmi") == 0)
+                    {
+                        ok = RC_ActionSetBrightnessWmiPercent(v, wmiTarget);
+                    }
+                    else if (_stricmp(token, "dxva2") == 0)
+                    {
+                        ok = RC_ActionSetBrightnessDxva2Percent(v, dxva2Target);
+                    }
+                    else if (_stricmp(token, "twinkle_tray") == 0)
+                    {
+                        ok = RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+                    }
+
+                    if (ok) success = true;
+                    if (fallback && success) break;
+
+                    token = strtok_s(NULL, ",", &ctx);
+                }
+                free(copy);
+            }
+        }
     }
 
     router_notify_action(r, topicUtf8, payloadUtf8);

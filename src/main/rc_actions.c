@@ -415,16 +415,13 @@ void RC_ActionMediaCommand(const char *command)
 typedef struct
 {
     DWORD brightness;
+    int targetIndex; // -1 for all, >=0 for specific index
+    int currentIndex;
     bool ok;
 } BrightnessCtx;
 
 /*
  * EnumDisplayMonitors 的回调：尝试为当前 HMONITOR 下的所有“物理显示器”设置亮度。
- *
- * 说明：
- * - HMONITOR 只是逻辑监视器句柄；Dxva2 API 需要先映射到 PHYSICAL_MONITOR。
- * - 并非所有显示器都支持 DDC/CI 亮度控制；不支持时 SetMonitorBrightness 会失败。
- * - 这里采用 best-effort：只要任意一个物理显示器设置成功，就把 ctx->ok 置为 true。
  */
 static BOOL CALLBACK enum_monitors_set_brightness(HMONITOR hMonitor, HDC hdc, LPRECT lprc, LPARAM lp)
 {
@@ -446,9 +443,13 @@ static BOOL CALLBACK enum_monitors_set_brightness(HMONITOR hMonitor, HDC hdc, LP
     {
         for (DWORD i = 0; i < count; i++)
         {
-            // Note: Some monitors may not support brightness control.
-            if (SetMonitorBrightness(mons[i].hPhysicalMonitor, ctx->brightness))
-                ctx->ok = true;
+            // 如果指定了索引，则必须匹配当前索引
+            if (ctx->targetIndex == -1 || ctx->currentIndex == ctx->targetIndex)
+            {
+                if (SetMonitorBrightness(mons[i].hPhysicalMonitor, ctx->brightness))
+                    ctx->ok = true;
+            }
+            ctx->currentIndex++;
         }
         DestroyPhysicalMonitors(count, mons);
     }
@@ -457,60 +458,74 @@ static BOOL CALLBACK enum_monitors_set_brightness(HMONITOR hMonitor, HDC hdc, LP
     return TRUE;
 }
 
-bool RC_ActionSetBrightnessDxva2Percent(int percent0to100)
+bool RC_ActionSetBrightnessDxva2Percent(int percent0to100, const char *target)
 {
     /*
      * 通过 Dxva2 的物理显示器 API 调整亮度（0~100）。
-     *
-     * 注意事项：
-     * - 该路径依赖显示器/显卡驱动对 DDC/CI 等能力的支持；很多设备不支持或会失败。
-     * - 本实现会枚举所有 HMONITOR，并尝试对每个物理显示器句柄调用 SetMonitorBrightness。
-     * - 只要有任意一个显示器设置成功，就认为 ok=true。
+     * - target: "all" 表示所有；数字字符串 (e.g. "0", "1") 表示指定索引的显示器。
      */
     int v = clamp_int(percent0to100, 0, 100);
     BrightnessCtx ctx;
     ctx.brightness = (DWORD)v;
+    ctx.targetIndex = -1;
+    ctx.currentIndex = 0;
     ctx.ok = false;
+
+    if (target && isdigit((unsigned char)target[0]))
+    {
+        ctx.targetIndex = atoi(target);
+    }
 
     EnumDisplayMonitors(NULL, NULL, enum_monitors_set_brightness, (LPARAM)&ctx);
     if (!ctx.ok)
-        RC_LogWarn("Dxva2 设置亮度失败或不支持 (percent=%d)", v);
+        RC_LogWarn("Dxva2 设置亮度失败或不支持 (percent=%d, target=%s)", v, target ? target : "all");
     return ctx.ok;
 }
 
-bool RC_ActionSetBrightnessWmiPercent(int percent0to100)
+bool RC_ActionSetBrightnessWmiPercent(int percent0to100, const char *target)
 {
     /*
      * 使用 WMI (WmiMonitorBrightnessMethods) 调整亮度。
-     * 必须以管理员权限运行，支持大部分笔记本和部分支持 DDC/CI 的台式机。
+     * - target: "all" 表示所有；数字字符串 (e.g. "0", "1") 表示指定索引的实例。
      */
     int v = clamp_int(percent0to100, 0, 100);
     char psCmd[2048];
+    int targetIdx = -1;
+    if (target && isdigit((unsigned char)target[0]))
+    {
+        targetIdx = atoi(target);
+    }
 
     /*
      * PowerShell 脚本逻辑：
      * 1. 获取 WmiMonitorBrightnessMethods 实例。
-     * 2. 遍历实例并调用 WmiSetBrightness(0, v)。
-     * 3. 捕获异常。
+     * 2. 根据 target 选择全部或特定实例。
+     * 3. 调用 WmiSetBrightness(0, v)。
      */
-    snprintf(psCmd, sizeof(psCmd),
-             "$ErrorActionPreference = 'Stop'; "
-             "try { "
-             "  $methods = Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods; "
-             "  if ($null -eq $methods) { throw 'No WMI brightness methods found' } "
-             "  if ($methods -is [array]) { "
-             "    foreach ($m in $methods) { $m.WmiSetBrightness(0, %d) } "
-             "  } else { "
-             "    $methods.WmiSetBrightness(0, %d) "
-             "  } "
-             "  Write-Host 'Success' "
-             "} catch { "
-             "  [Console]::Error.WriteLine(\"WMI Failed: $($_.Exception.Message)\"); "
-             "  exit 1; "
-             "}",
-             v, v);
+    const char *psTemplate =
+        "$ErrorActionPreference = 'Stop'; "
+        "try { "
+        "  $methods = @(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods); "
+        "  if ($null -eq $methods -or $methods.Count -eq 0) { throw 'No WMI brightness methods found' } "
+        "  $target = %d; "
+        "  if ($target -eq -1) { "
+        "    foreach ($m in $methods) { $m.WmiSetBrightness(0, %d) } "
+        "  } else { "
+        "    if ($target -lt $methods.Count) { "
+        "      $methods[$target].WmiSetBrightness(0, %d) "
+        "    } else { "
+        "      throw \"Target index $target out of range (Count: $($methods.Count))\" "
+        "    } "
+        "  } "
+        "  Write-Host 'Success' "
+        "} catch { "
+        "  [Console]::Error.WriteLine(\"WMI Failed: $($_.Exception.Message)\"); "
+        "  exit 1; "
+        "}";
 
-    RC_LogInfo("WMI 亮度调节: %d%%", v);
+    snprintf(psCmd, sizeof(psCmd), psTemplate, targetIdx, v, v);
+
+    RC_LogInfo("WMI 亮度调节: %d%% (target=%s)", v, target ? target : "all");
     char *output = NULL;
     bool ok = RC_ActionRunPowershellCommandWithOutput(psCmd, &output);
     if (ok && output)

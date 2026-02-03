@@ -48,15 +48,17 @@ extern "C"
 
     /*
      * 通过 Dxva2 的物理显示器 API 调整亮度（0~100）。
+     * - target: "all" 表示所有；数字字符串 (e.g. "0", "1") 表示指定索引的显示器。
      * - 该路径依赖显示器/显卡驱动对 DDC/CI 等能力的支持；很多设备不支持或会失败。
      */
-    bool RC_ActionSetBrightnessDxva2Percent(int percent0to100);
+    bool RC_ActionSetBrightnessDxva2Percent(int percent0to100, const char *target);
 
     /*
      * 通过 WMI (WmiMonitorBrightnessMethods) 调整亮度（0~100）。
+     * - target: "all" 表示所有；数字字符串 (e.g. "0", "1") 表示指定索引的实例。
      * - 适用于大多数笔记本和部分台式机，通常需要管理员权限。
      */
-    bool RC_ActionSetBrightnessWmiPercent(int percent0to100);
+    bool RC_ActionSetBrightnessWmiPercent(int percent0to100, const char *target);
 
     /*
      * 使用 Twinkle Tray CLI 设置亮度（Twinkle Tray 需已安装，通常也需要运行）。

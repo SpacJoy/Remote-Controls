@@ -849,16 +849,29 @@ def _apply_ttk_ui_fonts(root: tk.Tk) -> None:
         pass
 
 # 设置窗口居中
-def center_window(window: Union[tk.Tk, tk.Toplevel]) -> None:
+def center_window(window: Union[tk.Tk, tk.Toplevel], parent: Union[tk.Tk, tk.Toplevel, None] = None) -> None:
     """
-    English: Centers the given window on the screen
-    中文: 将指定窗口在屏幕上居中显示
+    English: Centers the given window on the screen or relative to parent
+    中文: 将指定窗口在屏幕上或相对于父窗口居中显示
     """
     window.update_idletasks()
     width: int = window.winfo_width()
     height: int = window.winfo_height()
-    x: int = (window.winfo_screenwidth() // 2) - (width // 2)
-    y: int = (window.winfo_screenheight() // 2) - (height // 2)
+    
+    if parent:
+        # Center relative to parent
+        parent.update_idletasks()
+        px = parent.winfo_rootx()
+        py = parent.winfo_rooty()
+        pw = parent.winfo_width()
+        ph = parent.winfo_height()
+        x = px + (pw - width) // 2
+        y = py + (ph - height) // 2
+    else:
+        # Center on screen
+        x = (window.winfo_screenwidth() // 2) - (width // 2)
+        y = (window.winfo_screenheight() // 2) - (height // 2)
+
     window.geometry(f"{width}x{height}+{x}+{y}")
 
 
@@ -4005,134 +4018,251 @@ def open_builtin_settings():
     ttk.Label(win, text=t("显示器亮度调节方案")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
     row_i += 1
 
-    brightness_modes = [
-        ("wmi", "WMI (系统 WMI 接口)"),
-        ("dxva2", "Dxva2 (物理显示器 DDC/CI)"),
-        ("twinkle_tray", "Twinkle Tray (仅命令行)"),
-        ("wmi_priority", "WMI 优先 (失败则使用 Twinkle Tray)"),
-        ("twinkle_priority", "Twinkle Tray 优先 (失败则使用 WMI)"),
-        ("both", "同时控制 (WMI, Dxva2 和 Twinkle Tray)")
-    ]
-    bm_key_to_label_zh = {k: v for k, v in brightness_modes}
-    cur_bm_key = config.get("brightness_mode", "wmi")
-    bm_key_var = tk.StringVar(value=cur_bm_key)
-    brightness_mode_var = tk.StringVar(value=t(bm_key_to_label_zh.get(cur_bm_key, "WMI (系统 WMI 接口)")))
-
-    def _bm_labels() -> list[str]:
-        return [t(label) for _, label in brightness_modes]
-
-    def _bm_key_by_label(label: str) -> str:
-        m = {t(v): k for k, v in brightness_modes}
-        return m.get(label, "wmi")
-
-    def _bm_label_by_key(key: str) -> str:
-        return t(bm_key_to_label_zh.get(key, "WMI (系统 WMI 接口)"))
-
-    ttk.Label(win, text=t("控制接口：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
-    brightness_mode_combo = ttk.Combobox(win, values=_bm_labels(), textvariable=brightness_mode_var, state="readonly", width=22)
-    brightness_mode_combo.bind(
-        "<<ComboboxSelected>>",
-        lambda e: bm_key_var.set(_bm_key_by_label(brightness_mode_var.get())),
-    )
-    brightness_mode_combo.grid(row=row_i, column=1, sticky="w")
-
-    twinkle_overlay_var = tk.IntVar(value=int(config.get("twinkle_tray_overlay", 1) or 0))
-    overlay_cb = ttk.Checkbutton(win, text=t("显示亮度叠加层(Overlay)"), variable=twinkle_overlay_var)
-    overlay_cb.grid(row=row_i, column=2, columnspan=2, sticky="w")
-    row_i += 1
-
-    ttk.Label(win, text=t("Twinkle Tray 路径：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
-    default_twinkle_path = r"%LocalAppData%\Programs\twinkle-tray\Twinkle Tray.exe"
-    twinkle_path_var = tk.StringVar(value=(config.get("twinkle_tray_path", "") or default_twinkle_path))
-    twinkle_path_entry = ttk.Entry(win, textvariable=twinkle_path_var, width=24)
-    twinkle_path_entry.grid(row=row_i, column=1, columnspan=1, sticky="w")
-
-    def browse_twinkle_path():
+    def open_advanced_brightness_settings():
+        adv_win = tk.Toplevel(win)
+        adv_win.title(t("亮度调节设置"))
+        adv_win.geometry("690x650")
+        adv_win.transient(win)
+        adv_win.grab_set()
+        
         try:
-            path = filedialog.askopenfilename(
-                title=t("选择 Twinkle Tray 可执行文件"),
-                filetypes=[(t("可执行文件"), "*.exe"), (t("所有文件"), "*.*")],
-            )
-            if path:
-                twinkle_path_var.set(path)
-        except Exception as e:
-            messagebox.showerror(t("错误"), t(f"选择文件失败: {e}"))
-    btns_frame = ttk.Frame(win)
-    btns_frame.grid(row=row_i, column=2, columnspan=2, sticky="w", padx=6)
-    browse_btn = ttk.Button(btns_frame, text=t("浏览"), command=browse_twinkle_path)
-    browse_btn.grid(row=0, column=0, sticky="w")
-    def open_twinkle_store():
-        try:
-            import webbrowser
-            webbrowser.open("https://twinkletray.com/")
-        except Exception as e:
-            messagebox.showerror(t("错误"), t(f"打开下载链接失败: {e}"))
-    download_btn = ttk.Button(btns_frame, text=t("下载"), command=open_twinkle_store)
-    download_btn.grid(row=0, column=1, sticky="w", padx=(6, 0))
-    row_i += 1
+            center_window(adv_win, win)
+        except Exception:
+            pass
 
-    ttk.Label(win, text=t("目标显示器：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
-    target_modes = [
-        ("monitor_num", "按编号 (MonitorNum)"),
-        ("monitor_id", "按 ID (MonitorID)"),
-        ("all", "全部显示器 (All)")
-    ]
-    tm_key_to_label_zh = {k: v for k, v in target_modes}
-    tm_key_var = tk.StringVar(value=str(config.get("twinkle_tray_target_mode", "monitor_num") or "monitor_num"))
-    twinkle_target_mode_var = tk.StringVar(value=t(tm_key_to_label_zh.get(tm_key_var.get(), "按编号 (MonitorNum)")))
-    twinkle_target_value_var = tk.StringVar(value=str(config.get("twinkle_tray_target_value", "1") or ""))
+        adv_row = 0
+        
+        # 1. Mode Selection (Checkboxes)
+        # Initialize variables based on current config
+        cur_mode = config.get("brightness_mode", "wmi")
+        custom_list_str = config.get("brightness_custom_list", "wmi,dxva2,twinkle_tray") or "wmi,dxva2,twinkle_tray"
+        custom_items = [x.strip() for x in custom_list_str.split(",") if x.strip()]
+        
+        wmi_var = tk.IntVar()
+        dxva2_var = tk.IntVar()
+        tt_var = tk.IntVar()
+        
+        # Logic to set initial checkbox states
+        if cur_mode == "custom":
+            if "wmi" in custom_items: wmi_var.set(1)
+            if "dxva2" in custom_items: dxva2_var.set(1)
+            if "twinkle_tray" in custom_items: tt_var.set(1)
+        elif cur_mode == "both":
+            wmi_var.set(1); dxva2_var.set(1); tt_var.set(1)
+        elif cur_mode == "wmi_priority":
+            wmi_var.set(1); tt_var.set(1)
+        elif cur_mode == "twinkle_priority":
+            wmi_var.set(1); tt_var.set(1)
+        elif cur_mode == "wmi":
+            wmi_var.set(1)
+        elif cur_mode == "dxva2":
+            dxva2_var.set(1)
+        elif cur_mode == "twinkle_tray":
+            tt_var.set(1)
+        else:
+            wmi_var.set(1)
 
-    def _tm_labels() -> list[str]:
-        return [t(label) for _, label in target_modes]
+        ttk.Label(adv_win, text=t("控制模式:")).grid(row=adv_row, column=0, padx=10, pady=10, sticky="nw")
+        
+        cb_frame = ttk.Frame(adv_win)
+        cb_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, pady=10, sticky="w")
+        
+        ttk.Checkbutton(cb_frame, text="WMI (系统 WMI 接口)", variable=wmi_var).pack(anchor="w", pady=2)
+        ttk.Checkbutton(cb_frame, text="Dxva2 (物理显示器 DDC/CI)", variable=dxva2_var).pack(anchor="w", pady=2)
+        ttk.Checkbutton(cb_frame, text="Twinkle Tray (仅命令行)", variable=tt_var).pack(anchor="w", pady=2)
+        
+        adv_row += 1
 
-    def _tm_key_by_label(label: str) -> str:
-        m = {t(v): k for k, v in target_modes}
-        return m.get(label, "monitor_num")
+        ttk.Separator(adv_win, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=5)
+        adv_row += 1
 
-    def _tm_label_by_key(key: str) -> str:
-        return t(tm_key_to_label_zh.get(key, "按编号(MonitorNum)"))
+        # 2. Custom Order
+        ttk.Label(adv_win, text=t("自定义调节顺序:")).grid(row=adv_row, column=0, columnspan=2, padx=10, pady=(5, 5), sticky="w")
+        adv_row += 1
+        
+        list_frame = ttk.Frame(adv_win)
+        list_frame.grid(row=adv_row, column=0, columnspan=3, padx=10, pady=0, sticky="ew")
+        
+        custom_list_str = config.get("brightness_custom_list", "wmi,dxva2,twinkle_tray") or "wmi,dxva2,twinkle_tray"
+        current_order = [x.strip() for x in custom_list_str.split(",") if x.strip()]
+        all_methods = ["wmi（系统 WMI 接口）", "dxva2（物理显示器 DDC/CI）", "twinkle_tray（第三方接口）"]
+        for m in all_methods:
+            if m not in current_order: current_order.append(m)
+            
+        lb = tk.Listbox(list_frame, height=3, selectmode="single")
+        for m in current_order: lb.insert(tk.END, m)
+        lb.pack(side="left", fill="x", expand=True)
+        
+        btn_frame = ttk.Frame(list_frame)
+        btn_frame.pack(side="right", fill="y", padx=5)
+        
+        def move_up():
+            sel = lb.curselection()
+            if not sel or sel[0] == 0: return
+            idx = sel[0]
+            txt = lb.get(idx)
+            lb.delete(idx)
+            lb.insert(idx-1, txt)
+            lb.selection_set(idx-1)
+            
+        def move_down():
+            sel = lb.curselection()
+            if not sel or sel[0] == lb.size()-1: return
+            idx = sel[0]
+            txt = lb.get(idx)
+            lb.delete(idx)
+            lb.insert(idx+1, txt)
+            lb.selection_set(idx+1)
+            
+        ttk.Button(btn_frame, text="↑", width=3, command=move_up).pack(pady=2)
+        ttk.Button(btn_frame, text="↓", width=3, command=move_down).pack(pady=2)
+        adv_row += 1
 
-    twinkle_target_mode_combo = ttk.Combobox(win, values=_tm_labels(), textvariable=twinkle_target_mode_var, state="readonly", width=22)
-    twinkle_target_mode_combo.bind(
-        "<<ComboboxSelected>>",
-        lambda e: tm_key_var.set(_tm_key_by_label(twinkle_target_mode_var.get())),
-    )
-    twinkle_target_mode_combo.grid(row=row_i, column=1, sticky="w")
+        ttk.Label(adv_win, text=t("执行策略:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        strat_var = tk.StringVar(value=config.get("brightness_custom_strategy", "all"))
+        ttk.Combobox(adv_win, textvariable=strat_var, values=["all", "fallback"], state="readonly", width=10).grid(row=adv_row, column=1, padx=10, pady=5, sticky="w")
+        ttk.Label(adv_win, text=t("(all=同时执行, fallback=成功即止)")).grid(row=adv_row, column=2, padx=5, sticky="w")
+        adv_row += 1
 
-    twinkle_target_entry = ttk.Entry(win, textvariable=twinkle_target_value_var, width=18)
-    twinkle_target_entry.grid(row=row_i, column=2, sticky="w")
-    row_i += 1
+        ttk.Separator(adv_win, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
+        adv_row += 1
 
-    def _toggle_twinkle_fields(*_args):
-        mode_key = _bm_key_by_label(brightness_mode_var.get()) or "wmi"
-        use_twinkle = mode_key in ("twinkle_tray", "wmi_priority", "twinkle_priority", "both")
-        state = "normal" if use_twinkle else "disabled"
-        for w in (twinkle_path_entry, twinkle_target_mode_combo, twinkle_target_entry, overlay_cb, browse_btn, download_btn):
+        # 3. Targets
+        ttk.Label(adv_win, text="WMI " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        wmi_target = tk.StringVar(value=config.get("wmi_target", "all"))
+        ttk.Entry(adv_win, textvariable=wmi_target).grid(row=adv_row, column=1, padx=10, sticky="ew")
+        ttk.Label(adv_win, text=t("('all'（全部） 或 索引 0, 1...)")).grid(row=adv_row, column=2, padx=5, sticky="w")
+        adv_row += 1
+        
+        ttk.Label(adv_win, text="Dxva2 " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        dxva2_target = tk.StringVar(value=config.get("dxva2_target", "all"))
+        ttk.Entry(adv_win, textvariable=dxva2_target).grid(row=adv_row, column=1, padx=10, sticky="ew")
+        ttk.Label(adv_win, text=t("('all'（全部） 或 索引 0, 1...)")).grid(row=adv_row, column=2, padx=5, sticky="w")
+        adv_row += 1
+
+        ttk.Separator(adv_win, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
+        adv_row += 1
+
+        # 4. Twinkle Tray
+        ttk.Label(adv_win, text="Twinkle Tray " + t("配置:")).grid(row=adv_row, column=0, columnspan=2, padx=10, pady=5, sticky="w")
+        adv_row += 1
+
+        default_tt = r"%LocalAppData%\Programs\twinkle-tray\Twinkle Tray.exe"
+        tt_path = tk.StringVar(value=config.get("twinkle_tray_path", "") or default_tt)
+        ttk.Label(adv_win, text=t("路径:")).grid(row=adv_row, column=0, padx=10, sticky="e")
+        ttk.Entry(adv_win, textvariable=tt_path).grid(row=adv_row, column=1, padx=10, sticky="ew")
+        
+        def browse_tt():
             try:
-                w.state(["!disabled"] if use_twinkle else ["disabled"])
+                p = filedialog.askopenfilename(filetypes=[(t("可执行文件"), "*.exe"), (t("所有文件"), "*.*")])
+                if p: tt_path.set(p)
+            except Exception as e:
+                messagebox.showerror(t("错误"), str(e))
+        ttk.Button(adv_win, text="选择", width=3, command=browse_tt).grid(row=adv_row, column=2, padx=5, sticky="w")
+        adv_row += 1
+        
+        tt_modes = [("monitor_num", "按编号 (MonitorNum)"), ("monitor_id", "按 ID (MonitorID)"), ("all", "全部显示器 (All)")]
+        tt_mode_key = tk.StringVar(value=config.get("twinkle_tray_target_mode", "monitor_num"))
+        # Find label for key
+        def _get_tt_label(key):
+            for k, l in tt_modes:
+                if k == key: return t(l)
+            return t("按编号 (MonitorNum)")
+        tt_mode_lbl = tk.StringVar(value=_get_tt_label(tt_mode_key.get()))
+        
+        ttk.Label(adv_win, text=t("目标模式:")).grid(row=adv_row, column=0, padx=10, sticky="e")
+        tm_cb = ttk.Combobox(adv_win, textvariable=tt_mode_lbl, values=[t(l) for k,l in tt_modes], state="readonly")
+        tm_cb.grid(row=adv_row, column=1, padx=10, sticky="w")
+        
+        def _on_tt_mode_change(e):
+            lbl = tt_mode_lbl.get()
+            for k, l in tt_modes:
+                if t(l) == lbl:
+                    tt_mode_key.set(k)
+                    break
+        tm_cb.bind("<<ComboboxSelected>>", _on_tt_mode_change)
+        adv_row += 1
+        
+        tt_val = tk.StringVar(value=config.get("twinkle_tray_target_value", "1"))
+        ttk.Label(adv_win, text=t("目标值:")).grid(row=adv_row, column=0, padx=10, sticky="e")
+        ttk.Entry(adv_win, textvariable=tt_val).grid(row=adv_row, column=1, padx=10, sticky="ew")
+        adv_row += 1
+        
+        tt_overlay = tk.IntVar(value=int(config.get("twinkle_tray_overlay", 1) or 0))
+        ttk.Checkbutton(adv_win, text=t("显示亮度叠加层(Overlay)"), variable=tt_overlay).grid(row=adv_row, column=1, sticky="w", padx=10)
+        
+        def download_tt():
+            try:
+                import webbrowser
+                webbrowser.open("https://twinkletray.com/")
             except Exception:
-                try:
-                    w.config(state=state)
-                except Exception:
-                    pass
+                pass
+        ttk.Button(adv_win, text=t("下载 Twinkle Tray"), command=download_tt).grid(row=adv_row, column=2, padx=5, sticky="w")
+        adv_row += 1
 
-        # NOTE: Combobox 会先更新 textvariable（twinkle_target_mode_var），再触发 <<ComboboxSelected>>。
-        # 如果这里只依赖 tm_key_var，可能读到旧值，导致“全部显示器”时输入框未及时禁用。
-        target_mode_key = _tm_key_by_label(twinkle_target_mode_var.get()) or (tm_key_var.get() or "monitor_num")
-        if tm_key_var.get() != target_mode_key:
-            tm_key_var.set(target_mode_key)
+        # Toggle state based on mode
+        def _update_state(*args):
+            # Check if mode uses TT
+            m = mode_key_var.get()
+            use_tt = m in ("twinkle_tray", "wmi_priority", "twinkle_priority", "both", "custom")
+            # In custom mode, user might use TT, so enable it.
+            # Actually, even if mode is WMI, user might want to configure TT for later.
+            # But let's keep it simple: always enable editing in advanced settings? 
+            # Or follow the logic.
+            # User request: "support visual adjustment ... custom parameters"
+            # It's better to leave them enabled in advanced window so user can configure them anytime.
+            pass
 
-        if use_twinkle and target_mode_key == "all":
-            twinkle_target_entry.state(["disabled"])
-        elif use_twinkle:
-            twinkle_target_entry.state(["!disabled"])
+        # Save
+        def save():
+            selected = []
+            if wmi_var.get(): selected.append("wmi")
+            if dxva2_var.get(): selected.append("dxva2")
+            if tt_var.get(): selected.append("twinkle_tray")
+            
+            if not selected:
+                messagebox.showerror(t("错误"), t("请至少选择一种控制模式"))
+                return
 
-    brightness_mode_var.trace_add("write", _toggle_twinkle_fields)
-    twinkle_target_mode_var.trace_add("write", _toggle_twinkle_fields)
-    _toggle_twinkle_fields()
+            # Determine order from listbox
+            current_lb_order = lb.get(0, tk.END)
+            final_order = [x for x in current_lb_order if x in selected]
+            # Append any selected but missing from listbox
+            for s in selected:
+                if s not in final_order: final_order.append(s)
+
+            # Determine mode
+            if len(selected) == 1:
+                new_mode = selected[0]
+            else:
+                new_mode = "custom"
+
+            config["brightness_mode"] = new_mode
+            config["brightness_custom_list"] = ",".join(final_order)
+            config["brightness_custom_strategy"] = strat_var.get()
+            config["wmi_target"] = wmi_target.get()
+            config["dxva2_target"] = dxva2_target.get()
+            config["twinkle_tray_path"] = tt_path.get()
+            config["twinkle_tray_target_mode"] = tt_mode_key.get()
+            config["twinkle_tray_target_value"] = tt_val.get()
+            config["twinkle_tray_overlay"] = tt_overlay.get()
+            
+            # Save to file
+            try:
+                generate_config()
+            except Exception as e:
+                messagebox.showerror(t("错误"), t(f"保存配置失败: {e}"))
+                return
+
+            adv_win.destroy()
+            
+        ttk.Button(adv_win, text=t("保存"), command=save).grid(row=adv_row+1, column=0, columnspan=3, pady=20)
+
+    ttk.Button(win, text=t("打开亮度调节设置"), command=open_advanced_brightness_settings).grid(row=row_i, column=1, columnspan=2, sticky="w", padx=10)
+    row_i += 1
 
     # 分隔线
-    ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
+    ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(10, 10))
     row_i += 1
 
     # 睡眠主题设置
@@ -4263,12 +4393,6 @@ def open_builtin_settings():
             except Exception:
                 config["sleep_off_delay"] = 0
 
-            config["brightness_mode"] = bm_key_var.get() or "wmi"
-            config["twinkle_tray_path"] = twinkle_path_var.get().strip()
-            config["twinkle_tray_target_mode"] = tm_key_var.get() or "monitor_num"
-            config["twinkle_tray_target_value"] = twinkle_target_value_var.get().strip()
-            config["twinkle_tray_overlay"] = 1 if twinkle_overlay_var.get() else 0
-
             # Hotkey 不在内置设置中保存
 
             # 统一通过 generate_config 保存并刷新
@@ -4294,16 +4418,6 @@ def open_builtin_settings():
             off_combo.configure(values=_action_labels())
             on_var.set(_action_label_by_key(on_key_var.get() or "lock", "lock"))
             off_var.set(_action_label_by_key(off_key_var.get() or "restart", "restart"))
-        except Exception:
-            pass
-        try:
-            brightness_mode_combo.configure(values=_bm_labels())
-            brightness_mode_var.set(_bm_label_by_key(bm_key_var.get() or "wmi"))
-        except Exception:
-            pass
-        try:
-            twinkle_target_mode_combo.configure(values=_tm_labels())
-            twinkle_target_mode_var.set(_tm_label_by_key(tm_key_var.get() or "monitor_num"))
         except Exception:
             pass
         try:
