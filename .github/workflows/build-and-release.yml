@@ -255,10 +255,9 @@ jobs:
                   Add-Content -Path $env:GITHUB_ENV -Value "PAHO_MQTT_C_ROOT=$pahoRoot"
               
             - name: Install Inno Setup 6
-              run: |
-                Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -OutFile "is.exe"
-                Start-Process -FilePath "is.exe" -ArgumentList "/VERYSILENT /NORESTART" -Wait
               shell: pwsh
+              run: |
+                choco install innosetup -y --no-progress
 
             - name: Set up Python
               uses: actions/setup-python@v5.4.0
