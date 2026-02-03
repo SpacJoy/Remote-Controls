@@ -1,37 +1,59 @@
-installer/build
-/build
-/dist
+# --- IDE/Editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+.env
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Build & Artifacts ---
+build/
+dist/
+bin/
+installer/build/
+installer/dist/
+installer/EXE/
 *.spec
-*.gitignore
-*.txt
-*.log
-config.json
-*.back
-# up.md
-test.*
-*.o
-/__pycache__
-.gitignore
-RC-main.exe
-RC-GUI.exe
-RC-tray.exe
-*.pyc
-res/top.png
-# installer
-version_info.py
-installer/EXE
-# 临时版本文件
+installer/*.spec
 installer/version.tmp
 installer/Remote-Controls-temp.iss
-installer/test_dynamic_version.ps1
-installer/RC-GUI.spec
-installer/RC-Status.spec
-installer/RC-main.spec
-installer/RC-tray.spec
-installer/EXE/close_RC.bat
-installer/EXE/close_RC_tray.bat
-logs/admin_status.txt
+
+# --- Compiled C/C++ ---
+*.o
+*.obj
+*.exe
+*.dll
+*.a
+*.lib
+*.so
+*.dylib
+
+# --- Logs & Temp ---
+logs/
+*.log
+*.tmp
+*.bak
+*.back
+
+# --- Project Specific ---
+config.json
 test.py
-logs/Remote Controls Tray.xml
-installer/dist
-logs
+test.*
+src/python/version_info.py
+installer/test_dynamic_version.ps1
+!/installer/update_version.py
+!/installer/build_installer.ps1
+!/setup_dev.ps1
+version.txt
+git_log.txt
