@@ -9,8 +9,9 @@
 ## 特性一览
 
 - MQTT 控制：支持“私钥客户端ID（巴法云等）”与“用户名/密码”两种认证
-- 设备动作：锁屏/关机/重启；亮度（系统接口或 Twinkle Tray）；音量与媒体控制；热键发送
+- 设备动作：锁屏/关机/重启；亮度（支持 WMI、Dxva2 DDC/CI、Twinkle Tray 多种模式）；音量与媒体控制；热键发送
 - 自定义主题：支持程序/脚本、服务、命令、热键四类，开关动作可分别配置
+- 亮度高级设置：独立配置窗口，支持自定义控制顺序、策略（同时执行/成功即止）与单显示器目标控制
 - 参数化命令：on#/off# 默认 0-100（可通过 `commandN_value_min/value_max` 自定义）+ `{value}` 占位符，GUI 测试会询问参数
 - 托盘管理：一键启动/重启/关闭主程序，显示权限与运行模式
 - 打包与发布：一键构建（github actions），安装器自动注入版本
@@ -23,7 +24,7 @@
 - 巴法云接入与小爱同学（官方文档）：<https://cloud.bemfa.com/docs/src/speaker_mi.html>
 - 主题速查（内置 + 自定义）：
   - 电脑（开关）：lock/restart/shutdown 等，支持延时
-  - 屏幕（灯）：on=100，off=0，`on#数字` 设亮度；在“更多”中可切换 Twinkle Tray 命令行模式以适配外接显示器
+  - 屏幕（灯）：on=100，off=0，`on#数字` 设亮度；支持通过“高级亮度设置”切换 WMI、Dxva2、Twinkle Tray 模式，适配外接显示器与 DDC/CI 控制。
   - 音量（窗帘）：on=100，off=0，`on#数字` 设音量；pause=静音
   - 媒体（窗帘）：上一曲/下一曲/播放暂停；`on#百分比` 映射三段操作
   - 睡眠（开关）：sleep/hibernate/display_off/display_on/lock
@@ -105,13 +106,13 @@ Remote-Controls/
     - 触发条件：`main` 分支推送或 Pull Request。
     - 操作：安装 Python 依赖、静态语法检查 (`compileall`)、关键模块导入测试。
 - **构建与发布 (Release)**：[build-and-release.yml](file:///d:/Code/Python/Remote-Controls/.github/workflows/build-and-release.yml)
-    - 触发条件：推送以 `V` 开头的标签（如 `V3.0.2`）或手动触发。
+    - 触发条件：推送以 `V` 开头的标签（如 `V3.0.2`）、手动触发，或 **`dev` 分支推送（自动递增版本号）**。
     - 操作：
         1. 自动配置 MSYS2/MinGW 和 Paho MQTT C 环境。
-        2. 安装 Inno Setup 并注入版本号。
+        2. 安装 Inno Setup 并注入版本号（`dev` 分支自动在最新标签基础上加 `0.0.0.1`）。
         3. 编译 C 语言主程序与托盘。
         4. 使用 PyInstaller 打包 Python GUI。
-        5. 生成最终安装包并自动创建 GitHub Release 上传产物。
+        5. 生成最终安装包并自动创建 GitHub Release / Pre-release 上传产物。
 
 更多工作流细节请参考 [.github/workflows/README.md](file:///d:/Code/Python/Remote-Controls/.github/workflows/README.md)。
 

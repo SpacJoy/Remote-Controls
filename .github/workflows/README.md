@@ -17,17 +17,20 @@ git push origin V<版本号>
 这将：
 
 -   自动提取版本号（去掉 V 前缀）
--   更新版本文件到 3.0.0（或你输入/标签携带的版本）
+-   更新版本文件到你输入/标签携带的版本
 -   构建所有程序和安装包
 -   创建 GitHub Release
 -   上传构建产物
 
-实际工作流文件：
+### 2. 开发分支自动化 (dev)
 
-- 构建与发布：`.github/workflows/build-and-release.yml`
-- CI 自检：`.github/workflows/ci.yml`
+向 `dev` 分支推送代码时会：
 
-### 2. 手动触发（测试用）
+-   **自动递增版本号**：基于最新发布标签（Latest Tag）自动加 `0.0.0.1`（如 `3.0.0` -> `3.0.0.1`）。
+-   自动构建并创建 **Pre-release**。
+-   方便开发者快速验证功能。
+
+### 3. 手动触发（测试用）
 
 1. 访问 [GitHub Actions](https://github.com/SpacJoy/Remote-Controls/actions)
 2. 选择 "Build and Release Remote Controls" workflow
@@ -72,7 +75,7 @@ git push origin :refs/tags/V3.0.0-test
 ## 📋 注意事项
 
 1. **标签格式**: 必须以 `V` 开头（如 V3.0.0）
-	- 以 `-test` 结尾的标签（如 `V3.0.0-test`）会自动发布为 GitHub **预发布（prerelease）**
+	- 以 `-test` 结尾的标签（如 `V3.0.0-test`）或 **`dev` 分支的自动构建** 会发布为 GitHub **预发布（prerelease）**
 2. **版本文件**: 构建前会通过 `installer/update_version.py` 写入/更新版本文件（以及构建所需的临时版本文件）
 3. **CI 自检**: `ci.yml` 会做最小自检（`compileall` + `pip check` + 关键依赖导入 + `update_version.py` 试跑）
 4. **权限要求**: 需要仓库的 push 权限来创建 Release
@@ -97,5 +100,11 @@ git push origin :refs/tags/V3.0.0-test
 
 -   确保标签版本唯一
 -   手动触发时可以覆盖现有版本
+-   `dev` 分支构建会自动跳过已存在的版本号，但建议保持最新标签版本规范
 
-手动触发建议使用新版本号，避免与已有 Release/tag 混淆。
+---
+
+**实际工作流文件：**
+
+- 构建与发布：[.github/workflows/build-and-release.yml](file:///d:/Code/Python/Remote-Controls/.github/workflows/build-and-release.yml)
+- CI 自检：[.github/workflows/ci.yml](file:///d:/Code/Python/Remote-Controls/.github/workflows/ci.yml)
