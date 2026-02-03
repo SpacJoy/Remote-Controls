@@ -62,8 +62,8 @@ def _detect_default_lang() -> str:
         except Exception:
             pass
 
-    # Windows 默认偏中文用户群，这里保守地按系统语言判断失败则给 en
-    return "en"
+    # Windows 默认偏中文用户群，这里保守地按系统语言判断失败则给 zh
+    return "zh"
 
 
 # 全局语言：在读取 config.json 后会被覆盖
@@ -250,6 +250,8 @@ _ZH_TO_EN: dict[str, str] = {
     "请先确保 Twinkle Tray 正在运行后再测试，否则将未响应，可退出Twinkle Tray解决": "Please ensure Twinkle Tray is running before testing, otherwise it will not respond. You can exit Twinkle Tray to resolve this.",
     "自定义调节顺序:": "Custom Adjustment Order:",
     "执行策略:": "Execution Strategy:",
+    "同时执行 (all)": "all",
+    "成功即止 (fallback)": "fallback",
     "(all=同时执行, fallback=成功即止)": "(all=Simultaneous, fallback=Stop on success)",
     "请至少选择一种控制模式": "Please select at least one control mode",
     "wmi（系统 WMI 接口）": "wmi (System WMI Interface)",
@@ -1552,10 +1554,8 @@ def show_detail_window():
     策略说明：
         - WMI (系统 WMI 接口)：使用系统 WMI 接口；适用于笔记本和部分支持的台式机。
         - Dxva2 (物理显示器 DDC/CI)：使用 Dxva2 接口；依赖驱动支持，可能不稳定。
-        - Twinkle Tray (仅命令行)：仅调用 Twinkle Tray 命令行；不回退到 WMI。
-        - WMI 优先：先尝试 WMI；失败时再调用 Twinkle Tray。
-        - Twinkle Tray 优先：先尝试 Twinkle Tray；失败时再调用 WMI。
-        - 同时控制：依次执行 WMI、Dxva2 与 Twinkle Tray（不论成功与否都会尝试全部方式）。
+        - Twinkle Tray (第三方接口)：调用 Twinkle Tray 命令行控制，需先确保其运行。
+        - 自定义调节：可自由组合以上接口，支持“同时执行”或“成功即止”策略，并可自定义调节顺序。
 
 系统音量：
     类型：窗帘 (Curtain) 接口；调节系统全局主音量 (0-100%)。
@@ -1582,10 +1582,8 @@ Monitor Brightness:
     Strategy Notes:
         - WMI (System WMI): Uses WMI only; suitable for laptops and supported devices.
         - Dxva2 (DDC/CI): Uses Dxva2 physical monitor API; driver dependent.
-        - Twinkle Tray (CLI): Uses Twinkle Tray CLI only; no fallback to WMI.
-        - WMI Priority: Try WMI first; fall back to Twinkle Tray on failure.
-        - Twinkle Tray Priority: Try Twinkle Tray first; fall back to WMI on failure.
-        - Both: Run WMI, Dxva2 and Twinkle Tray sequentially.
+        - Twinkle Tray (Third-party): Uses Twinkle Tray CLI; ensure it is running before use.
+        - Custom Adjustment: Combine multiple interfaces with "Simultaneous" or "Stop on success" strategies and custom order.
 
 System Volume:
     Type: Curtain interface; adjust system-wide master volume (0-100%).
@@ -4050,7 +4048,7 @@ def open_builtin_settings():
     def open_advanced_brightness_settings():
         adv_win = tk.Toplevel(win)
         adv_win.title(t("亮度调节设置"))
-        adv_win.geometry("690x650")
+        adv_win.geometry("600x680")
         adv_win.transient(win)
         adv_win.grab_set()
         
@@ -4248,7 +4246,7 @@ def open_builtin_settings():
         adv_row += 1
         
         list_frame = ttk.Frame(adv_win)
-        list_frame.grid(row=adv_row, column=0, columnspan=3, padx=10, pady=0, sticky="ew")
+        list_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, pady=0, sticky="ew")
         
         custom_list_str = config.get("brightness_custom_list", "wmi,dxva2,twinkle_tray") or "wmi,dxva2,twinkle_tray"
         # Map keys to display names
@@ -4301,9 +4299,27 @@ def open_builtin_settings():
         adv_row += 1
 
         ttk.Label(adv_win, text=t("执行策略:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
-        strat_var = tk.StringVar(value=config.get("brightness_custom_strategy", "all"))
-        ttk.Combobox(adv_win, textvariable=strat_var, values=["all", "fallback"], state="readonly", width=10).grid(row=adv_row, column=1, padx=10, pady=5, sticky="w")
-        ttk.Label(adv_win, text=t("(all=同时执行, fallback=成功即止)")).grid(row=adv_row, column=2, padx=5, sticky="w")
+        
+        strat_options = [("all", "同时执行 (all)"), ("fallback", "成功即止 (fallback)")]
+        strat_key_var = tk.StringVar(value=config.get("brightness_custom_strategy", "all"))
+        
+        def _get_strat_label(key):
+            for k, l in strat_options:
+                if k == key: return t(l)
+            return t("同时执行 (all)")
+        
+        strat_lbl_var = tk.StringVar(value=_get_strat_label(strat_key_var.get()))
+        
+        strat_cb = ttk.Combobox(adv_win, textvariable=strat_lbl_var, values=[t(l) for k, l in strat_options], state="readonly", width=15)
+        strat_cb.grid(row=adv_row, column=1, padx=10, pady=5, sticky="w")
+        
+        def _on_strat_change(e):
+            lbl = strat_lbl_var.get()
+            for k, l in strat_options:
+                if t(l) == lbl:
+                    strat_key_var.set(k)
+                    break
+        strat_cb.bind("<<ComboboxSelected>>", _on_strat_change)
         adv_row += 1
 
         ttk.Separator(adv_win, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
@@ -4332,13 +4348,23 @@ def open_builtin_settings():
         adv_row += 1
 
         # 4. Twinkle Tray
-        ttk.Label(adv_win, text="Twinkle Tray " + t("配置:")).grid(row=adv_row, column=0, columnspan=2, padx=10, pady=5, sticky="w")
+        tt_header_frame = ttk.Frame(adv_win)
+        tt_header_frame.grid(row=adv_row, column=0, columnspan=3, sticky="ew")
+        ttk.Label(tt_header_frame, text="Twinkle Tray " + t("配置:")).pack(side="left", padx=10, pady=5)
+        
+        def download_tt():
+            try:
+                import webbrowser
+                webbrowser.open("https://twinkletray.com/")
+            except Exception:
+                pass
+        ttk.Button(tt_header_frame, text=t("下载 Twinkle Tray"),width=15, command=download_tt).pack(side="left", padx=15, pady=5)
         adv_row += 1
 
         default_tt = r"%LocalAppData%\Programs\twinkle-tray\Twinkle Tray.exe"
         tt_path = tk.StringVar(value=config.get("twinkle_tray_path", "") or default_tt)
-        ttk.Label(adv_win, text=t("路径:")).grid(row=adv_row, column=0, padx=10, sticky="e")
-        ttk.Entry(adv_win, textvariable=tt_path).grid(row=adv_row, column=1, padx=10, sticky="ew")
+        ttk.Label(adv_win, text=t("路径:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Entry(adv_win, textvariable=tt_path).grid(row=adv_row, column=1, padx=10, pady=5, sticky="ew")
         
         def browse_tt():
             try:
@@ -4346,7 +4372,7 @@ def open_builtin_settings():
                 if p: tt_path.set(p)
             except Exception as e:
                 messagebox.showerror(t("错误"), str(e))
-        ttk.Button(adv_win, text=t("选择"), width=3, command=browse_tt).grid(row=adv_row, column=2, padx=5, sticky="w")
+        ttk.Button(adv_win, text=t("选择"), width=5, command=browse_tt).grid(row=adv_row, column=2, padx=5, sticky="w")
         adv_row += 1
         
         tt_modes = [("monitor_num", "按编号 (MonitorNum)"), ("monitor_id", "按 ID (MonitorID)"), ("all", "全部显示器 (All)")]
@@ -4363,7 +4389,9 @@ def open_builtin_settings():
         tm_cb.grid(row=adv_row, column=1, padx=10, sticky="w")
         
         tt_val = tk.StringVar(value=config.get("twinkle_tray_target_value", "1"))
-        ttk.Label(adv_win, text=t("目标值:")).grid(row=adv_row + 1, column=0, padx=10, sticky="e")
+        ttk.Label(adv_win, text=t("目标值:")).grid(row=adv_row + 1, column=0, padx=10, pady=5, sticky="e")
+        tt_val_entry = ttk.Entry(adv_win, textvariable=tt_val)
+        tt_val_entry.grid(row=adv_row + 1, column=1, padx=10, pady=5, sticky="ew")
         tt_val_entry = ttk.Entry(adv_win, textvariable=tt_val)
         tt_val_entry.grid(row=adv_row + 1, column=1, padx=10, sticky="ew")
 
@@ -4386,15 +4414,7 @@ def open_builtin_settings():
         _update_tt_val_state() # Initial state
         
         tt_overlay = tk.IntVar(value=int(config.get("twinkle_tray_overlay", 1) or 0))
-        ttk.Checkbutton(adv_win, text=t("显示亮度叠加层(Overlay)"), variable=tt_overlay).grid(row=adv_row, column=1, sticky="w", padx=10)
-        
-        def download_tt():
-            try:
-                import webbrowser
-                webbrowser.open("https://twinkletray.com/")
-            except Exception:
-                pass
-        ttk.Button(adv_win, text=t("下载 Twinkle Tray"), command=download_tt).grid(row=adv_row, column=2, padx=5, sticky="w")
+        ttk.Checkbutton(adv_win, text=t("显示亮度叠加层(Overlay)"), variable=tt_overlay, command=_update_tt_val_state).grid(row=adv_row, column=1, sticky="w", padx=10)
         adv_row += 1
 
         # Toggle state based on mode
@@ -4442,7 +4462,7 @@ def open_builtin_settings():
 
             config["brightness_mode"] = new_mode
             config["brightness_custom_list"] = ",".join(final_order)
-            config["brightness_custom_strategy"] = strat_var.get()
+            config["brightness_custom_strategy"] = strat_key_var.get()
             config["wmi_target"] = wmi_target.get()
             config["dxva2_target"] = dxva2_target.get()
             config["twinkle_tray_path"] = tt_path.get()
@@ -4704,12 +4724,10 @@ ttk.Button(theme_frame, text=t("刷新"), command=refresh_custom_themes).grid(
 ttk.Button(theme_frame, text=t("更多"), command=open_builtin_settings).grid(row=6, column=2, pady=PADY, padx=PADX, sticky="n")
 
 # 添加和修改按钮
-ttk.Button(theme_frame, text=t("添加"), command=lambda: add_custom_theme(config)).grid(
-    row=6, pady=PADY, padx=PADX, column=3, sticky="w"
-)
-ttk.Button(theme_frame, text=t("修改"), command=lambda: modify_custom_theme()).grid(
-    row=6, pady=PADY, padx=PADX, column=3, sticky="e"
-)
+custom_btn_frame = ttk.Frame(theme_frame)
+custom_btn_frame.grid(row=6, column=3, sticky="ew")
+ttk.Button(custom_btn_frame, text=t("添加"), command=lambda: add_custom_theme(config)).pack(side="left", expand=True, fill="x", padx=(PADX, 2), pady=PADY)
+ttk.Button(custom_btn_frame, text=t("修改"), command=lambda: modify_custom_theme()).pack(side="left", expand=True, fill="x", padx=(2, PADX), pady=PADY)
 
 # 绑定鼠标双击事件到自定义主题列表
 custom_theme_tree.bind("<Double-Button-1>", on_double_click)
