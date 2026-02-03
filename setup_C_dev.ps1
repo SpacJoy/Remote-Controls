@@ -15,7 +15,7 @@ function Confirm-Step {
     if ($Global:SkipAllConfirm) { return $true }
     
     Write-Host "`n>>> 准备执行: $StepDescription" -ForegroundColor Magenta
-    $choice = Read-Host "是否继续执行? [Y] 是 / [N] 跳过 / [A] 全部执行并不再提示"
+    $choice = Read-Host "是否继续执行? [Y] 是 / [N] 跳过 / [A] 全部执行并不再提示(默认N)"
     switch ($choice.ToUpper()) {
         "Y" { return $true }
         "A" { $Global:SkipAllConfirm = $true; return $true }
