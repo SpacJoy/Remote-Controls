@@ -157,7 +157,7 @@ jobs:
                           # 获取自该标签创建以来，dev 分支上成功的 Actions 运行次数
                           # 逻辑优化：排除当前运行 ID，并排除与标签本身关联的运行
                           $currentRunId = "${{ github.run_id }}"
-                          $tagSha = git rev-list -n 1 $latestTag
+                          $tagSha = git rev-parse "$latestTag^{commit}"
                           $runJson = gh run list --workflow "${{ github.workflow }}" --branch dev --status success --created ">$tagDate" --limit 100 --json databaseId,headSha,displayTitle
                           if ($LASTEXITCODE -eq 0) {
                             $runs = $runJson | ConvertFrom-Json
