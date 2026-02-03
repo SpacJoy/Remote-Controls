@@ -4062,14 +4062,149 @@ def open_builtin_settings():
         else:
             wmi_var.set(1)
 
+        def test_brightness_method(method):
+            val = simpledialog.askinteger(t("测试亮度"), t("请输入亮度值 (0-100):"), 
+                                         parent=adv_win, minvalue=0, maxvalue=100)
+            if val is None:
+                return
+                
+            try:
+                if method == "wmi":
+                    target_str = wmi_target.get().strip()
+                    target_idx = -1
+                    if target_str.isdigit():
+                        target_idx = int(target_str)
+                    
+                    ps_cmd = f"""
+                    $ErrorActionPreference = 'Stop';
+                    try {{
+                        $methods = @(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods);
+                        if ($null -eq $methods -or $methods.Count -eq 0) {{ throw 'No WMI brightness methods found' }}
+                        $target = {target_idx};
+                        if ($target -eq -1) {{
+                            foreach ($m in $methods) {{ $m.WmiSetBrightness(0, {val}) }}
+                        }} else {{
+                            if ($target -lt $methods.Count) {{
+                                $methods[$target].WmiSetBrightness(0, {val})
+                            }} else {{
+                                throw "Target index $target out of range (Count: $($methods.Count))"
+                            }}
+                        }}
+                        Write-Host 'Success'
+                    }} catch {{
+                        [Console]::Error.WriteLine("WMI Failed: $($_.Exception.Message)");
+                        exit 1;
+                    }}
+                    """
+                    subprocess.run(["powershell", "-Command", ps_cmd], capture_output=True, check=True)
+                    messagebox.showinfo(t("测试成功"), f"WMI 亮度已设置为 {val}%")
+
+                elif method == "dxva2":
+                    target_str = dxva2_target.get().strip()
+                    target_idx = -1
+                    if target_str.isdigit():
+                        target_idx = int(target_str)
+
+                    # PowerShell script using Add-Type for Dxva2
+                    ps_cmd = f"""
+                    $ErrorActionPreference = 'Stop';
+                    $code = @'
+                    using System;
+                    using System.Runtime.InteropServices;
+                    public class MonitorControl {{
+                        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+                        public struct PHYSICAL_MONITOR {{
+                            public IntPtr hPhysicalMonitor;
+                            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+                            public string szPhysicalMonitorDescription;
+                        }}
+                        [DllImport("user32.dll")]
+                        public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
+                        public delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, IntPtr lprcMonitor, IntPtr dwData);
+                        [DllImport("dxva2.dll", SetLastError = true)]
+                        public static extern bool GetNumberOfPhysicalMonitorsFromHMONITOR(IntPtr hMonitor, out uint pdwNumberOfPhysicalMonitors);
+                        [DllImport("dxva2.dll", SetLastError = true)]
+                        public static extern bool GetPhysicalMonitorsFromHMONITOR(IntPtr hMonitor, uint dwNumberOfPhysicalMonitors, [Out] PHYSICAL_MONITOR[] pPhysicalMonitorArray);
+                        [DllImport("dxva2.dll", SetLastError = true)]
+                        public static extern bool SetMonitorBrightness(IntPtr hMonitor, uint dwNewBrightness);
+                        [DllImport("dxva2.dll", SetLastError = true)]
+                        public static extern bool DestroyPhysicalMonitors(uint dwNumberOfPhysicalMonitors, PHYSICAL_MONITOR[] pPhysicalMonitorArray);
+                        public static void SetBrightness(int brightness, int targetIdx) {{
+                            int currentIdx = 0;
+                            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, delegate (IntPtr hMonitor, IntPtr hdcMonitor, IntPtr lprcMonitor, IntPtr dwData) {{
+                                uint count = 0;
+                                if (GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, out count)) {{
+                                    PHYSICAL_MONITOR[] monitors = new PHYSICAL_MONITOR[count];
+                                    if (GetPhysicalMonitorsFromHMONITOR(hMonitor, count, monitors)) {{
+                                        foreach (var m in monitors) {{
+                                            if (targetIdx == -1 || currentIdx == targetIdx) {{
+                                                SetMonitorBrightness(m.hPhysicalMonitor, (uint)brightness);
+                                            }}
+                                            currentIdx++;
+                                        }}
+                                        DestroyPhysicalMonitors(count, monitors);
+                                    }}
+                                }}
+                                return true;
+                            }}, IntPtr.Zero);
+                        }}
+                    }}
+'@
+                    if (-not ([System.Management.Automation.PSTypeName]'MonitorControl').Type) {{
+                        Add-Type -TypeDefinition $code
+                    }}
+                    [MonitorControl]::SetBrightness({val}, {target_idx})
+                    """
+                    subprocess.run(["powershell", "-Command", ps_cmd], capture_output=True, check=True)
+                    messagebox.showinfo(t("测试成功"), f"Dxva2 亮度已设置为 {val}%")
+
+                elif method == "twinkle_tray":
+                    exe_path = tt_path.get().strip()
+                    if not exe_path:
+                        exe_path = _resolve_twinkle_tray_path_for_gui() or "Twinkle-Tray.exe"
+                    
+                    mode = tt_mode_key.get()
+                    val_str = tt_val.get().strip()
+                    
+                    args = [exe_path]
+                    if mode == "all":
+                        args.extend(["--All", f"--Set={val}"])
+                    elif mode == "monitor_id":
+                        args.extend([f"--MonitorID={val_str}", f"--Set={val}"])
+                    else:
+                        args.extend([f"--MonitorNum={val_str}", f"--Set={val}"])
+                    
+                    if tt_overlay.get():
+                        args.append("--Overlay")
+                    
+                    subprocess.run(args, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                    messagebox.showinfo(t("测试成功"), f"Twinkle Tray 亮度已设置为 {val}%")
+
+            except Exception as e:
+                messagebox.showerror(t("测试失败"), f"执行测试时出错:\n{str(e)}")
+
         ttk.Label(adv_win, text=t("控制模式:")).grid(row=adv_row, column=0, padx=10, pady=10, sticky="nw")
         
         cb_frame = ttk.Frame(adv_win)
         cb_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, pady=10, sticky="w")
         
-        ttk.Checkbutton(cb_frame, text="WMI (系统 WMI 接口)", variable=wmi_var).pack(anchor="w", pady=2)
-        ttk.Checkbutton(cb_frame, text="Dxva2 (物理显示器 DDC/CI)", variable=dxva2_var).pack(anchor="w", pady=2)
-        ttk.Checkbutton(cb_frame, text="Twinkle Tray (仅命令行)", variable=tt_var).pack(anchor="w", pady=2)
+        # WMI row
+        wmi_row = ttk.Frame(cb_frame)
+        wmi_row.pack(fill="x", pady=2)
+        ttk.Checkbutton(wmi_row, text="WMI (系统 WMI 接口)", variable=wmi_var).pack(side="left")
+        ttk.Button(wmi_row, text=t("测试"), width=5, command=lambda: test_brightness_method("wmi")).pack(side="left", padx=10)
+
+        # Dxva2 row
+        dxva2_row = ttk.Frame(cb_frame)
+        dxva2_row.pack(fill="x", pady=2)
+        ttk.Checkbutton(dxva2_row, text="Dxva2 (物理显示器 DDC/CI)", variable=dxva2_var).pack(side="left")
+        ttk.Button(dxva2_row, text=t("测试"), width=5, command=lambda: test_brightness_method("dxva2")).pack(side="left", padx=10)
+
+        # Twinkle Tray row
+        tt_row = ttk.Frame(cb_frame)
+        tt_row.pack(fill="x", pady=2)
+        ttk.Checkbutton(tt_row, text="Twinkle Tray (第三方接口)", variable=tt_var).pack(side="left")
+        ttk.Button(tt_row, text=t("测试"), width=5, command=lambda: test_brightness_method("twinkle_tray")).pack(side="left", padx=10)
         
         adv_row += 1
 
@@ -4149,7 +4284,7 @@ def open_builtin_settings():
         wmi_target_frame.grid(row=adv_row, column=1, padx=10, sticky="w")
         ttk.Entry(wmi_target_frame, textvariable=wmi_target, width=15).pack(side="left", padx=(0, 5))
         ttk.Button(wmi_target_frame, text=t("所有"), width=5, command=lambda: wmi_target.set("all")).pack(side="left")
-        ttk.Label(adv_win, text=t("('all'（全部） 或 索引 0, 1...)")).grid(row=adv_row, column=2, padx=5, sticky="w")
+        ttk.Label(adv_win, text=t("('all' 或 索引 0, 1...)")).grid(row=adv_row, column=2, padx=5, sticky="w")
         adv_row += 1
         
         ttk.Label(adv_win, text="Dxva2 " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
@@ -4158,7 +4293,7 @@ def open_builtin_settings():
         dxva2_target_frame.grid(row=adv_row, column=1, padx=10, sticky="w")
         ttk.Entry(dxva2_target_frame, textvariable=dxva2_target, width=15).pack(side="left", padx=(0, 5))
         ttk.Button(dxva2_target_frame, text=t("所有"), width=5, command=lambda: dxva2_target.set("all")).pack(side="left")
-        ttk.Label(adv_win, text=t("('all'（全部） 或 索引 0, 1...)")).grid(row=adv_row, column=2, padx=5, sticky="w")
+        ttk.Label(adv_win, text=t("('all' 或 索引 0, 1...)")).grid(row=adv_row, column=2, padx=5, sticky="w")
         adv_row += 1
 
         ttk.Separator(adv_win, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
