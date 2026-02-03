@@ -157,7 +157,7 @@ jobs:
                           # 获取自该标签创建以来，dev 分支上成功的 Actions 运行次数
                           # 逻辑优化：排除当前运行 ID，并排除与标签本身关联的运行
                           $currentRunId = "${{ github.run_id }}"
-                          $tagSha = git rev-parse $latestTag
+                          $tagSha = git rev-list -n 1 $latestTag
                           $runJson = gh run list --workflow "${{ github.workflow }}" --branch dev --status success --created ">$tagDate" --limit 100 --json databaseId,headSha,displayTitle
                           if ($LASTEXITCODE -eq 0) {
                             $runs = $runJson | ConvertFrom-Json
@@ -168,8 +168,9 @@ jobs:
                             # 打印调试信息
                             $filteredRuns | ForEach-Object { echo "计入统计的历史任务: ID=$($_.databaseId), Title=$($_.displayTitle)" }
                             
-                            $runCount = $filteredRuns.Count
-                            echo "自标签 $latestTag ($tagDate) 以来，检测到 $runCount 次有效的成功 dev 运行记录"
+                            # 需求：结果-1次，以修正计数偏差
+                            $runCount = [Math]::Max(0, $filteredRuns.Count - 1)
+                            echo "自标签 $latestTag ($tagDate) 以来，检测到 $($filteredRuns.Count) 次有效的成功 dev 运行记录，修正后计入次数为 $runCount"
                           } else {
                             echo "警告：gh run list 执行失败，退出代码: $LASTEXITCODE"
                           }
