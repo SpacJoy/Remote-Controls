@@ -3591,7 +3591,7 @@ def generate_config() -> None:
             config[f"{prefix}_char_delay_ms"] = int(theme.get("char_delay_ms", 0) or 0)
             hotkey_index += 1
 
-    # 1. 保存为 TOML 文件 (主要格式，用户要求的格式)
+    # 1. 保存为 TOML 文件 (首选格式)
     try:
         # 将扁平字典转换为嵌套结构，以便生成可读性更好的 TOML
         nested_config = unflatten_config(config)
@@ -3600,14 +3600,8 @@ def generate_config() -> None:
         messagebox.showerror(t("错误"), t(f"保存 TOML 配置文件失败：\n{config_toml_path}\n\n{e}"))
         return
 
-    # 2. 保存为 JSON 文件 (旧版兼容，之后将弃用)
-    # 提示：目前 C 核心组件（main/tray）仍依赖此 JSON 文件
-    try:
-        with open(config_json_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        # JSON 保存失败仅作为警告，因为主要格式 TOML 已保存成功
-        print(f"Warning: Failed to save legacy JSON config: {e}")
+    # 2. 检查并清理旧版 JSON 文件 (如果存在且内容一致，可以选择删除，但这里为了安全先只停止生成)
+    # 提示：C 核心组件（main/tray）现在已适配 TOML 优先加载
 
     # 保存后刷新界面
     messagebox.showinfo(t("提示"), t("配置文件已保存\n请重新打开主程序以应用更改\n刷新test模式需重启本程序"))
