@@ -90,7 +90,7 @@ Remote-Controls/
 .\build.ps1
 
 # 自动化构建：指定版本并跳过暂停
-.\build.ps1 3.0.2.1 -NoPause
+.\build.ps1 a.b.c.x -NoPause
 ```
 
 - **产物位置**：
