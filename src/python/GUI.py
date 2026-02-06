@@ -3193,6 +3193,140 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     _apply_lang_to_add_theme_win()
 
 
+# ---------------------------------------------------------
+# Configuration Helpers (TOML Grouping & Flattening)
+# ---------------------------------------------------------
+
+def unflatten_config(flat_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    English: Converts flat config dict to nested structure for readable TOML
+    中文: 将扁平的 config 字典转换为嵌套结构，以生成可读性更高的 TOML
+    """
+    # 按照期望的顺序初始化字典（Python 3.7+ 保持插入顺序）
+    nested = {
+        "mqtt": {},
+        "settings": {},
+        "built_in_themes": {},
+        "brightness": {},
+        "other": {},
+        "custom_themes": {
+            "applications": {},
+            "services": {},
+            "commands": {},
+            "hotkeys": {}
+        }
+    }
+    
+    # 1. Defined keys for grouping
+    mqtt_keys = {"broker", "port", "mqtt_tls", "mqtt_tls_verify", "mqtt_tls_ca_file", "auth_mode", "mqtt_username", "mqtt_password", "client_id"}
+    settings_keys = {"language", "test", "notify"}
+    
+    # 2. Built-in themes keys (from global builtin_themes list)
+    builtin_base_keys = set()
+    try:
+        for theme in builtin_themes:
+            builtin_base_keys.add(theme["key"])
+    except NameError:
+        pass # builtin_themes not defined yet, will handle dynamically below
+        
+    for k, v in flat_dict.items():
+        # MQTT
+        if k in mqtt_keys:
+            nested["mqtt"][k] = v
+        # Settings
+        elif k in settings_keys:
+            nested["settings"][k] = v
+        # Built-in Themes
+        elif k in builtin_base_keys or any(k.startswith(bk + "_") for bk in builtin_base_keys):
+            nested["built_in_themes"][k] = v
+        # Custom Themes
+        elif k.startswith("application"):
+            nested["custom_themes"]["applications"][k] = v
+        elif k.startswith("serve"):
+            nested["custom_themes"]["services"][k] = v
+        elif k.startswith("command"):
+            nested["custom_themes"]["commands"][k] = v
+        elif k.startswith("hotkey"):
+            nested["custom_themes"]["hotkeys"][k] = v
+        # Brightness/Twinkle Tray
+        elif k.startswith("brightness_") or k.startswith("twinkle_tray_"):
+            nested["brightness"][k] = v
+        # Legacy/Other known keys that should go to 'other' or 'brightness'
+        elif k in {"wmi_target", "dxva2_target"}:
+            nested["other"][k] = v
+        elif k.startswith("computer_") or k.startswith("sleep_"):
+            # computer_on_action etc. should go to 'other' or 'built_in_themes'?
+            # In previous run they were in 'other'.
+            nested["other"][k] = v
+        else:
+            # Miscellaneous
+            nested["other"][k] = v
+            
+    # 清理空分组以保持 TOML 整洁
+    for main_key in ["mqtt", "settings", "built_in_themes", "brightness", "other"]:
+        if not nested[main_key]:
+            del nested[main_key]
+    
+    # 清理自定义主题子分组
+    ct = nested["custom_themes"]
+    for sub in list(ct.keys()):
+        if not ct[sub]:
+            del ct[sub]
+    if not nested["custom_themes"]:
+        del nested["custom_themes"]
+    
+    return nested
+
+def flatten_config(nested_dict: Dict[str, Any], target_dict: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    English: Recursively flattens nested TOML structure back to flat GUI config dict
+    中文: 递归将嵌套的 TOML 结构扁平化为 GUI 使用的扁平 config 字典
+    """
+    if target_dict is None:
+        target_dict = {}
+    for k, v in nested_dict.items():
+        if isinstance(v, dict):
+            flatten_config(v, target_dict)
+        else:
+            target_dict[k] = v
+    return target_dict
+
+def save_config_toml(nested_config: Dict[str, Any], file_path: str) -> None:
+    """
+    English: Saves nested config to TOML with section comments
+    中文: 保存嵌套配置到 TOML 文件，并添加章节注释以提高可读性
+    """
+    import tomli_w
+    # 使用 tomli_w 生成基础 TOML 字符串
+    content = tomli_w.dumps(nested_config)
+    
+    # 定义中文注释映射
+    replacements = {
+        "[mqtt]": "# MQTT 服务器配置 (MQTT Broker Settings)\n[mqtt]",
+        "[settings]": "\n# 常规设置 (General Settings)\n[settings]",
+        "[built_in_themes]": "\n# 内置主题 (Built-in Themes: Topic & Toggle)\n[built_in_themes]",
+        "[custom_themes]": "\n# 自定义主题 (Custom Themes)\n[custom_themes]",
+        "[custom_themes.applications]": "\n# 自定义主题：程序或脚本 (Applications / Scripts)\n[custom_themes.applications]",
+        "[custom_themes.services]": "\n# 自定义主题：服务 (Windows Services)\n[custom_themes.services]",
+        "[custom_themes.commands]": "\n# 自定义主题：命令 (Shell Commands)\n[custom_themes.commands]",
+        "[custom_themes.hotkeys]": "\n# 自定义主题：热键 (Global Hotkeys)\n[custom_themes.hotkeys]",
+        "[brightness]": "\n# 亮度控制 (Brightness Control)\n[brightness]",
+        "[other]": "\n# 其他杂项 (Miscellaneous)\n[other]"
+    }
+    
+    for old, new in replacements.items():
+        content = content.replace(old, new)
+        
+    # 在文件头部添加说明
+    header = "# Remote-Controls Configuration File (TOML Format)\n"
+    header += "# This file is automatically generated. Manual editing is supported.\n"
+    header += "# 配置文件（TOML 格式）。支持手动编辑，程序保存时会自动更新。\n\n"
+    
+    final_content = header + content
+    
+    with open(file_path, "wb") as f:
+        f.write(final_content.encode("utf-8"))
+
 def generate_config() -> None:
     """
     English: Generates and saves the config file (JSON) based on the input
@@ -3321,8 +3455,9 @@ def generate_config() -> None:
 
     # 1. 保存为 TOML 文件 (主要格式，用户要求的格式)
     try:
-        with open(config_toml_path, "wb") as f:
-            tomli_w.dump(config, f)
+        # 将扁平字典转换为嵌套结构，以便生成可读性更好的 TOML
+        nested_config = unflatten_config(config)
+        save_config_toml(nested_config, config_toml_path)
     except Exception as e:
         messagebox.showerror(t("错误"), t(f"保存 TOML 配置文件失败：\n{config_toml_path}\n\n{e}"))
         return
@@ -3643,7 +3778,9 @@ def load_config_file():
     if os.path.exists(config_toml_path):
         try:
             with open(config_toml_path, "rb") as f:
-                config = tomllib.load(f)
+                nested_config = tomllib.load(f)
+            # 将嵌套结构扁平化回 GUI 使用的字典
+            config = flatten_config(nested_config)
             config_file_path = config_toml_path
             return True
         except Exception as e:
@@ -3662,8 +3799,8 @@ def load_config_file():
             
             # 自动迁移到 TOML
             try:
-                with open(config_toml_path, "wb") as f:
-                    tomli_w.dump(config, f)
+                nested_config = unflatten_config(config)
+                save_config_toml(nested_config, config_toml_path)
                 # 迁移成功后，将 JSON 重命名为 .bak 以示弃用
                 # os.rename(config_json_path, f"{config_json_path}.deprecated")
                 # 这里我们暂时保留 json 以供 C 核心使用，但内存中已切换到 TOML
