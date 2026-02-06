@@ -1,4 +1,4 @@
-﻿param(
+param(
   [Parameter(Mandatory = $false)]
   [string]$Version,
 
@@ -139,6 +139,7 @@ Remove-Item -LiteralPath (Join-Path $root 'src\main\rc_router.o') -Force -ErrorA
 Remove-Item -LiteralPath (Join-Path $root 'src\main\rc_mqtt.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'src\main\rc_main_tray.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'src\rc_json_main.o') -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $root 'src\toml_main.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'src\rc_notify_main.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'src\main\main_res.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'bin\RC-main.exe') -Force -ErrorAction SilentlyContinue
@@ -251,6 +252,7 @@ Invoke-Exe -FilePath 'windres' -Arguments @(
 )
 
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\rc_json.c','-o','src\rc_json_main.o'))
+Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\toml.c','-o','src\toml_main.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\rc_notify.c','-o','src\rc_notify_main.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_log.c','-o','src\main\rc_log.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_utf.c','-o','src\main\rc_utf.o'))
@@ -272,6 +274,7 @@ $linkArgs = @(
   'src\main\rc_main_tray.o',
   'src\main\main_res.o',
   'src\rc_json_main.o',
+  'src\toml_main.o',
   'src\rc_notify_main.o',
   '-o','bin\RC-main.exe',
   '-mwindows',

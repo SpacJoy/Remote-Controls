@@ -305,48 +305,90 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     WriteAdminStatusFile(logsDir);
 
     wchar_t configPath[MAX_PATH] = {0};
+    wchar_t tomlPath[MAX_PATH] = {0};
+    BuildPathW(tomlPath, MAX_PATH, appDir, L"config.toml");
     BuildPathW(configPath, MAX_PATH, appDir, L"config.json");
 
     const bool sysEnglish = IsSystemEnglishUI();
+    char *jsonText = NULL;
+    bool isToml = false;
 
-    if (!PathFileExistsW(configPath))
+    // 1. 优先尝试读取 config.toml
+    if (PathFileExistsW(tomlPath))
     {
-        // 配置缺失：提示 + 打开 GUI；若 GUI 不可用则记事本打开（并创建空配置）。
-        if (sysEnglish)
-            MessageBoxW(NULL, L"config.json not found. Please open RC-GUI to configure.", L"RC-main", MB_ICONERROR);
+        RC_LogInfo("检测到 config.toml，尝试优先加载...");
+        jsonText = ReadFileUtf8Alloc(tomlPath);
+        if (jsonText)
+        {
+            isToml = true;
+            RC_LogInfo("成功读取 config.toml");
+        }
         else
-            MessageBoxW(NULL, L"配置文件不存在，请先打开 RC-GUI 进行配置。", L"RC-main", MB_ICONERROR);
-        OpenGuiOrNotepadConfig(appDir, configPath, true);
-        CloseHandle(hMutex);
-        return 1;
+        {
+            RC_LogWarn("读取 config.toml 失败，回退到 config.json");
+        }
     }
 
-    char *jsonText = ReadFileUtf8Alloc(configPath);
+    // 2. 如果 TOML 不存在或读取失败，尝试读取 config.json
     if (!jsonText)
     {
-        // 读取失败：可能是权限/占用/损坏。回退到 GUI/记事本让用户修复。
+        if (PathFileExistsW(configPath))
+        {
+            RC_LogInfo("尝试加载备用方案 config.json...");
+            jsonText = ReadFileUtf8Alloc(configPath);
+            if (jsonText)
+            {
+                RC_LogInfo("成功读取 config.json");
+            }
+            else
+            {
+                RC_LogError("读取 config.json 失败");
+            }
+        }
+    }
+
+    if (!jsonText)
+    {
+        // 两个配置文件都不可用
         if (sysEnglish)
-            MessageBoxW(NULL, L"Failed to read config.json.", L"RC-main", MB_ICONERROR);
+            MessageBoxW(NULL, L"Configuration file (config.toml or config.json) not found. Please open RC-GUI to configure.", L"RC-main", MB_ICONERROR);
         else
-            MessageBoxW(NULL, L"读取配置文件失败。", L"RC-main", MB_ICONERROR);
-        OpenGuiOrNotepadConfig(appDir, configPath, true);
+            MessageBoxW(NULL, L"配置文件 (config.toml 或 config.json) 不存在，请先打开 RC-GUI 进行配置。", L"RC-main", MB_ICONERROR);
+        OpenGuiOrNotepadConfig(appDir, tomlPath, true);
         CloseHandle(hMutex);
         return 1;
     }
 
     RC_JsonError jerr = {0};
-    RC_Json *root = RC_JsonParse(jsonText, &jerr);
+    RC_Json *root = NULL;
+
+    if (isToml)
+    {
+        
+        RC_LogInfo("正在解析 TOML 格式配置...");
+        root = RC_JsonParseToml(jsonText, &jerr); // 我们需要实现这个函数
+    }
+    else
+    {
+        RC_LogInfo("正在解析 JSON 格式配置...");
+        root = RC_JsonParse(jsonText, &jerr);
+    }
+
     if (!root || !RC_JsonIsObject(root))
     {
-        // JSON 解析失败或根不是对象：提示并让用户修复。
+        // 解析失败
         free(jsonText);
         if (root)
             RC_JsonFree(root);
+        
+        const wchar_t *errFile = isToml ? L"config.toml" : L"config.json";
         if (sysEnglish)
-            MessageBoxW(NULL, L"Invalid config.json format. Please fix it in RC-GUI.", L"RC-main", MB_ICONERROR);
+            MessageBoxW(NULL, L"Invalid configuration format. Please fix it in RC-GUI.", L"RC-main", MB_ICONERROR);
         else
             MessageBoxW(NULL, L"配置文件格式错误，请使用 RC-GUI 修复。", L"RC-main", MB_ICONERROR);
-        OpenGuiOrNotepadConfig(appDir, configPath, true);
+        
+        RC_LogError("解析 %ls 失败: %s (偏移: %zu)", errFile, jerr.message ? jerr.message : "未知错误", jerr.offset);
+        OpenGuiOrNotepadConfig(appDir, isToml ? tomlPath : configPath, true);
         CloseHandle(hMutex);
         return 1;
     }
