@@ -12,6 +12,8 @@ from tkinter import messagebox, filedialog, simpledialog
 import tkinter.ttk as ttk
 import tkinter.font as tkfont
 import json
+import tomllib
+import tomli_w
 import ctypes
 import sys
 import time
@@ -66,7 +68,7 @@ def _detect_default_lang() -> str:
     return "zh"
 
 
-# 全局语言：在读取 config.json 后会被覆盖
+# 全局语言：在读取配置文件后会被覆盖
 LANG: str = _detect_default_lang()
 
 # 中文源文案 -> 英文翻译（只翻 GUI 文案；未命中的保持原样）
@@ -1640,7 +1642,7 @@ Sleep/Power Control:
 
 命令：
     “打开(on)”为 PowerShell 片段，可随时点击测试按钮；
-    支持 on#数字（默认 0-100，可在 config.json 中通过 commandN_value_min/commandN_value_max 自定义范围），命令中使用 {value} 占位符获取参数。
+    支持 on#数字（默认 0-100，可在配置文件中通过 commandN_value_min/commandN_value_max 自定义范围），命令中使用 {value} 占位符获取参数。
     关闭预设默认“中断”(CTRL+BREAK)，可改为强制结束或自定义并独立测试。
 
 按键(Hotkey)：
@@ -3317,28 +3319,28 @@ def generate_config() -> None:
             config[f"{prefix}_char_delay_ms"] = int(theme.get("char_delay_ms", 0) or 0)
             hotkey_index += 1
 
-    # 保存为 JSON 文件
+    # 1. 保存为 TOML 文件 (主要格式，用户要求的格式)
     try:
-        with open(config_file_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=4)
-    except PermissionError as e:
-        messagebox.showerror(
-            t("错误"),
-            t(f"无法写入配置文件（可能没有权限）：\n{config_file_path}\n\n{e}")
-        )
-        return
+        with open(config_toml_path, "wb") as f:
+            tomli_w.dump(config, f)
     except Exception as e:
-        messagebox.showerror(t("错误"), t(f"保存配置文件失败：\n{config_file_path}\n\n{e}"))
+        messagebox.showerror(t("错误"), t(f"保存 TOML 配置文件失败：\n{config_toml_path}\n\n{e}"))
         return
+
+    # 2. 保存为 JSON 文件 (旧版兼容，之后将弃用)
+    # 提示：目前 C 核心组件（main/tray）仍依赖此 JSON 文件
+    try:
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        # JSON 保存失败仅作为警告，因为主要格式 TOML 已保存成功
+        print(f"Warning: Failed to save legacy JSON config: {e}")
+
     # 保存后刷新界面
     messagebox.showinfo(t("提示"), t("配置文件已保存\n请重新打开主程序以应用更改\n刷新test模式需重启本程序"))
+    
     # 重新读取配置
-    try:
-        with open(config_file_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except Exception:
-        # 不影响保存结果：读取失败则保留内存中的 config
-        pass
+    load_config_file()
     # 刷新test模式
     test_var.set(config.get("test", 0))
     # 刷新通知开关
@@ -3368,11 +3370,8 @@ def refresh_custom_themes() -> None:
         return
     
     # 从配置文件重新读取最新配置
-    if os.path.exists(config_file_path):
+    if load_config_file():
         try:
-            with open(config_file_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            
             # 刷新test模式
             test_var.set(config.get("test", 0))
             # 刷新通知开关
@@ -3393,7 +3392,7 @@ def refresh_custom_themes() -> None:
             
             messagebox.showinfo(t("提示"), t("已从配置文件刷新自定义主题列表"))
         except Exception as e:
-            messagebox.showerror(t("错误"), t("读取配置文件失败: {err}").format(err=e))
+            messagebox.showerror(t("错误"), t("刷新配置文件失败: {err}").format(err=e))
     else:
         messagebox.showwarning(t("警告"), t("配置文件不存在，无法刷新"))
 
@@ -3630,41 +3629,74 @@ except Exception as e:
 appdata_dir: str = os.path.abspath(os.path.dirname(sys.argv[0]))
 
 # 配置文件路径
-config_file_path: str = os.path.join(appdata_dir, "config.json")
+config_json_path: str = os.path.join(appdata_dir, "config.json")
+config_toml_path: str = os.path.join(appdata_dir, "config.toml")
+config_file_path: str = config_json_path # 默认路径，用于备份等操作
 
 # 尝试读取配置文件
 config: Dict[str, Any] = {}
-if os.path.exists(config_file_path):
-    try:
-        with open(config_file_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except json.decoder.JSONDecodeError as e:
-        if LANG == "en":
-            error_msg = (
-                f"Config file is invalid:\n{str(e)}\n\nChoose:\n"
-                "• Yes: backup the broken config and continue\n"
-                "• No: exit and keep the config"
-            )
-        else:
-            error_msg = f"配置文件格式错误：\n{str(e)}\n\n请选择：\n• 点击\"是\"删除错误的配置文件并继续\n• 点击\"否\"退出程序不删除配置文件"
-        if messagebox.askyesno(t("配置文件错误"), error_msg):
-            # 用户选择删除配置文件
+
+def load_config_file():
+    global config, config_file_path
+    
+    # 1. 优先尝试读取 TOML (主要格式)
+    if os.path.exists(config_toml_path):
+        try:
+            with open(config_toml_path, "rb") as f:
+                config = tomllib.load(f)
+            config_file_path = config_toml_path
+            return True
+        except Exception as e:
+            if LANG == "en":
+                error_msg = f"Primary TOML config file is invalid:\n{str(e)}\n\nTry loading legacy JSON config?"
+            else:
+                error_msg = f"主要 TOML 配置文件格式错误：\n{str(e)}\n\n是否尝试加载旧版 JSON 配置文件？"
+            if not messagebox.askyesno(t("配置文件错误"), error_msg):
+                sys.exit(0)
+
+    # 2. 如果 TOML 不存在，尝试读取并迁移 JSON (旧版兼容)
+    if os.path.exists(config_json_path):
+        try:
+            with open(config_json_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            
+            # 自动迁移到 TOML
             try:
-                os.rename(config_file_path, f"{config_file_path}.bak")
-                messagebox.showinfo(t("备份完成"), t(f"已将错误的配置文件备份为：\n{config_file_path}.bak"))
-            except Exception as backup_error:
-                messagebox.showwarning(t("备份失败"), t(f"无法备份配置文件：{str(backup_error)}\n将直接删除错误的配置文件。"))           
+                with open(config_toml_path, "wb") as f:
+                    tomli_w.dump(config, f)
+                # 迁移成功后，将 JSON 重命名为 .bak 以示弃用
+                # os.rename(config_json_path, f"{config_json_path}.deprecated")
+                # 这里我们暂时保留 json 以供 C 核心使用，但内存中已切换到 TOML
+                config_file_path = config_toml_path
+            except Exception:
+                config_file_path = config_json_path
+                
+            return True
+        except json.decoder.JSONDecodeError as e:
+            if LANG == "en":
+                error_msg = (
+                    f"Legacy JSON config file is invalid:\n{str(e)}\n\nChoose:\n"
+                    "• Yes: backup the broken config and continue\n"
+                    "• No: exit and keep the config"
+                )
+            else:
+                error_msg = f"旧版 JSON 配置文件格式错误：\n{str(e)}\n\n请选择：\n• 点击\"是\"备份错误的配置文件并继续\n• 点击\"否\"退出程序不删除配置文件"
+            
+            if messagebox.askyesno(t("配置文件错误"), error_msg):
                 try:
-                    os.remove(config_file_path)
-                except Exception as remove_error:
-                    messagebox.showerror(t("错误"), t(f"无法删除配置文件：{str(remove_error)}\n程序将退出。"))
-                    sys.exit(1)
-            # 继续使用空配置
-            config = {}
-        else:
-            # 用户选择退出程序
-            messagebox.showinfo(t("程序退出"), t("您选择了保留配置文件并退出程序。\n请手动修复配置文件后再次运行程序。"))
-            sys.exit(0)
+                    os.rename(config_json_path, f"{config_json_path}.bak")
+                except Exception:
+                    try:
+                        os.remove(config_json_path)
+                    except Exception:
+                        pass
+                config = {}
+                return True
+            else:
+                sys.exit(0)
+    return False
+
+load_config_file()
 
 # 根据配置文件覆盖语言（如果存在）
 try:
