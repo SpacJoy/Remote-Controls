@@ -1,5 +1,7 @@
-pyinstaller>=6.13.0
 psutil>=7.0.0
 pywin32>=310
 setuptools>=80.1.0
 wmi>=1.5.1
+tomli>=2.2.1; python_version < "3.11"
+tomli_w>=1.2.0
+pyinstaller>=6.13.0

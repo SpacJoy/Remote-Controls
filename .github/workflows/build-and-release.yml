@@ -316,9 +316,10 @@ jobs:
                   python -c "import psutil; print('psutil: OK')"
                   python -c "import wmi; print('wmi: OK')"
                   python -c "import PyInstaller; print('pyinstaller: OK')"
+                  python -c "import tomli_w; print('tomli_w: OK')"
 
                   echo "=== 已安装的包 ==="
-                  pip list | Select-String -Pattern "pyinstaller|pywin32|psutil|wmi"
+                  pip list | Select-String -Pattern "pyinstaller|pywin32|psutil|wmi|tomli_w"
 
             - name: Update version files
               if: ${{ github.event.inputs.update_version_files == 'true' || github.event_name == 'push' }}

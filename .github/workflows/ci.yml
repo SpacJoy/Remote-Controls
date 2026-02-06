@@ -46,5 +46,5 @@ jobs:
         run: |
           python -m compileall -q src installer scripts
           python -m pip check
-          python -c "import tkinter, psutil, wmi, PyInstaller, win32com.client; print('imports: OK')"
+          python -c "import tkinter, psutil, wmi, PyInstaller, win32com.client, tomli_w; print('imports: OK')"
           python installer/update_version.py 0.0.0

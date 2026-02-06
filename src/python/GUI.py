@@ -12,7 +12,10 @@ from tkinter import messagebox, filedialog, simpledialog
 import tkinter.ttk as ttk
 import tkinter.font as tkfont
 import json
-import tomllib
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 import tomli_w
 import ctypes
 import sys
