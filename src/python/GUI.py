@@ -3254,10 +3254,10 @@ def unflatten_config(flat_dict: Dict[str, Any]) -> Dict[str, Any]:
         # Legacy/Other known keys that should go to 'other' or 'brightness'
         elif k in {"wmi_target", "dxva2_target"}:
             nested["other"][k] = v
-        elif k.startswith("computer_") or k.startswith("sleep_"):
-            # computer_on_action etc. should go to 'other' or 'built_in_themes'?
-            # In previous run they were in 'other'.
+        elif k.startswith("computer_"):
             nested["other"][k] = v
+        elif k.startswith("sleep_"):
+            nested["built_in_themes"][k] = v
         else:
             # Miscellaneous
             nested["other"][k] = v
@@ -3293,36 +3293,171 @@ def flatten_config(nested_dict: Dict[str, Any], target_dict: Dict[str, Any] = No
 
 def save_config_toml(nested_config: Dict[str, Any], file_path: str) -> None:
     """
-    English: Saves nested config to TOML with section comments
-    中文: 保存嵌套配置到 TOML 文件，并添加章节注释以提高可读性
+    English: Saves nested config to TOML with detailed per-item comments
+    中文: 保存嵌套配置到 TOML 文件，并添加详细的逐项注释
     """
     import tomli_w
+    import re
     # 使用 tomli_w 生成基础 TOML 字符串
     content = tomli_w.dumps(nested_config)
     
-    # 定义中文注释映射
+    # 定义详细的注释映射
+    # 包含章节注释和关键配置项的逐项说明
     replacements = {
+        # --- Sections ---
         "[mqtt]": "# MQTT 服务器配置 (MQTT Broker Settings)\n[mqtt]",
         "[settings]": "\n# 常规设置 (General Settings)\n[settings]",
         "[built_in_themes]": "\n# 内置主题 (Built-in Themes: Topic & Toggle)\n[built_in_themes]",
+        "[brightness]": "\n# 亮度控制 (Brightness Control)\n[brightness]",
+        "[other]": "\n# 其他杂项 (Miscellaneous)\n[other]",
         "[custom_themes]": "\n# 自定义主题 (Custom Themes)\n[custom_themes]",
         "[custom_themes.applications]": "\n# 自定义主题：程序或脚本 (Applications / Scripts)\n[custom_themes.applications]",
         "[custom_themes.services]": "\n# 自定义主题：服务 (Windows Services)\n[custom_themes.services]",
         "[custom_themes.commands]": "\n# 自定义主题：命令 (Shell Commands)\n[custom_themes.commands]",
         "[custom_themes.hotkeys]": "\n# 自定义主题：热键 (Global Hotkeys)\n[custom_themes.hotkeys]",
-        "[brightness]": "\n# 亮度控制 (Brightness Control)\n[brightness]",
-        "[other]": "\n# 其他杂项 (Miscellaneous)\n[other]"
+
+        # --- MQTT Items ---
+        "broker =": "# MQTT 服务器地址 (Broker Address)\nbroker",
+        "port =": "# 端口号 (Port: 9501 for bemfa)\nport",
+        "auth_mode =": "# 认证模式: private_key / username\nauth_mode",
+        "mqtt_username =": "# 用户名 (MQTT Username)\nmqtt_username",
+        "mqtt_password =": "# 密码 (MQTT Password)\nmqtt_password",
+        "client_id =": "# 客户端 ID (Client ID)\nclient_id",
+        "mqtt_tls =": "# 是否启用 TLS 加密 (Enable TLS: 0/1)\nmqtt_tls",
+        "mqtt_tls_verify =": "# 是否验证证书 (Verify Certificate: 0/1)\nmqtt_tls_verify",
+        "mqtt_tls_ca_file =": "# CA 证书路径 (CA File Path)\nmqtt_tls_ca_file",
+
+        # --- Settings Items ---
+        "test =": "# 测试模式 (Test Mode: 0/1)\ntest",
+        "notify =": "# 消息通知开关 (Notifications: 0/1)\nnotify",
+        "language =": "# 界面语言 (Language: zh/en)\nlanguage",
+
+        # --- Brightness Items ---
+        "brightness_mode =": "# 亮度控制模式: wmi / dxva2 / twinkle_tray / custom\nbrightness_mode",
+        "twinkle_tray_path =": "# Twinkle Tray 安装路径 (Twinkle Tray Path)\ntwinkle_tray_path",
+        "twinkle_tray_target_mode =": "# 目标模式 (Target Mode: all/id/number)\ntwinkle_tray_target_mode",
+        "twinkle_tray_target_value =": "# 目标值 (Target Value)\ntwinkle_tray_target_value",
+        "twinkle_tray_overlay =": "# 是否显示亮度浮层 (Show Overlay: 0/1)\ntwinkle_tray_overlay",
+        "brightness_custom_list =": "# 自定义控制顺序 (Custom Strategy List: e.g. wmi,dxva2)\nbrightness_custom_list",
+        "brightness_custom_strategy =": "# 自定义策略: all (全部执行) / success (成功即止)\nbrightness_custom_strategy",
+
+        # --- Other/Internal Items ---
+        "computer_on_action =": "# 电脑开启时的动作 (On Action: lock/shutdown/restart/none)\ncomputer_on_action",
+        "computer_off_action =": "# 电脑关闭时的动作 (Off Action: shutdown/lock/restart/none)\ncomputer_off_action",
+        "computer_on_delay =": "# 开启延时秒数 (On Delay Seconds)\ncomputer_on_delay",
+        "computer_off_delay =": "# 关闭延时秒数 (Off Delay Seconds)\ncomputer_off_delay",
+        "wmi_target =": "# WMI 目标显示器 (WMI Target: all/number)\nwmi_target",
+        "dxva2_target =": "# Dxva2 目标显示器 (Dxva2 Target: all/number)\ndxva2_target",
+
+        # --- Built-in Themes Items ---
+        "Computer =": "# 电脑控制主题 (Computer Control Topic)\nComputer",
+        "Computer_checked =": "# 是否启用电脑控制 (Enable Computer Control: 0/1)\nComputer_checked",
+        "screen =": "# 屏幕控制主题 (Screen Control Topic)\nscreen",
+        "screen_checked =": "# 是否启用屏幕控制 (Enable Screen Control: 0/1)\nscreen_checked",
+        "volume =": "# 音量控制主题 (Volume Control Topic)\nvolume",
+        "volume_checked =": "# 是否启用音量控制 (Enable Volume Control: 0/1)\nvolume_checked",
+        "sleep =": "# 睡眠控制主题 (Sleep Control Topic)\nsleep",
+        "sleep_checked =": "# 是否启用睡眠控制 (Enable Sleep Control: 0/1)\nsleep_checked",
+        "media =": "# 媒体控制主题 (Media Control Topic)\nmedia",
+        "media_checked =": "# 是否启用媒体控制 (Enable Media Control: 0/1)\nmedia_checked",
+        "sleep_on_action =": "# 睡眠开启时的动作 (Sleep On Action)\nsleep_on_action",
+        "sleep_off_action =": "# 睡眠关闭时的动作 (Sleep Off Action)\nsleep_off_action",
+        "sleep_on_delay =": "# 睡眠开启延时 (Sleep On Delay)\nsleep_on_delay",
+        "sleep_off_delay =": "# 睡眠关闭延时 (Sleep Off Delay)\nsleep_off_delay"
     }
     
-    for old, new in replacements.items():
-        content = content.replace(old, new)
+    # 为了避免替换掉不该替换的内容（如自定义主题中的 key 可能包含这些子串），
+    # 我们按照行来匹配并替换
+    lines = content.splitlines()
+    new_lines = []
+    
+    # 记录已经添加过注释的 section 或动态项类型，防止重复
+    processed_sections = set()
+    processed_dynamic_types = set()
+    
+    for line in lines:
+        stripped = line.strip()
         
+        # 处理 Section 注释
+        if stripped in replacements and stripped.startswith("["):
+            if stripped not in processed_sections:
+                new_lines.append(replacements[stripped])
+                processed_sections.add(stripped)
+            else:
+                new_lines.append(line)
+            continue
+            
+        # 处理配置项注释
+        found_item = False
+        # 仅对基础层级的配置项添加注释，不进入自定义主题深层，避免混乱
+        # 基础层级的行通常缩进较少或没有缩进
+        if not (line.startswith(" ") or line.startswith("\t")):
+            for key, comment_block in replacements.items():
+                if not key.startswith("[") and stripped.startswith(key):
+                    # 关键修复：确保替换时保留整行内容（key = value），而不是破坏它
+                    if "=" in line:
+                        value_part = line.split("=", 1)[1]
+                        new_lines.append(comment_block + " =" + value_part)
+                        found_item = True
+                        break
+        
+        if not found_item:
+            # 检查是否是自定义主题相关的动态行 (Check for custom theme dynamic items)
+            # 匹配模式如 application1, serve2_name, command3_checked 等
+            m = re.match(r'^((application|serve|command|hotkey)\d+)(_\w+)?\s*=', stripped)
+            if m:
+                # 仅为每类自定义主题的第一个项目 (N=1) 添加注释
+                is_first_of_type = m.group(1).endswith("1")
+                
+                suffix = m.group(3) if m.group(3) else ""
+                comment = ""
+                if is_first_of_type:
+                    if suffix == "":
+                        comment = "# 主题 ID (Theme ID)"
+                    elif suffix == "_name":
+                        comment = "# 显示名称 (Display Name)"
+                    elif suffix == "_checked":
+                        comment = "# 开关状态 (Status: 0/1)"
+                    elif suffix.startswith("_directory") or suffix.startswith("_service") or \
+                         suffix.startswith("_command") or suffix.startswith("_hotkey"):
+                        comment = "# 目标路径/服务名/命令/热键 (Path/Service/Command/Hotkey)"
+                    elif suffix == "_on_value":
+                        comment = "# 开启时执行的内容 (On Action Value)"
+                    elif suffix == "_off_value":
+                        comment = "# 关闭时执行的内容 (Off Action Value)"
+                    elif suffix == "_off_preset":
+                        comment = "# 关闭预设 (Off Preset: kill/none/etc.)"
+                    elif suffix == "_value":
+                        if stripped.startswith("serve"):
+                            comment = "# 服务名 (Service Name)"
+                        elif stripped.startswith("command"):
+                            comment = "# 命令内容 (Command Content)"
+                        elif stripped.startswith("hotkey"):
+                            comment = "# 热键组合 (Hotkey Combination)"
+                    elif suffix == "_window":
+                        comment = "# 窗口模式 (Window Mode: show/hide)"
+                    elif suffix == "_value_min":
+                        comment = "# 最小值 (Min Value)"
+                    elif suffix == "_value_max":
+                        comment = "# 最大值 (Max Value)"
+                    elif suffix == "_on_type" or suffix == "_off_type":
+                        comment = "# 触发类型 (Trigger Type: keyboard/mouse/etc.)"
+                    elif suffix == "_char_delay_ms":
+                        comment = "# 字符输入延迟 (Char Delay MS)"
+                
+                if comment:
+                    new_lines.append(comment)
+            
+            new_lines.append(line)
+            
+    final_content_body = "\n".join(new_lines)
+    
     # 在文件头部添加说明
     header = "# Remote-Controls Configuration File (TOML Format)\n"
     header += "# This file is automatically generated. Manual editing is supported.\n"
     header += "# 配置文件（TOML 格式）。支持手动编辑，程序保存时会自动更新。\n\n"
     
-    final_content = header + content
+    final_content = header + final_content_body
     
     with open(file_path, "wb") as f:
         f.write(final_content.encode("utf-8"))
