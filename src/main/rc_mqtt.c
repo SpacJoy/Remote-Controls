@@ -28,11 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Paho MQTT C (synchronous client)
-// Build notes:
-// - Provide MQTTClient.h in include path
-// - Link with paho-mqtt3c (non-SSL) or paho-mqtt3cs (SSL) as needed
-#include "MQTTClient.h"
+#include <MQTTClient.h>
 
 static const char *rc_title_for_notify(const RC_Router *router)
 {

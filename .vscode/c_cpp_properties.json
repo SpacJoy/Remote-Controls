@@ -13,7 +13,10 @@
             "cStandard": "c17",
             "cppStandard": "c++17",
             "intelliSenseMode": "windows-gcc-x64",
-            "configurationProvider": "ms-vscode.makefile-tools"
+            "browse": {
+                "path": ["${workspaceFolder}", "C:/msys64/mingw64/include"],
+                "limitSymbolsToIncludedHeaders": true
+            }
         }
     ],
     "version": 4
