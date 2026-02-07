@@ -269,12 +269,15 @@ def _apply_language_everywhere() -> None:
     except Exception:
         pass
     # 已打开的 Toplevel
-    try:
-        for w in root.winfo_children():
-            if isinstance(w, tk.Toplevel) and w.winfo_exists():
-                apply_language_to_widgets(w)
-    except Exception:
-        pass
+    def _apply_to_toplevels(parent):
+        try:
+            for w in parent.winfo_children():
+                if isinstance(w, tk.Toplevel) and w.winfo_exists():
+                    apply_language_to_widgets(w)
+                    _apply_to_toplevels(w)
+        except Exception:
+            pass
+    _apply_to_toplevels(root)
 
     # 动态元素（combobox values / window titles 等）
     try:
@@ -295,16 +298,20 @@ def _apply_language_everywhere() -> None:
         root.update_idletasks()
         root.geometry("")
 
-        for w in root.winfo_children():
-            if isinstance(w, tk.Toplevel) and w.winfo_exists():
-                try:
-                    w.update_idletasks()
-                    # 只有当窗口不是固定大小时才尝试自动调整
-                    # 或者对于我们的设置窗口，强制自适应一次
-                    w.geometry("")
-                    w.update_idletasks()
-                except Exception:
-                    pass
+        def _resize_toplevels(parent):
+            for w in parent.winfo_children():
+                if isinstance(w, tk.Toplevel) and w.winfo_exists():
+                    try:
+                        w.update_idletasks()
+                        # 只有当窗口不是固定大小时才尝试自动调整
+                        # 或者对于我们的设置窗口，强制自适应一次
+                        w.geometry("")
+                        w.update_idletasks()
+                        # 递归处理嵌套的 Toplevel
+                        _resize_toplevels(w)
+                    except Exception:
+                        pass
+        _resize_toplevels(root)
     except Exception:
         pass
 
@@ -4353,7 +4360,8 @@ def open_builtin_settings():
         # Twinkle Tray row
         tt_row = ttk.Frame(cb_frame)
         tt_row.pack(fill="x", pady=2)
-        ttk.Checkbutton(tt_row, text=t("Twinkle Tray (第三方接口)"), variable=tt_var).pack(side="left")
+        tt_cb = ttk.Checkbutton(tt_row, text=t("Twinkle Tray (第三方接口)"), variable=tt_var)
+        tt_cb.pack(side="left")
         ttk.Button(tt_row, text=t("测试"), width=5, command=lambda: test_brightness_method("twinkle_tray")).pack(side="left", padx=10)
         
         adv_row += 1
@@ -4446,7 +4454,7 @@ def open_builtin_settings():
         adv_row += 1
 
         # 3. Targets
-        ttk.Label(adv_main_frame, text="WMI " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Label(adv_main_frame, text=t("WMI 目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
         wmi_target = tk.StringVar(value=config.get("wmi_target", "all"))
         wmi_target_frame = ttk.Frame(adv_main_frame)
         wmi_target_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, sticky="w")
@@ -4455,7 +4463,7 @@ def open_builtin_settings():
         ttk.Label(wmi_target_frame, text=t("('all' 或 索引 0, 1...)")).pack(side="left", padx=5)
         adv_row += 1
         
-        ttk.Label(adv_main_frame, text="Dxva2 " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Label(adv_main_frame, text=t("Dxva2 目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
         dxva2_target = tk.StringVar(value=config.get("dxva2_target", "all"))
         dxva2_target_frame = ttk.Frame(adv_main_frame)
         dxva2_target_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, sticky="w")
@@ -4470,7 +4478,7 @@ def open_builtin_settings():
         # 4. Twinkle Tray
         tt_header_frame = ttk.Frame(adv_main_frame)
         tt_header_frame.grid(row=adv_row, column=0, columnspan=3, sticky="ew")
-        ttk.Label(tt_header_frame, text="Twinkle Tray " + t("配置:")).pack(side="left", padx=10, pady=5)
+        ttk.Label(tt_header_frame, text=t("Twinkle Tray 配置:")).pack(side="left", padx=10, pady=5)
         
         def download_tt():
             try:
