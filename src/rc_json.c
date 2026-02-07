@@ -13,6 +13,7 @@
  */
 
 #include "rc_json.h"
+#include "toml.h"
 
 #include <ctype.h>
 #include <limits.h>
@@ -59,6 +60,9 @@ typedef struct Parser
     size_t i;
     RC_JsonError *err;
 } Parser;
+
+static RC_Json *alloc_node(RC_JsonType t);
+static bool object_set_value(RC_Json *obj, const char *key, RC_Json *val);
 
 static void set_err(Parser *p, const char *msg)
 {
@@ -651,6 +655,118 @@ RC_Json *RC_JsonParse(const char *text, RC_JsonError *err)
     }
     return root;
 }
+
+/*
+ * 极简 TOML 键值对解析（用于适配 config.toml）。
+ * 使用 tomlc99 库实现。
+ */
+static void traverse_toml_table(RC_Json *root, toml_table_t *tab)
+{
+    if (!tab || !root)
+        return;
+
+    for (int i = 0;; i++)
+    {
+        const char *key = toml_key_in(tab, i);
+        if (!key)
+            break;
+
+        // Try as string
+        toml_datum_t d = toml_string_in(tab, key);
+        if (d.ok)
+        {
+            RC_Json *val = alloc_node(RC_JSON_STRING);
+            if (val)
+            {
+                val->u.string = _strdup(d.u.s);
+                object_set_value(root, key, val);
+            }
+            free(d.u.s);
+            continue;
+        }
+
+        // Try as bool
+        d = toml_bool_in(tab, key);
+        if (d.ok)
+        {
+            RC_Json *val = alloc_node(RC_JSON_BOOL);
+            if (val)
+            {
+                val->u.boolean = d.u.b ? true : false;
+                object_set_value(root, key, val);
+            }
+            continue;
+        }
+
+        // Try as int
+        d = toml_int_in(tab, key);
+        if (d.ok)
+        {
+            RC_Json *val = alloc_node(RC_JSON_NUMBER);
+            if (val)
+            {
+                val->u.number = (double)d.u.i;
+                object_set_value(root, key, val);
+            }
+            continue;
+        }
+
+        // Try as double
+        d = toml_double_in(tab, key);
+        if (d.ok)
+        {
+            RC_Json *val = alloc_node(RC_JSON_NUMBER);
+            if (val)
+            {
+                val->u.number = d.u.d;
+                object_set_value(root, key, val);
+            }
+            continue;
+        }
+
+        // Try as nested table
+        toml_table_t *subtab = toml_table_in(tab, key);
+        if (subtab)
+        {
+            traverse_toml_table(root, subtab);
+            continue;
+        }
+    }
+}
+
+RC_Json *RC_JsonParseToml(const char *text, RC_JsonError *err)
+{
+    if (!text)
+        return NULL;
+
+    char errbuf[200];
+    char *conf = _strdup(text);
+    if (!conf)
+        return NULL;
+
+    toml_table_t *tab = toml_parse(conf, errbuf, sizeof(errbuf));
+    free(conf);
+
+    if (!tab)
+    {
+        if (err)
+        {
+            err->message = _strdup(errbuf);
+            err->offset = 0;
+        }
+        return NULL;
+    }
+
+    RC_Json *root = alloc_node(RC_JSON_OBJECT);
+    if (root)
+    {
+        traverse_toml_table(root, tab);
+    }
+
+    toml_free(tab);
+    return root;
+}
+
 
 static void free_pairs(RC_JsonPair *pair)
 {

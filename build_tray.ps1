@@ -128,6 +128,8 @@ $cleanupFiles = @(
   'src\tray\tray_res.o',
   'src\rc_utils.o',
   'src\rc_notify_tray.o',
+  'src\rc_json_tray.o',
+  'src\toml_tray.o',
   'bin\RC-tray.exe'
 )
 foreach ($rel in $cleanupFiles) {
@@ -161,6 +163,8 @@ Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\tray\languag
 Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\tray\log_messages.c', '-o', 'src\tray\log_messages.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\rc_utils.c', '-o', 'src\rc_utils.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\rc_notify.c', '-o', 'src\rc_notify_tray.o'))
+Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\rc_json.c', '-o', 'src\rc_json_tray.o'))
+Invoke-Exe -FilePath 'gcc' -Arguments ($commonCFlags + @('-c', 'src\toml.c', '-o', 'src\toml_tray.o'))
 
 # Link
 Write-Host '链接...'
@@ -170,6 +174,8 @@ Invoke-Exe -FilePath 'gcc' -Arguments @(
   'src\tray\log_messages.o',
   'src\rc_utils.o',
   'src\rc_notify_tray.o',
+  'src\rc_json_tray.o',
+  'src\toml_tray.o',
   'src\tray\tray_res.o',
   '-o', 'bin\RC-tray.exe',
   '-mwindows',

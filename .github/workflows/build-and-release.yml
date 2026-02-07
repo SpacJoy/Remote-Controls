@@ -27,7 +27,7 @@ on:
                 type: boolean
 
 env:
-    PYTHON_VERSION: "3.12.10"
+    PYTHON_VERSION: "3.14.2"
     # 设置UTF-8编码以正确处理中文字符
     PYTHONIOENCODING: "utf-8"
     PYTHONUTF8: "1"
@@ -37,58 +37,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-    build-and-release:
-        timeout-minutes: 10
+    prepare:
         runs-on: windows-latest
         permissions:
-            contents: write
+            contents: read
             actions: read
-            issues: read
-            pull-requests: read
-
+        outputs:
+            version: ${{ steps.version.outputs.version }}
+            tag_name: ${{ steps.version.outputs.tag_name }}
+            is_tag_push: ${{ steps.version.outputs.is_tag_push }}
+            is_test_tag: ${{ steps.version.outputs.is_test_tag }}
+            old_tag_name: ${{ steps.version.outputs.old_tag_name }}
+            should_rename_tag: ${{ steps.version.outputs.should_rename_tag }}
+            skip_job: ${{ steps.version.outputs.skip_job }}
         steps:
             - name: Checkout code
               uses: actions/checkout@v4.2.2
               with:
                   fetch-depth: 0
-
-            - name: Set up MSYS2 (MinGW-w64)
-              uses: msys2/setup-msys2@v2.29.0
-              id: msys2
-              with:
-                  msystem: MINGW64
-                  update: true
-                  cache: true
-                  install: >-
-                      mingw-w64-x86_64-gcc
-                      mingw-w64-x86_64-binutils
-                      mingw-w64-x86_64-paho.mqtt.c
-
-            - name: Add MinGW64 to PATH
-              shell: pwsh
-              run: |
-                  $msys2Location = "${{ steps.msys2.outputs.msys2-location }}"
-                  if (-not $msys2Location) {
-                    throw "错误：未获取到 msys2-location 输出"
-                  }
-                  Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $msys2Location "mingw64\\bin")
-
-            - name: Configure Paho MQTT C root
-              shell: pwsh
-              run: |
-                  # build_main.ps1 requires PAHO_MQTT_C_ROOT (or -PahoRoot) to locate MQTTClient.h and libpaho-mqtt3c.*
-                  $msys2Location = "${{ steps.msys2.outputs.msys2-location }}"
-                  if (-not $msys2Location) {
-                    throw "错误：未获取到 msys2-location 输出"
-                  }
-                  $pahoRoot = Join-Path $msys2Location "mingw64"
-                  Add-Content -Path $env:GITHUB_ENV -Value "PAHO_MQTT_C_ROOT=$pahoRoot"
-              
-            - name: Install Inno Setup 6
-              run: |
-                Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -OutFile "is.exe"
-                Start-Process -FilePath "is.exe" -ArgumentList "/VERYSILENT /NORESTART" -Wait
-              shell: pwsh
 
             - name: Extract version from tag or input
               id: version
@@ -96,6 +62,7 @@ jobs:
               env:
                   PYTHONIOENCODING: utf-8
                   PYTHONUTF8: 1
+                  GH_TOKEN: ${{ github.token }}
               run: |
                   # 设置PowerShell输出编码为UTF-8
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -127,12 +94,48 @@ jobs:
                   }
 
                   $tagName = ""
+                  $oldTagName = ""
+                  $shouldRenameTag = "false"
                   $isTagPush = $false
+                  $skipJob = "false"
                   $resolved = $null
 
                   if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref_type }}" -eq "tag") {
                     $tagName = "${{ github.ref_name }}"
                     $isTagPush = $true
+                    
+                    # 需求 2：如果 dev 分支推送的标签不带 test，则强制加上
+                    $onDev = $false
+                    try {
+                      $branches = git branch -r --contains ${{ github.sha }}
+                      if ($branches -match 'origin/dev') {
+                        $onDev = $true
+                      }
+                    } catch {
+                      echo "无法确定分支信息"
+                    }
+
+                    if ($onDev -and ($tagName -notmatch '-test')) {
+                      $oldTagName = $tagName
+                      $baseTagName = $tagName
+                      $targetTag = "$baseTagName-test"
+                      
+                      # 检查远程是否存在该标签，如果存在则递增后缀
+                      # 使用 git ls-remote 检查远程标签最准确
+                      $suffix = 1
+                      $maxTries = 20
+                      while ($suffix -lt $maxTries) {
+                        $exists = git ls-remote --tags origin $targetTag
+                        if (-not $exists) { break }
+                        $suffix++
+                        $targetTag = "$baseTagName-test$suffix"
+                      }
+                      
+                      $tagName = $targetTag
+                      $shouldRenameTag = "true"
+                      echo "检测到在 dev 分支推送了正式标签，将重命名标签 (从 $oldTagName 到 $tagName)"
+                    }
+
                     $resolved = Resolve-VersionFromTagName -TagName $tagName
                   } elseif ("${{ github.event_name }}" -eq "workflow_dispatch") {
                     $input = "${{ github.event.inputs.version }}"
@@ -142,9 +145,18 @@ jobs:
                   } else {
                     $tagName = "Build-${{ github.ref_name }}"
                     $isTagPush = $false
-                    $buildVersion = "0.0.0"
-
+                    
+                    # 需求 1：如果当前 commit 已有版本标签，则跳过 dev 分支触发的构建
                     if ("${{ github.ref_name }}" -eq "dev") {
+                      $tags = git tag --points-at HEAD
+                      if ($tags -match 'V\d+') {
+                        echo "检测到当前 commit 已有版本标签 ($tags)，此分支推送将由标签触发的工作流处理，当前任务跳过以避免重复构建"
+                        $skipJob = "true"
+                      }
+                    }
+
+                    $buildVersion = "0.0.0"
+                    if ("${{ github.ref_name }}" -eq "dev" -and $skipJob -eq "false") {
                       # 获取最新标签作为基准
                       $latestTag = ""
                       try {
@@ -157,20 +169,54 @@ jobs:
                         # 去掉 V 前缀和 -test 等后缀
                         $baseVersion = ($latestTag -replace '^V', '') -replace '-.*$', ''
                         $parts = $baseVersion.Split('.')
-                        if ($parts.Length -eq 3) {
-                          # 1.0.0 -> 1.0.0.1
-                          $buildVersion = "$($parts[0]).$($parts[1]).$($parts[2]).1"
-                        } elseif ($parts.Length -ge 4) {
-                          # 1.0.0.1 -> 1.0.0.2
-                          $lastPart = [int]$parts[3] + 1
-                          $buildVersion = "$($parts[0]).$($parts[1]).$($parts[2]).$lastPart"
+                        
+                        # 需求 3：除了参考标签，还要参考最近的 Actions 运行记录来决定 build 号
+                        $tagDate = git log -1 --format=%aI $latestTag
+                        $runCount = 0
+                        try {
+                          # 获取自该标签创建以来，dev 分支上成功的 Actions 运行次数
+                          # 逻辑优化：排除当前运行 ID，并排除与标签本身关联的运行
+                          $currentRunId = "${{ github.run_id }}"
+                          $tagSha = git rev-parse "$latestTag^{commit}"
+                          $runJson = gh run list --workflow "${{ github.workflow }}" --branch dev --status success --created ">$tagDate" --limit 100 --json databaseId,headSha,displayTitle
+                          if ($LASTEXITCODE -eq 0) {
+                            $runs = $runJson | ConvertFrom-Json
+                            # 过滤：1. 不是当前任务；2. SHA 不等于标签 SHA
+                            $filteredRuns = @($runs) | Where-Object { 
+                              $_.databaseId -ne $currentRunId -and $_.headSha -ne $tagSha 
+                            }
+                            # 打印调试信息
+                            $filteredRuns | ForEach-Object { echo "计入统计的历史任务: ID=$($_.databaseId), Title=$($_.displayTitle)" }
+                            
+                            $runCount = $filteredRuns.Count
+                            echo "自标签 $latestTag ($tagDate) 以来，检测到 $runCount 次有效的成功 dev 运行记录"
+                          } else {
+                            echo "警告：gh run list 执行失败，退出代码: $LASTEXITCODE"
+                          }
+                        } catch {
+                          echo "警告：解析 Actions 运行记录失败，将仅基于标签进行递增"
+                        }
+
+                        if ($parts.Length -ge 3) {
+                          $major = $parts[0]
+                          $minor = $parts[1]
+                          $patch = $parts[2]
+                          
+                          if ($parts.Length -eq 3) {
+                            # 1.0.0 -> 1.0.0.(runCount + 1)
+                            $buildVersion = "$major.$minor.$patch.$($runCount + 1)"
+                          } else {
+                            # 1.0.0.5 -> 1.0.0.(5 + runCount + 1)
+                            $tagBuild = [int]$parts[3]
+                            $buildVersion = "$major.$minor.$patch.$($tagBuild + $runCount + 1)"
+                          }
                         } else {
-                          $buildVersion = "1.0.0.1"
+                          $buildVersion = "1.0.0.$($runCount + 1)"
                         }
                       } else {
                         $buildVersion = "1.0.0.1"
                       }
-                      echo "检测到 dev 分支推送，自动根据最新标签 ($latestTag) 递增版本号为: $buildVersion"
+                      echo "检测到 dev 分支推送，自动根据最新标签 ($latestTag) 及 Actions 记录递增版本号为: $buildVersion"
                     }
 
                     $resolved = [pscustomobject]@{
@@ -178,17 +224,108 @@ jobs:
                       Build = $buildVersion
                       IsTest = $true
                     }
-                    echo "检测到分支推送 (${{ github.ref_name }})，执行构建测试而不发布"
+                    if ($skipJob -eq "false") {
+                      echo "检测到分支推送 (${{ github.ref_name }})，执行构建测试而不发布"
+                    }
                   }
 
-                  echo "version=$($resolved.Build)" >> $env:GITHUB_OUTPUT
+                  $finalOutVersion = $resolved.Build
+                  if ($isTagPush -or "${{ github.event_name }}" -eq "workflow_dispatch") {
+                    $finalOutVersion = $resolved.Raw
+                  } elseif ($resolved.IsTest -and ($finalOutVersion -notmatch '-test')) {
+                    $finalOutVersion = "$finalOutVersion-test"
+                  }
+
+                  echo "version=$finalOutVersion" >> $env:GITHUB_OUTPUT
                   echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
+                  echo "old_tag_name=$oldTagName" >> $env:GITHUB_OUTPUT
+                  echo "should_rename_tag=$shouldRenameTag" >> $env:GITHUB_OUTPUT
                   echo "is_tag_push=$($isTagPush.ToString().ToLower())" >> $env:GITHUB_OUTPUT
                   echo "is_test_tag=$($resolved.IsTest.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+                  echo "skip_job=$skipJob" >> $env:GITHUB_OUTPUT
 
-                  echo "构建版本(用于打包/写入版本文件): $($resolved.Build)"
-                  echo "标签名称(用于发布): $tagName"
-                  echo "是否测试标签(-test): $($resolved.IsTest)"
+                  echo "构建版本: $finalOutVersion"
+                  echo "标签名称: $tagName"
+                  echo "原始标签: $oldTagName"
+                  echo "是否重命名标签: $shouldRenameTag"
+                  echo "是否测试标签: $($resolved.IsTest)"
+                  echo "是否跳过任务: $skipJob"
+
+    build-and-release:
+        needs: prepare
+        if: needs.prepare.outputs.skip_job != 'true'
+        timeout-minutes: 10
+        runs-on: windows-latest
+        permissions:
+            contents: write
+            actions: read
+            issues: read
+            pull-requests: read
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4.2.2
+              with:
+                  fetch-depth: 0
+
+            - name: Rename tag on remote
+              if: ${{ needs.prepare.outputs.should_rename_tag == 'true' }}
+              shell: pwsh
+              run: |
+                  $oldTag = "${{ needs.prepare.outputs.old_tag_name }}"
+                  $newTag = "${{ needs.prepare.outputs.tag_name }}"
+                  echo "检测到 dev 分支推送了正式标签，执行重命名: $oldTag -> $newTag"
+                  
+                  # 配置 git 身份
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  
+                  # 创建新本地标签指向当前 commit
+                  git tag $newTag HEAD
+                  # 推送新标签
+                  git push origin $newTag
+                  # 删除远程旧标签
+                  git push origin :refs/tags/$oldTag
+                  
+                  echo "✅ 标签重命名完成: 远程已删除 $oldTag，已新增 $newTag"
+
+            - name: Set up MSYS2 (MinGW-w64)
+              uses: msys2/setup-msys2@v2.29.0
+              id: msys2
+              with:
+                  msystem: MINGW64
+                  update: true
+                  cache: true
+                  install: >-
+                      mingw-w64-x86_64-gcc
+                      mingw-w64-x86_64-binutils
+                      mingw-w64-x86_64-paho.mqtt.c
+                      mingw-w64-x86_64-openssl
+
+            - name: Add MinGW64 to PATH
+              shell: pwsh
+              run: |
+                  $msys2Location = "${{ steps.msys2.outputs.msys2-location }}"
+                  if (-not $msys2Location) {
+                    throw "错误：未获取到 msys2-location 输出"
+                  }
+                  Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $msys2Location "mingw64\\bin")
+
+            - name: Configure Paho MQTT C root
+              shell: pwsh
+              run: |
+                  # build_main.ps1 requires PAHO_MQTT_C_ROOT (or -PahoRoot) to locate MQTTClient.h and libpaho-mqtt3c.*
+                  $msys2Location = "${{ steps.msys2.outputs.msys2-location }}"
+                  if (-not $msys2Location) {
+                    throw "错误：未获取到 msys2-location 输出"
+                  }
+                  $pahoRoot = Join-Path $msys2Location "mingw64"
+                  Add-Content -Path $env:GITHUB_ENV -Value "PAHO_MQTT_C_ROOT=$pahoRoot"
+              
+            - name: Install Inno Setup 6
+              shell: pwsh
+              run: |
+                choco install innosetup -y --no-progress
 
             - name: Set up Python
               uses: actions/setup-python@v5.4.0
@@ -232,9 +369,10 @@ jobs:
                   python -c "import psutil; print('psutil: OK')"
                   python -c "import wmi; print('wmi: OK')"
                   python -c "import PyInstaller; print('pyinstaller: OK')"
+                  python -c "import tomli_w; print('tomli_w: OK')"
 
                   echo "=== 已安装的包 ==="
-                  pip list | Select-String -Pattern "pyinstaller|pywin32|psutil|wmi"
+                  pip list | Select-String -Pattern "pyinstaller|pywin32|psutil|wmi|tomli_w"
 
             - name: Update version files
               if: ${{ github.event.inputs.update_version_files == 'true' || github.event_name == 'push' }}
@@ -254,7 +392,7 @@ jobs:
                   $env:PYTHONUTF8 = "1"
 
                   .\.venv\Scripts\Activate.ps1
-                  $version = "${{ steps.version.outputs.version }}"
+                  $version = "${{ needs.prepare.outputs.version }}"
 
                   # 执行前再次确认编码设置
                   python -c "import sys; print('Python encoding:', sys.stdout.encoding)"
@@ -319,7 +457,7 @@ jobs:
                   $env:PYTHONUTF8 = "1"
 
                   .\.venv\Scripts\Activate.ps1
-                  $version = "${{ steps.version.outputs.version }}"
+                  $version = "${{ needs.prepare.outputs.version }}"
 
                   # 运行PyInstaller构建脚本
                   echo "开始PyInstaller构建..."
@@ -392,7 +530,7 @@ jobs:
             - name: Upload build artifacts
               uses: actions/upload-artifact@v4.6.0
               with:
-                  name: remote-controls-v${{ steps.version.outputs.version }}
+                  name: remote-controls-v${{ needs.prepare.outputs.version }}
                   path: |
                       installer/dist/*.exe
                       installer/dist/installer/*.exe
@@ -400,7 +538,7 @@ jobs:
 
             # 【修改】添加发布流程专属条件：仅标签推送/ main分支手动触发 执行更新日志
             - name: Generate changelog
-              if: ${{ steps.version.outputs.is_tag_push == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
+              if: ${{ needs.prepare.outputs.is_tag_push == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
               id: changelog
               shell: pwsh
               env:
@@ -412,8 +550,8 @@ jobs:
                   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
 
-                  $version = "${{ steps.version.outputs.version }}"
-                  $tagName = "${{ steps.version.outputs.tag_name }}"
+                  $version = "${{ needs.prepare.outputs.version }}"
+                  $tagName = "${{ needs.prepare.outputs.tag_name }}"
 
                   # 获取上一个标签
                   $previousTag = ""
@@ -480,7 +618,7 @@ jobs:
 
                           # 测试标签（如 V3.0.2-test2）发布时：保持文案复用，但将 compare 链接末尾改为完整 tag
                           # 例如：.../compare/V3.0.1...V3.0.2  ->  .../compare/V3.0.1...V3.0.2-test2
-                          $isTestTag = "${{ steps.version.outputs.is_test_tag }}"
+                          $isTestTag = "${{ needs.prepare.outputs.is_test_tag }}"
                           if ($isTestTag -eq 'true' -and $tagName -and $version) {
                             $stableTag = "V$version"
                             if ($tagName -ne $stableTag) {
@@ -652,20 +790,20 @@ jobs:
 
             # 原条件保留：仅发布流程执行发行版创建
             - name: Create Release
-              if: ${{ steps.version.outputs.is_tag_push == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
+              if: ${{ needs.prepare.outputs.is_tag_push == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
               id: create_release
               uses: softprops/action-gh-release@v2.1.0
               with:
-                  tag_name: ${{ steps.version.outputs.tag_name }}
-                  name: Remote Controls ${{ steps.version.outputs.tag_name }}
+                  tag_name: ${{ needs.prepare.outputs.tag_name }}
+                  name: Remote Controls ${{ needs.prepare.outputs.tag_name }}
                   body: ${{ steps.changelog.outputs.changelog }}
                   draft: false
-                  prerelease: ${{ steps.version.outputs.is_test_tag == 'true' }}
+                  prerelease: ${{ needs.prepare.outputs.is_test_tag == 'true' }}
                   files: |
                       installer/dist/RC-main.exe
                       installer/dist/RC-GUI.exe
                       installer/dist/RC-tray.exe
-                      installer/dist/installer/Remote-Controls-Installer-${{ steps.version.outputs.version }}.exe
+                      installer/dist/installer/Remote-Controls-Installer-${{ needs.prepare.outputs.version }}.exe
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -673,7 +811,7 @@ jobs:
               if: failure()
               uses: actions/upload-artifact@v4.6.0
               with:
-                  name: logs-v${{ steps.version.outputs.version }}
+                  name: logs-v${{ needs.prepare.outputs.version }}
                   path: |
                       logs/**/*.log
                       installer/build/**/warn-*.txt
@@ -690,8 +828,8 @@ jobs:
                   $PSDefaultParameterValues['*:Encoding'] = 'utf8'
 
                   echo "=== 构建总结 ==="
-                  echo "版本: ${{ steps.version.outputs.version }}"
-                  echo "标签: ${{ steps.version.outputs.tag_name }}"
+                  echo "版本: ${{ needs.prepare.outputs.version }}"
+                  echo "标签: ${{ needs.prepare.outputs.tag_name }}"
                   echo "Python: ${{ env.PYTHON_VERSION }}"
                   echo "触发方式: ${{ github.event_name }}"
                   if ("${{ github.event_name }}" -eq "push") {

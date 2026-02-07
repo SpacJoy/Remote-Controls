@@ -43,10 +43,10 @@
 ### 指定版本构建
 
 ```powershell
-pwsh -File installer/build_installer.ps1 "3.0.0"  # 示例：也可以换成你的版本号
+pwsh -File installer/build_installer.ps1 "x.y.z"  # 示例：也可以换成你的版本号
 
 # 无交互（跳过 Pause，适合 CI/无人值守）
-pwsh -File installer/build_installer.ps1 "3.0.0" -NoPause
+pwsh -File installer/build_installer.ps1 "x.y.z" -NoPause
 ```
 
 ### 自动版本构建

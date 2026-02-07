@@ -44,6 +44,13 @@ extern "C"
     RC_Json *RC_JsonParse(const char *text, RC_JsonError *err);
 
     /*
+     * 极简 TOML 键值对解析（用于适配 config.toml）。
+     * - 仅支持 key = value 格式，忽略 [section] 和注释。
+     * - 自动将所有发现的键值对扁平化存入一个 Object。
+     */
+    RC_Json *RC_JsonParseToml(const char *text, RC_JsonError *err);
+
+    /*
      * 释放节点（递归释放子节点）。
      */
     void RC_JsonFree(RC_Json *node);

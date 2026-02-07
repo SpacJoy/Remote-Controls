@@ -1039,7 +1039,7 @@ void CheckMainAdminStatus(void)
  */
 void OpenConfigGui(void)
 {
-    // 优先启动 RC-GUI.exe；若不存在，则用系统默认程序打开 config.json。
+    // 优先启动 RC-GUI.exe；若不存在，则优先打开 config.toml。
     wchar_t guiPathW[MAX_PATH] = {0};
     if (Utf8ToWide(g_guiExePath, guiPathW, MAX_PATH) && PathFileExistsW(guiPathW))
     {
@@ -1055,17 +1055,23 @@ void OpenConfigGui(void)
 
     LogMessage("WARNING", g_logMsg->configNotExists, g_guiExePath);
 
-    // 回退：打开 config.json（使用系统默认 JSON 打开方式）。
+    // 回退：打开配置文件
     char configPathA[MAX_PATH] = {0};
-    sprintf_s(configPathA, MAX_PATH, "%s\\config.json", g_appDir);
+    sprintf_s(configPathA, MAX_PATH, "%s\\config.toml", g_appDir);
     wchar_t configPathW[MAX_PATH] = {0};
     if (!Utf8ToWide(configPathA, configPathW, MAX_PATH) || !PathFileExistsW(configPathW))
     {
-        ShowNotificationDirect(g_lang->errorPromptTitle, g_lang->configNotExists);
-        return;
+        // 如果 config.toml 不存在，尝试 config.json
+        sprintf_s(configPathA, MAX_PATH, "%s\\config.json", g_appDir);
+        if (!Utf8ToWide(configPathA, configPathW, MAX_PATH) || !PathFileExistsW(configPathW))
+        {
+            ShowNotificationDirect(g_lang->errorPromptTitle, g_lang->configNotExists);
+            return;
+        }
     }
 
-    HINSTANCE res = ShellExecuteW(NULL, L"open", configPathW, NULL, NULL, SW_SHOWNORMAL);
+    // 使用记事本打开
+    HINSTANCE res = ShellExecuteW(NULL, L"open", L"notepad.exe", configPathW, NULL, SW_SHOWNORMAL);
     if ((INT_PTR)res <= 32)
     {
         ShowNotificationDirect(g_lang->errorPromptTitle, g_lang->openConfigFailed);
@@ -1074,7 +1080,7 @@ void OpenConfigGui(void)
     }
 
     ShowNotificationDirect(g_lang->promptTitle, g_lang->openingConfig);
-    LogMessage("INFO", "已使用默认程序打开配置文件: %s", configPathA);
+    LogMessage("INFO", "已使用记事本打开配置文件: %s", configPathA);
 }
 
 /**

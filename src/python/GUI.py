@@ -12,6 +12,11 @@ from tkinter import messagebox, filedialog, simpledialog
 import tkinter.ttk as ttk
 import tkinter.font as tkfont
 import json
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+import tomli_w
 import ctypes
 import sys
 import time
@@ -23,27 +28,60 @@ import shutil
 import locale
 from typing import Any, Dict, List, Union
 
+def resource_path(relative_path: str) -> str:
+    """返回资源文件的实际路径（兼容 PyInstaller）。"""
+    bases: list[str] = []
+    if hasattr(sys, "_MEIPASS"):
+        try:
+            bases.append(getattr(sys, "_MEIPASS"))  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    try:
+        bases.append(os.path.abspath(os.path.dirname(__file__)))
+    except Exception:
+        pass
+    try:
+        bases.append(os.path.abspath(os.path.dirname(sys.executable)))
+    except Exception:
+        pass
+    bases.append(os.path.abspath("."))
+    seen = set()
+    for base in bases:
+        if not base or base in seen:
+            continue
+        seen.add(base)
+        p = os.path.join(base, relative_path)
+        if os.path.exists(p):
+            return p
+    return relative_path
+
 # ----------------------------
-# i18n (zh/en) for GUI
+# i18n (Dynamic loading)
 # ----------------------------
 
 def _normalize_lang(lang: str | None) -> str:
     if not lang:
-        return ""
+        return "zh-CN"
     s = str(lang).strip().lower().replace("_", "-")
+    # 基础映射
     if s in ("zh", "zh-cn", "zh-hans", "cn", "zh-hans-cn"):
-        return "zh"
+        return "zh-CN"
+    if s in ("zh-tw", "zh-hk", "zh-hant"):
+        return "zh-TW"
     if s in ("en", "en-us", "en-gb"):
-        return "en"
+        return "en-US"
+    
+    # 模糊匹配
+    if s.startswith("zh-tw") or s.startswith("zh-hk") or s.startswith("zh-hant"):
+        return "zh-TW"
     if s.startswith("zh"):
-        return "zh"
+        return "zh-CN"
     if s.startswith("en"):
-        return "en"
-    return ""
+        return "en-US"
+    return s
 
 
 def _detect_default_lang() -> str:
-    # locale.getdefaultlocale() 已弃用（Python 3.15+），改用 setlocale/getlocale。
     try:
         locale.setlocale(locale.LC_ALL, "")
     except Exception:
@@ -62,283 +100,61 @@ def _detect_default_lang() -> str:
         except Exception:
             pass
 
-    # Windows 默认偏中文用户群，这里保守地按系统语言判断失败则给 en
-    return "en"
+    return "zh-CN"
 
 
-# 全局语言：在读取 config.json 后会被覆盖
+# 全局语言：在读取配置文件后会被覆盖
 LANG: str = _detect_default_lang()
 
-# 中文源文案 -> 英文翻译（只翻 GUI 文案；未命中的保持原样）
-_ZH_TO_EN: dict[str, str] = {
-    "远程控制": "Remote Controls",
-    "远程控制-": "Remote Controls - ",
-    "(管理员)": "(Admin)",
-    "系统配置": "System Settings",
-    "MQTT认证配置": "MQTT Authentication",
-    "主题配置": "Themes",
-    "网站：": "Broker Address:",
-    "端口：": "Port:",
-    "认证模式：": "Auth Mode:",
-    "私钥模式": "Secret Key",
-    "账密模式": "Username/Password",
-    "test模式": "Test Mode",
-    "通知提示": "Notifications",
-    "点击打开任务计划": "Open Task Scheduler",
-    "需要管理员权限才能设置": "Administrator Privileges Required",
-    "开机自启/启用睡眠(休眠)功能": "Autostart / Sleep & Hibernate",
-    "获取权限": "Request Admin Rights",
-    "用户名：": "Username:",
-    "密码：": "Password:",
-    "客户端ID：": "Client ID:",
-    "启用TLS/SSL": "Use TLS/SSL",
-    "私钥模式：\n        使用客户端ID作为私钥\n账密模式：\n        兼容大多数IoT平台": "Secret Key:\n        Client ID is used as the security secret\nUsername/Password:\n        Compatible with most IoT platforms",
-    "内置": "Built-in",
-    "计算机": "Computer",
-    "屏幕": "Screen",
-    "音量": "Volume",
-    "睡眠": "Sleep",
-    "媒体控制": "Media",
-    "详情": "Details",
-    "主题：": "Theme:",
-    "自定义：": "Custom:",
-    "双击即可修改": "Double-click to edit",
-    "刷新": "Reload",
-    "更多": "More",
-    "添加": "Add",
-    "修改": "Edit",
-    "打开配置文件夹": "Open config folder",
-    "保存配置文件": "Save config",
-    "取消": "Cancel",
-    "提示": "Info",
-    "警告": "Warning",
-    "错误": "Error",
-    "确认刷新": "Confirm reload",
-    "配置文件错误": "Config error",
-    "备份完成": "Backup created",
-    "备份失败": "Backup failed",
-    "程序退出": "Exit",
-    "管理员权限": "Administrator",
-    "管理员权限确认": "Administrator confirmation",
-    "权限提醒": "Permission notice",
-    "UAC提权": "UAC Elevation",
-    "检查失败": "Check failed",
-    "睡眠功能状态": "Sleep status",
-    "语言：": "Language:",
-    "参数范围：": "Value range:",
-        # 命令主题 {value} 范围
-        "value 参数范围：": "Parameter Range:",
-    "最小：": "Min:",
-    "最大：": "Max:",
-    "请输入整数": "Please enter an integer",
-    "参数超出范围：{lo}-{hi}": "Value out of range: {lo}-{hi}",
-    "请输入 {value} 的值（范围 {lo}-{hi}），例如 {ex}：": "Enter a value for {value} ({lo}-{hi}), e.g. {ex}:",
+# 扫描可用语言文件
+def _get_available_languages() -> Dict[str, str]:
+    """返回 {lang_code: file_path} 映射"""
+    langs = {"zh-CN": ""} # 内置中文不需要文件
+    lang_dir = resource_path("res/languages")
+    if os.path.exists(lang_dir):
+        for f in os.listdir(lang_dir):
+            if f.endswith(".json") and f != "template.json":
+                lang_code = f[:-5] # 移除 .json
+                langs[lang_code] = os.path.join(lang_dir, f)
+    return langs
 
-    # 开机自启
-    "设置开机自启": "Enable autostart",
-    "关闭开机自启": "Disable autostart",
-    "选择启动方案": "Choose startup mode",
-    "请选择以下两种启动方案之一：\n\n" +
-    "【方案一】用户登录时运行\n注：无托盘时推荐!!\n" +
-    "优点：只有用户登录时才运行\n" +
-    "缺点：需要用户登录后才能启动\n\n" +
-    "【方案二】系统启动时运行\n注：有托盘时推荐!!\n" +
-    "优点：系统启动即可运行，无需用户登录\n" +
-    "缺点：需要登录后托盘自动重启主程序才能使用媒体控制\n\n" +
-    "选择 是：【方案一】\n\n选择 否：【方案二】":
-        "Please choose one of the following startup modes:\n\n"
-        "[Mode 1] Run at user logon\nNote: recommended when tray is disabled.\n"
-        "Pros: runs only after a user signs in\n"
-        "Cons: will not start until a user signs in\n\n"
-        "[Mode 2] Run at system startup\nNote: recommended when tray is enabled.\n"
-        "Pros: starts when Windows boots (no sign-in required)\n"
-        "Cons: media control requires tray to restart main after sign-in\n\n"
-        "Choose Yes: Mode 1\n\nChoose No: Mode 2",
-    "已取消设置开机自启动": "Autostart setup cancelled",
-    "未找到 RC-main.exe 文件\n请检查文件是否存在": "RC-main.exe not found.\nPlease check the file exists.",
-    "未找到 RC-tray.exe 文件，跳过托盘启动设置": "RC-tray.exe not found. Skipping tray autostart setup.",
-    "创建任务成功\n已配置为任何用户登录时以管理员组权限运行":
-        "Task created.\nConfigured to run at logon for any user with Administrators group privileges.",
-    "创建任务成功\n已配置为系统启动时以SYSTEM用户权限运行":
-        "Task created.\nConfigured to run at system startup as SYSTEM.",
-    "创建托盘自启动失败\n{code}": "Failed to create tray autostart.\n{code}",
-    "移动文件位置后需重新设置任务哦！": "If you move the files, please reconfigure the task.",
-    "创建开机自启动失败\n{code}": "Failed to create autostart task.\n{code}",
-    "你确定要删除开机自启动任务吗？": "Are you sure you want to delete the autostart tasks?",
-    "关闭所有自启动任务成功": "Disabled all autostart tasks successfully.",
-    "关闭主程序自启动成功，托盘任务不存在": "Main autostart disabled. Tray task not found.",
-    "关闭托盘自启动成功，主程序任务不存在": "Tray autostart disabled. Main task not found.",
-    "关闭开机自启动失败": "Failed to disable autostart.",
+AVAILABLE_LANGS = _get_available_languages()
 
-    # 自定义主题：类型/关闭预设选项
-    "程序或脚本": "Program/Script",
-    "服务(需管理员权限)": "Service (admin)",
-    "命令": "Command",
-    "按键(Hotkey)": "Hotkey",
-    "忽略": "Ignore",
-    "强制结束": "Force kill",
-    "中断": "Interrupt",
-    "停止服务": "Stop service",
-    "自定义": "Custom",
-    "服务时主程序": "For service: main program",
-    "需管理员权限": "Admin required",
+# 加载当前语言字典
+_CURRENT_LANG_DICT: dict[str, str] = {}
+if LANG != "zh-CN" and LANG in AVAILABLE_LANGS:
+    _lang_file = AVAILABLE_LANGS[LANG]
+    if _lang_file and os.path.exists(_lang_file):
+        try:
+            with open(_lang_file, "r", encoding="utf-8") as f:
+                _CURRENT_LANG_DICT = json.load(f)
+        except Exception:
+            pass
 
-    # 详情/自定义/内置主题设置等子窗口
-    "详情信息": "Details",
-    "内置主题": "Built-in themes",
-    "自定义主题": "Custom themes",
-    "提示说明": "Tips",
-    "修改自定义主题": "Edit custom theme",
-    "添加自定义主题": "Add custom theme",
-    "类型：": "Type:",
-    "状态：": "Enabled:",
-    "昵称：": "Nickname:",
-    "打开(on)：": "On:",
-    "关闭(off)：": "Off:",
-    "关闭预设：": "Off preset:",
-    "选择文件": "Browse",
-    "打开服务": "Open Services",
-    "PowerShell测试": "Test in PowerShell",
-    "PowerShell测试(关闭)": "Test off in PowerShell",
-    "显示窗口": "Show window",
-    "按键(Hotkey) 设置": "Hotkey settings",
-    "录制": "Record",
-    "字母段间隔(ms)：": "Char delay (ms):",
-    "保存": "Save",
-    "删除": "Delete",
+# 若未找到翻译文件且当前不是中文，尝试回退到 en-US
+if not _CURRENT_LANG_DICT and LANG != "zh-CN":
+    if "en-US" in AVAILABLE_LANGS and LANG != "en-US":
+        _lang_file = AVAILABLE_LANGS["en-US"]
+        if _lang_file and os.path.exists(_lang_file):
+            try:
+                with open(_lang_file, "r", encoding="utf-8") as f:
+                    _CURRENT_LANG_DICT = json.load(f)
+                    LANG = "en-US"
+            except Exception:
+                pass
 
-    # 内置主题设置窗口
-    "内置主题设置": "Built-in Theme Settings",
-    "系统 (Computer) 控制": "System (Computer) Control",
-    "动作延时 (秒)：": "Action Delay (s):",
-    "提示：延时仅在执行关机或重启时生效，其它动作将立即执行。": "Note: Delay only applies to shutdown/restart, other actions execute immediately.",
-    "显示器亮度调节方案": "Monitor Brightness Control",
-    "控制接口：": "Control Interface:",
-    "WMI (系统 WMI 接口)": "WMI (System WMI)",
-    "Dxva2 (物理显示器 DDC/CI)": "Dxva2 (Physical Monitor DDC/CI)",
-    "Twinkle Tray (仅命令行)": "Twinkle Tray (CLI Only)",
-    "WMI 优先 (失败则使用 Twinkle Tray)": "WMI Priority (Fallback to Twinkle Tray)",
-    "Twinkle Tray 优先 (失败则使用 WMI)": "Twinkle Tray Priority (Fallback to WMI)",
-    "同时控制 (WMI, Dxva2 和 Twinkle Tray)": "Simultaneous (WMI, Dxva2 & Twinkle Tray)",
-    "显示亮度叠加层(Overlay)": "Show Brightness Overlay",
-    "Twinkle Tray 路径：": "Twinkle Tray Path:",
-    "选择 Twinkle Tray 可执行文件": "Select Twinkle Tray executable",
-    "可执行文件": "Executable",
-    "所有文件": "All files",
-    "浏览": "Browse",
-    "选择": "Select",
-    "目标显示器：": "Target Monitor:",
-    "按编号 (MonitorNum)": "By Number (MonitorNum)",
-    "按 ID (MonitorID)": "By ID (MonitorID)",
-    "全部显示器 (All)": "All Monitors (All)",
-    "目标:": "Target:",
-    "('all' 或 索引 0, 1...)": "('all' or index 0, 1...)",
-    "配置:": "Config:",
-    "路径:": "Path:",
-    "目标模式:": "Target Mode:",
-    "目标值:": "Target Value:",
-    "下载 Twinkle Tray": "Download Twinkle Tray",
-    "打开亮度调节设置": "Open Brightness Settings",
-    "亮度调节设置": "Brightness Settings",
-    "控制模式:": "Control Mode:",
-    "测试": "Test",
-    "测试亮度": "Test Brightness",
-    "请输入亮度值 (0-100):": "Enter brightness value (0-100):",
-    "测试成功": "Test Success",
-    "测试失败": "Test Failure",
-    "自定义调节顺序:": "Custom Adjustment Order:",
-    "执行策略:": "Execution Strategy:",
-    "(all=同时执行, fallback=成功即止)": "(all=Simultaneous, fallback=Stop on success)",
-    "请至少选择一种控制模式": "Please select at least one control mode",
-    "wmi（系统 WMI 接口）": "wmi (System WMI Interface)",
-    "dxva2（物理显示器 DDC/CI）": "dxva2 (Physical Monitor DDC/CI)",
-    "twinkle_tray（第三方接口）": "twinkle_tray (Third-party Interface)",
-    "WMI (系统 WMI 接口)": "WMI (System WMI Interface)",
-    "Dxva2 (物理显示器 DDC/CI)": "Dxva2 (Physical Monitor DDC/CI)",
-    "Twinkle Tray (第三方接口)": "Twinkle Tray (Third-party Interface)",
-    "所有": "All",
-    "睡眠/电源 (Sleep) 动作": "Sleep/Power (Sleep) Actions",
-    "提示：动作将在等待指定的延时秒数后执行。": "Note: Action will be performed after the specified delay.",
-    "系统休眠/睡眠功能开关：": "System Sleep/Hibernate Toggle:",
-    "注：此操作需要管理员权限": "Note: Admin privileges required",
-    " 启用 系统睡眠/休眠功能": " Enable System Sleep/Hibernate",
-    " 关闭 系统睡眠/休眠功能": " Disable System Sleep/Hibernate",
-    "检查功能可用性状态": "Check Availability Status",
-
-    # 其它提示/弹窗
-    "确定？": "Confirm?",
-    "已取消": "Cancelled",
-    "请先选择一个自定义主题": "Please select a custom theme first.",
-    "确认删除": "Confirm delete",
-    "确定要删除这个自定义主题吗？": "Delete this custom theme?",
-    "确认启用？": "Confirm Enable?",
-    "确认关闭": "Confirm Disable",
-    "睡眠功能状态": "Sleep/Power Status",
-    "检查失败": "Check Failed",
-    "休眠/睡眠状态：{status_text}\n\n详细信息：\n{output.strip()}": "Sleep/Hibernate Status: {status_text}\n\nDetails:\n{output.strip()}",
-    "休眠/睡眠功能已启用": "Sleep/Hibernate functions enabled",
-    "休眠/睡眠功能已关闭": "Sleep/Hibernate functions disabled",
-    "需要管理员权限才能启用休眠/睡眠功能": "Admin privileges required to enable Sleep/Hibernate",
-    "需要管理员权限才能关闭休眠/睡眠功能": "Admin privileges required to disable Sleep/Hibernate",
-
-    # 动作/选项通用
-    "不执行": "None",
-    "键盘组合": "Key combo",
-    "锁屏": "Lock",
-    "关机": "Shutdown",
-    "重启": "Restart",
-    "注销": "Log off",
-    "睡眠": "Sleep",
-    "休眠": "Hibernate",
-    "关闭显示器": "Turn display off",
-    "打开显示器": "Turn display on",
-
-    # 内置设置告警文案
-    "依赖于 Windows 的系统 API 来控制显示器电源状态\n未经过测试\n可能造成不可逆后果\n谨慎使用‘开/关显示器功能’": "Uses Windows system APIs to control display power.\nNot fully tested.\nMay cause irreversible side effects.\nUse display on/off with caution.",
-    "当打开动作设置为“睡眠/休眠”时：\n设备将进入低功耗或断电状态，主程序会离线，\n期间无法接收远程命令，需要人工或计划唤醒。": "When the On action is Sleep/Hibernate:\nThe device goes offline and cannot receive commands.\nYou will need to wake it manually or via scheduled wake.",
-
-    # 主界面状态提示
-    "休眠/睡眠不可用\n系统未启用休眠功能": "Sleep/Hibernate unavailable\nHibernate is not enabled on this system",
-
-    # 键盘录制弹窗
-    "录制键盘组合": "Record hotkey",
-    "已按下：(空)": "Pressed: (empty)",
-    "已按下：": "Pressed: ",
-
-    # 命令测试弹窗
-    "输入参数": "Input parameter",
-    "请输入 {value} 的值，例如 50：": "Enter a value for {value}, e.g. 50:",
-    "请先在“值”中输入要测试的命令": "Please enter a command to test in the value field.",
-    "请先在“关闭(off)”中输入要测试的命令": "Please enter a command to test in the Off field.",
-    "请先将关闭预设切换为“自定义”并填写命令": "Switch Off preset to Custom and enter a command first.",
-    "无法启动 PowerShell: {err}": "Failed to start PowerShell: {err}",
-    "无法打开服务管理器: {err}": "Failed to open Services: {err}",
-
-    # 配置保存提示
-    "配置文件已保存\n请重新打开主程序以应用更改\n刷新test模式需重启本程序":
-        "Config saved.\nPlease restart the main program to apply changes.\nRestart is required to refresh test mode.",
-
-    # 刷新自定义主题弹窗
-    "刷新将加载配置文件中的设置，\n您未保存的更改将会丢失！\n确定要继续吗？":
-        "Reload will load settings from the config file.\nUnsaved changes will be lost!\nContinue?",
-    "已从配置文件刷新自定义主题列表": "Custom themes reloaded from config.",
-    "读取配置文件失败: {err}": "Failed to read config file: {err}",
-    "配置文件不存在，无法刷新": "Config file not found; cannot reload.",
-}
-
-# 反向映射：用于从英文切回中文（避免某些控件在英文模式创建时无法回切）
-_EN_TO_ZH: dict[str, str] = {}
-for _zh, _en in _ZH_TO_EN.items():
-    if _en and _en not in _EN_TO_ZH:
-        _EN_TO_ZH[_en] = _zh
-
+# 反向映射：用于从翻译语种切回中文
+_REVERSE_LANG_DICT: dict[str, str] = {}
+for _zh, _trans in _CURRENT_LANG_DICT.items():
+    if _trans and _trans not in _REVERSE_LANG_DICT:
+        _REVERSE_LANG_DICT[_trans] = _zh
 
 
 def t(s: str) -> str:
-    """Translate UI string between zh/en based on current LANG."""
-    if LANG == "en":
-        return _ZH_TO_EN.get(s, s)
-    return _EN_TO_ZH.get(s, s)
+    """Translate UI string based on current LANG."""
+    if LANG == "zh-CN":
+        return _REVERSE_LANG_DICT.get(s, s)
+    return _CURRENT_LANG_DICT.get(s, s)
 
 
 _LANG_OBSERVERS: list[callable] = []
@@ -357,10 +173,13 @@ def _set_root_title() -> None:
         base = f"远程控制-{BANBEN}"
         if IS_GUI_ADMIN:
             base = f"远程控制-{BANBEN}(管理员)"
-        if LANG == "en":
-            # 保留版本号，只替换前缀
-            base = base.replace("远程控制-", "Remote Controls - ")
-            base = base.replace("(管理员)", "(Admin)")
+        if LANG != "zh-CN":
+            # 使用翻译字典
+            base_trans = t("远程控制")
+            admin_trans = t("(管理员)")
+            base = f"{base_trans}-{BANBEN}"
+            if IS_GUI_ADMIN:
+                base = f"{base_trans}-{BANBEN}{admin_trans}"
         root.title(base)
     except Exception:
         pass
@@ -392,8 +211,8 @@ def apply_language_to_widgets(widget: tk.Misc) -> None:
                     # 若控件文本被动态改写（如“设置/关闭开机自启”），刷新源文案以保证可双向切换
                     if _has_cjk(cur):
                         src = cur
-                    elif cur in _EN_TO_ZH:
-                        src = _EN_TO_ZH.get(cur, src)
+                    elif cur in _REVERSE_LANG_DICT:
+                        src = _REVERSE_LANG_DICT.get(cur, src)
                 setattr(w, "_rc_text_src", src)
                 w.configure(text=t(src))
             except Exception:
@@ -450,12 +269,15 @@ def _apply_language_everywhere() -> None:
     except Exception:
         pass
     # 已打开的 Toplevel
-    try:
-        for w in root.winfo_children():
-            if isinstance(w, tk.Toplevel):
-                apply_language_to_widgets(w)
-    except Exception:
-        pass
+    def _apply_to_toplevels(parent):
+        try:
+            for w in parent.winfo_children():
+                if isinstance(w, tk.Toplevel) and w.winfo_exists():
+                    apply_language_to_widgets(w)
+                    _apply_to_toplevels(w)
+        except Exception:
+            pass
+    _apply_to_toplevels(root)
 
     # 动态元素（combobox values / window titles 等）
     try:
@@ -467,6 +289,29 @@ def _apply_language_everywhere() -> None:
             except Exception:
                 pass
         _LANG_OBSERVERS[:] = alive
+    except Exception:
+        pass
+
+    # 最后统一触发一次自适应宽度更新
+    try:
+        # 主窗口自适应
+        root.update_idletasks()
+        root.geometry("")
+
+        def _resize_toplevels(parent):
+            for w in parent.winfo_children():
+                if isinstance(w, tk.Toplevel) and w.winfo_exists():
+                    try:
+                        w.update_idletasks()
+                        # 只有当窗口不是固定大小时才尝试自动调整
+                        # 或者对于我们的设置窗口，强制自适应一次
+                        w.geometry("")
+                        w.update_idletasks()
+                        # 递归处理嵌套的 Toplevel
+                        _resize_toplevels(w)
+                    except Exception:
+                        pass
+        _resize_toplevels(root)
     except Exception:
         pass
 
@@ -491,45 +336,10 @@ try:
     BANBEN = f"V{get_version_string()}"
 except Exception:
     # 回退：避免因缺少版本文件导致运行异常
-    BANBEN = "V未知版本"
+    BANBEN = t("V未知版本")
 # 计划任务名称（与安装器一致）
 TASK_NAME_MAIN = "Remote Controls Main Service"
 TASK_NAME_TRAY = "Remote Controls Tray"
-# 资源路径（兼容 PyInstaller _MEIPASS）
-def resource_path(relative_path: str) -> str:
-    """返回资源文件的实际路径（兼容 PyInstaller）。"""
-    bases: list[str] = []
-    if hasattr(sys, "_MEIPASS"):
-        try:
-            bases.append(getattr(sys, "_MEIPASS"))  # type: ignore[attr-defined]
-        except Exception:
-            pass
-    try:
-        bases.append(os.path.abspath(os.path.dirname(__file__)))
-    except Exception:
-        pass
-    try:
-        bases.append(os.path.abspath(os.path.dirname(sys.executable)))
-    except Exception:
-        pass
-    bases.append(os.path.abspath("."))
-    seen = set()
-    for base in bases:
-        if not base or base in seen:
-            continue
-        seen.add(base)
-        p = os.path.join(base, relative_path)
-        if os.path.exists(p):
-            return p
-    return relative_path
-
-# 创建一个命名的互斥体
-# mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "RC-main-GUI")
-
-# 检查互斥体是否已经存在
-# if ctypes.windll.kernel32.GetLastError() == 183:
-#     messagebox.showerror("错误", "应用程序已在运行。")
-#     sys.exit()
 
 # 运行模式 & 隐藏控制台
 is_script_mode = not getattr(sys, "frozen", False)
@@ -557,35 +367,29 @@ def get_administrator_privileges() -> None:
     try:
         # 询问用户是否确认重启为管理员权限
         result = messagebox.askyesno(
-            "管理员权限确认", 
-            "程序将以管理员权限重新启动。\n\n"
+            t("管理员权限确认"), 
+            t("程序将以管理员权限重新启动。\n\n"
             "这将关闭当前程序并请求管理员权限。\n\n"
-            "是否继续？"
+            "是否继续？")
         )
         
         if result:
             # 重新启动程序，请求管理员权限
-            ret = ctypes.windll.shell32.ShellExecuteW(
-                None, "runas", sys.executable, f'"{__file__}"', None, 1
-            )
-            # 只有在成功启动新进程时才退出当前程序
-            if ret > 32:  # ShellExecuteW 返回值大于32表示成功
-                sys.exit()
-            else:
+            if not restart_self_as_admin():
                 messagebox.showwarning(
-                    "权限提醒", 
-                    "授权被取消或失败。\n\n"
+                    t("权限提醒"), 
+                    t("授权被取消或失败。\n\n"
                     "程序将以当前权限继续运行。\n"
-                    "请注意：部分功能可能无法正常工作。"
+                    "请注意：部分功能可能无法正常工作。")
                 )
         else:
             messagebox.showwarning(
-                "权限提醒", 
-                "您选择了不使用管理员权限运行。\n\n"
-                "请注意：部分功能可能无法正常工作。"
+                t("权限提醒"), 
+                t("您选择了不使用管理员权限运行。\n\n"
+                "请注意：部分功能可能无法正常工作。")
             )
     except Exception as e:
-        messagebox.showerror("错误", f"请求管理员权限时出错: {e}")
+        messagebox.showerror(t("错误"), t(f"请求管理员权限时出错: {e}"))
 
 def run_as_admin(executable_path, parameters=None, working_dir=None, show_cmd=0):
     """
@@ -676,11 +480,11 @@ def restart_self_as_admin():
                     time.sleep(0.1)
             os._exit(0)
         else:
-            messagebox.showwarning("UAC提权", f"获取管理员权限失败，错误码: {result}")
+            # UAC 被拒绝或失败，返回 False 让程序继续以普通权限运行
             return False
             
     except Exception as e:
-        messagebox.showerror("UAC提权", f"重启程序时出错: {e}")
+        messagebox.showerror(t("UAC提权"), t(f"重启程序时出错: {e}"))
         return False
 
 def check_and_request_uac():
@@ -690,29 +494,16 @@ def check_and_request_uac():
     if IS_GUI_ADMIN:
         return True
     
-    try:
-        # 询问用户是否要提权
-        if messagebox.askyesno(t("管理员权限"), t("程序未获得管理员权限。\n是否立即请求管理员权限？\n\n选择'是'将重新启动程序并请求管理员权限。")):
-            # 以管理员权限重新启动程序
-            return restart_self_as_admin()
-        else:
-            return False
-        
-    except Exception as e:
-        messagebox.showerror(t("管理员权限"), t(f"提权失败: {e}"))
-        return False
+    # 自动尝试以管理员权限重启
+    return restart_self_as_admin()
 
 def startup_admin_check():
     """启动时进行管理员权限检查和自动提权"""
     try:
-        # 检查并请求提权（如果需要的话）
-        admin_result = check_and_request_uac()
-        if admin_result is False:  # 明确检查False，因为None表示其他情况
-            messagebox.showinfo(t("管理员权限"), t("未进行提权或提权失败，程序将以当前权限继续运行"))
-        # 如果admin_result是True，说明已经有管理员权限
-        # 如果函数内部重启了程序，这里的代码不会执行到
-    except Exception as e:
-        messagebox.showerror(t("管理员权限检查"), t(f"管理员权限检查过程中出现异常: {e}"))
+        # 检查并请求提权
+        check_and_request_uac()
+    except Exception:
+        pass
 
 
 # DPI 与字体优化
@@ -966,7 +757,7 @@ def open_keyboard_recorder(parent: Union[tk.Tk, tk.Toplevel], target_var: tk.Str
     )
     msg = ttk.Label(
         rec,
-        text=(msg_en if LANG == "en" else msg_zh),
+        text=(msg_en if LANG != "zh-CN" else msg_zh),
         justify="left",
     )
     msg.pack(padx=10, pady=8, anchor="w")
@@ -1009,7 +800,7 @@ def open_keyboard_recorder(parent: Union[tk.Tk, tk.Toplevel], target_var: tk.Str
 
     def _update_pressed_label():
         keys = _current_keys()
-        if LANG == "en":
+        if LANG != "zh-CN":
             pressed_var.set("Pressed: " + (" + ".join(keys) if keys else "(empty)"))
         else:
             pressed_var.set("已按下：" + (" + ".join(keys) if keys else "(空)"))
@@ -1062,7 +853,7 @@ def open_keyboard_recorder(parent: Union[tk.Tk, tk.Toplevel], target_var: tk.Str
         except Exception:
             pass
         try:
-            msg.configure(text=(msg_en if LANG == "en" else msg_zh))
+            msg.configure(text=(msg_en if LANG != "zh-CN" else msg_zh))
         except Exception:
             pass
         try:
@@ -1339,7 +1130,7 @@ def load_custom_themes() -> None:
                 "off_preset": off_preset,
             }
             custom_themes.append(theme)
-            status = "开" if theme["checked"] else "关"
+            status = t("开") if theme["checked"] else t("关")
             display_name = theme["nickname"] or theme["name"]
             item_text = f"[{status}] {display_name}"
             tree_iid = str(len(custom_themes) - 1)
@@ -1365,7 +1156,7 @@ def load_custom_themes() -> None:
                 "off_preset": off_preset,
             }
             custom_themes.append(theme)
-            status = "开" if theme["checked"] else "关"
+            status = t("开") if theme["checked"] else t("关")
             display_name = theme["nickname"] or theme["name"]
             item_text = f"[{status}] {display_name}"
             tree_iid = str(len(custom_themes) - 1)
@@ -1409,7 +1200,7 @@ def load_custom_themes() -> None:
                 "value_max": _vmax,
             }
             custom_themes.append(theme)
-            status = "开" if theme["checked"] else "关"
+            status = t("开") if theme["checked"] else t("关")
             display_name = theme["nickname"] or theme["name"]
             item_text = f"[{status}] {display_name}"
             tree_iid = str(len(custom_themes) - 1)
@@ -1436,7 +1227,7 @@ def load_custom_themes() -> None:
                 "char_delay_ms": int(config.get(f"{hk_key}_char_delay_ms", 0) or 0),
             }
             custom_themes.append(theme)
-            status = "开" if theme["checked"] else "关"
+            status = t("开") if theme["checked"] else t("关")
             display_name = theme["nickname"] or theme["name"]
             item_text = f"[{status}] {display_name}"
             tree_iid = str(len(custom_themes) - 1)
@@ -1539,7 +1330,7 @@ def show_detail_window():
                 "content_zh": content_zh,
                 "content_en": content_en,
             }
-            _fill_text(txt, content_en if LANG == "en" else content_zh)
+            _fill_text(txt, content_en if LANG != "zh-CN" else content_zh)
             return entry
 
         builtin_content_zh = """
@@ -1550,10 +1341,8 @@ def show_detail_window():
     策略说明：
         - WMI (系统 WMI 接口)：使用系统 WMI 接口；适用于笔记本和部分支持的台式机。
         - Dxva2 (物理显示器 DDC/CI)：使用 Dxva2 接口；依赖驱动支持，可能不稳定。
-        - Twinkle Tray (仅命令行)：仅调用 Twinkle Tray 命令行；不回退到 WMI。
-        - WMI 优先：先尝试 WMI；失败时再调用 Twinkle Tray。
-        - Twinkle Tray 优先：先尝试 Twinkle Tray；失败时再调用 WMI。
-        - 同时控制：依次执行 WMI、Dxva2 与 Twinkle Tray（不论成功与否都会尝试全部方式）。
+        - Twinkle Tray (第三方接口)：调用 Twinkle Tray 命令行控制，需先确保其运行。
+        - 自定义调节：可自由组合以上接口，支持“同时执行”或“成功即止”策略，并可自定义调节顺序。
 
 系统音量：
     类型：窗帘 (Curtain) 接口；调节系统全局主音量 (0-100%)。
@@ -1580,10 +1369,8 @@ Monitor Brightness:
     Strategy Notes:
         - WMI (System WMI): Uses WMI only; suitable for laptops and supported devices.
         - Dxva2 (DDC/CI): Uses Dxva2 physical monitor API; driver dependent.
-        - Twinkle Tray (CLI): Uses Twinkle Tray CLI only; no fallback to WMI.
-        - WMI Priority: Try WMI first; fall back to Twinkle Tray on failure.
-        - Twinkle Tray Priority: Try Twinkle Tray first; fall back to WMI on failure.
-        - Both: Run WMI, Dxva2 and Twinkle Tray sequentially.
+        - Twinkle Tray (Third-party): Uses Twinkle Tray CLI; ensure it is running before use.
+        - Custom Adjustment: Combine multiple interfaces with "Simultaneous" or "Stop on success" strategies and custom order.
 
 System Volume:
     Type: Curtain interface; adjust system-wide master volume (0-100%).
@@ -1614,7 +1401,7 @@ Sleep/Power Control:
 
 命令：
     “打开(on)”为 PowerShell 片段，可随时点击测试按钮；
-    支持 on#数字（默认 0-100，可在 config.json 中通过 commandN_value_min/commandN_value_max 自定义范围），命令中使用 {value} 占位符获取参数。
+    支持 on#数字（默认 0-100，可在配置文件中通过 commandN_value_min/commandN_value_max 自定义范围），命令中使用 {value} 占位符获取参数。
     关闭预设默认“中断”(CTRL+BREAK)，可改为强制结束或自定义并独立测试。
 
 按键(Hotkey)：
@@ -1691,7 +1478,7 @@ Instance Management:
             try:
                 for ent in _detail_entries:
                     notebook.tab(ent["frame"], text=t(ent["title_zh"]))
-                    _fill_text(ent["txt"], ent["content_en"] if LANG == "en" else ent["content_zh"])
+                    _fill_text(ent["txt"], ent["content_en"] if LANG != "zh-CN" else ent["content_zh"])
             except Exception:
                 pass
             try:
@@ -1717,7 +1504,7 @@ def rebuild_custom_theme_tree() -> None:
     
     # 重新插入所有主题，使用正确的索引
     for index, theme in enumerate(custom_themes):
-        status = "开" if theme["checked"] else "关"
+        status = t("开") if theme["checked"] else t("关")
         display_name = theme["nickname"] or theme["name"]
         item_text = f"[{status}] {display_name}"
         custom_theme_tree.insert("", "end", iid=str(index), values=(item_text,))
@@ -1739,12 +1526,10 @@ def modify_custom_theme() -> None:
 
     theme_window = tk.Toplevel(root)
     theme_window.title(t("修改自定义主题"))
-    # 增加默认高度
-    try:
-        w, h = _scaled_size(theme_window, 780, 360)
-        theme_window.geometry(f"{w}x{h}")
-    except Exception:
-        pass
+    # 设置自适应
+    theme_window.geometry("")
+    theme_window.resizable(True, True)
+    
     PADX = 10
     PADY = 6
     # 允许窗口大小调整，并设置网格权重使输入控件随窗口拉伸
@@ -1757,7 +1542,7 @@ def modify_custom_theme() -> None:
     except Exception:
         pass
 
-    ttk.Label(theme_window, text="类型：").grid(row=0, column=0, sticky="e", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text=t("类型：")).grid(row=0, column=0, sticky="e", padx=PADX, pady=PADY)
     _type_keys = ["程序或脚本", "服务(需管理员权限)", "命令", "按键(Hotkey)"]
     _initial_type_key = theme.get("type") or "程序或脚本"
     if _initial_type_key not in _type_keys:
@@ -1792,27 +1577,27 @@ def modify_custom_theme() -> None:
         theme_type_key_var.set("程序或脚本")
         theme_type_var.set(t("程序或脚本"))
 
-    ttk.Label(theme_window, text="服务时主程序").grid(row=0, column=2, sticky="w", padx=PADX, pady=PADY)
-    ttk.Label(theme_window, text="需管理员权限").grid(row=1, column=2, sticky="w", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text=t("服务时主程序")).grid(row=0, column=2, sticky="w", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text=t("需管理员权限")).grid(row=1, column=2, sticky="w", padx=PADX, pady=PADY)
 
-    ttk.Label(theme_window, text="状态：").grid(row=1, column=0, sticky="e", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text=t("状态：")).grid(row=1, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_checked_var = tk.IntVar(value=theme["checked"])
     ttk.Checkbutton(theme_window, variable=theme_checked_var).grid(
         row=1, column=1, sticky="w", padx=(0, PADX), pady=PADY
     )
 
-    ttk.Label(theme_window, text="昵称：").grid(row=2, column=0, sticky="e", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text=t("昵称：")).grid(row=2, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_nickname_entry = ttk.Entry(theme_window)
     theme_nickname_entry.insert(0, theme["nickname"])
     theme_nickname_entry.grid(row=2, column=1, sticky="we", padx=(0, PADX), pady=PADY)
 
-    ttk.Label(theme_window, text="主题：").grid(row=3, column=0, sticky="e", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text=t("主题：")).grid(row=3, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_name_entry = ttk.Entry(theme_window)
     theme_name_entry.insert(0, theme["name"])
     theme_name_entry.grid(row=3, column=1, sticky="we", padx=(0, PADX), pady=PADY)
 
     # 新: 程序/命令类型拆分 ON/OFF 与关闭预设；Hotkey 保持原样
-    on_label_mod = ttk.Label(theme_window, text="打开(on)：")
+    on_label_mod = ttk.Label(theme_window, text=t("打开(on)："))
     on_label_mod.grid(row=4, column=0, sticky="e", padx=PADX, pady=PADY)
     on_frame_mod = ttk.Frame(theme_window)
     on_frame_mod.grid(row=4, column=1, sticky="nsew", padx=(0, PADX), pady=PADY)
@@ -1832,7 +1617,7 @@ def modify_custom_theme() -> None:
     except Exception:
         pass
 
-    off_label_mod = ttk.Label(theme_window, text="关闭(off)：")
+    off_label_mod = ttk.Label(theme_window, text=t("关闭(off)："))
     off_label_mod.grid(row=5, column=0, sticky="e", padx=PADX, pady=PADY)
     off_frame_mod = ttk.Frame(theme_window)
     off_frame_mod.grid(row=5, column=1, sticky="nsew", padx=(0, PADX), pady=PADY)
@@ -1848,7 +1633,7 @@ def modify_custom_theme() -> None:
     except Exception:
         pass
 
-    off_preset_label_mod = ttk.Label(theme_window, text="关闭预设：")
+    off_preset_label_mod = ttk.Label(theme_window, text=t("关闭预设："))
     off_preset_label_mod.grid(row=6, column=0, sticky="e", padx=PADX, pady=PADY)
     # 关闭预设：内部 code + 显示 label 分离
     _preset_label_zh_by_code = {
@@ -1905,7 +1690,7 @@ def modify_custom_theme() -> None:
     # 记录自定义内容以便在预设与自定义切换时还原
     previous_custom_off_value_mod = theme.get("off_value", "")
     def _preview_text_for_mod(code: str, t_type: str, service_name: str = "") -> str:
-        if LANG == "en":
+        if LANG != "zh-CN":
             if t_type == "命令":
                 if code == "interrupt":
                     return "Preset: Interrupt — Sends CTRL+BREAK to the last recorded command process and tries to exit gracefully."
@@ -1926,20 +1711,20 @@ def modify_custom_theme() -> None:
         # zh
         if t_type == "命令":
             if code == "interrupt":
-                return "预设：中断 — 向最新记录的命令进程发送 CTRL+BREAK，并尝试优雅结束。"
+                return t("预设：中断 — 向最新记录的命令进程发送 CTRL+BREAK，并尝试优雅结束。")
             if code == "kill":
-                return "预设：强制结束 — 结束所有记录的命令进程（kill/taskkill）。"
-            return "预设：忽略 — 不执行任何关闭动作。"
+                return t("预设：强制结束 — 结束所有记录的命令进程（kill/taskkill）。")
+            return t("预设：忽略 — 不执行任何关闭动作。")
         if t_type == "程序或脚本":
             if code == "kill":
-                return "预设：强制结束 — 将尝试结束由“打开(on)”目标派生的脚本/进程（cmd/bat 优先增强终止，ps1 专用终止，其它 taskkill /IM）。"
-            return "预设：忽略 — 不执行任何关闭动作。"
+                return t("预设：强制结束 — 将尝试结束由“打开(on)”目标派生的脚本/进程（cmd/bat 优先增强终止，ps1 专用终止，其它 taskkill /IM）。")
+            return t("预设：忽略 — 不执行任何关闭动作。")
         if t_type == "服务(需管理员权限)":
             if code == "stop":
-                svc = service_name or "指定服务"
-                return f"预设：停止服务 — 使用 sc stop {svc} 停止服务。"
-            return "预设：忽略 — 不执行任何关闭动作。"
-        return "预设：忽略 — 不执行任何关闭动作。"
+                svc = service_name or t("指定服务")
+                return t("预设：停止服务 — 使用 sc stop {svc} 停止服务。").format(svc=svc)
+            return t("预设：忽略 — 不执行任何关闭动作。")
+        return t("预设：忽略 — 不执行任何关闭动作。")
 
     def _update_off_editability_mod(*_):
         nonlocal previous_custom_off_value_mod
@@ -2099,7 +1884,7 @@ def modify_custom_theme() -> None:
             cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
         # 在 PowerShell 中显示命令，等待用户按回车后再执行
-        if LANG == "en":
+        if LANG != "zh-CN":
             ps_script = (
                 "Write-Host 'Ready to test command:' -ForegroundColor Cyan;"
                 "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
@@ -2125,7 +1910,7 @@ def modify_custom_theme() -> None:
         except Exception as e:
             messagebox.showerror(t("错误"), t("无法启动 PowerShell: {err}").format(err=e))
 
-    select_file_btn_mod = ttk.Button(theme_window, text="选择文件", command=select_file)
+    select_file_btn_mod = ttk.Button(theme_window, text=t("选择文件"), command=select_file)
     select_file_btn_mod.grid(row=4, column=2, sticky="w", padx=PADX, pady=PADY)
     def select_off_file():
         nonlocal previous_custom_off_value_mod
@@ -2161,7 +1946,7 @@ def modify_custom_theme() -> None:
                 return
             cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
-        if LANG == "en":
+        if LANG != "zh-CN":
             ps_script = (
                 "Write-Host 'Ready to test command:' -ForegroundColor Cyan;"
                 "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
@@ -2187,7 +1972,7 @@ def modify_custom_theme() -> None:
         except Exception as e:
             messagebox.showerror(t("错误"), t("无法启动 PowerShell: {err}").format(err=e))
 
-    off_action_btn_mod = ttk.Button(theme_window, text="选择文件", command=select_off_file)
+    off_action_btn_mod = ttk.Button(theme_window, text=t("选择文件"), command=select_off_file)
     off_action_btn_mod.grid(row=5, column=2, sticky="w", padx=PADX, pady=PADY)
     _update_off_editability_mod()
 
@@ -2201,7 +1986,7 @@ def modify_custom_theme() -> None:
 
     # 命令类型：命令窗口显示/隐藏 -> 改为复选框，放在“状态”后面
     cmd_window_var = tk.IntVar(value=0 if theme.get("window", "show") == "hide" else 1)
-    cmd_window_check = ttk.Checkbutton(theme_window, text="显示窗口", variable=cmd_window_var)
+    cmd_window_check = ttk.Checkbutton(theme_window, text=t("显示窗口"), variable=cmd_window_var)
 
     cmd_range_frame_mod = ttk.Frame(theme_window)
     ttk.Label(cmd_range_frame_mod, text=t("value 参数范围：")).grid(row=0, column=0, sticky="w")
@@ -2213,7 +1998,7 @@ def modify_custom_theme() -> None:
     cmd_max_entry_mod.grid(row=0, column=4, sticky="w")
 
     # Hotkey 专用设置（修改窗口）
-    hotkey_frame_mod = ttk.Labelframe(theme_window, text="按键(Hotkey) 设置")
+    hotkey_frame_mod = ttk.Labelframe(theme_window, text=t("按键(Hotkey) 设置"))
     hk_type_items = [
         ("none", "不执行"),
         ("keyboard", "键盘组合"),
@@ -2239,23 +2024,24 @@ def modify_custom_theme() -> None:
     hk_off_val_var_mod = tk.StringVar(value=theme.get("off_value", ""))
     hk_char_delay_var_mod = tk.StringVar(value=str(theme.get("char_delay_ms", 0)))
 
-    ttk.Label(hotkey_frame_mod, text="打开(on)：").grid(row=0, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(hotkey_frame_mod, text=t("打开(on)：")).grid(row=0, column=0, sticky="e", padx=8, pady=4)
     hk_on_type_combo_mod = ttk.Combobox(hotkey_frame_mod, values=_hk_type_labels_mod(), textvariable=hk_on_type_var_mod, state="readonly", width=12)
     hk_on_type_combo_mod.grid(row=0, column=1, sticky="w")
     hk_on_entry_mod = ttk.Entry(hotkey_frame_mod, textvariable=hk_on_val_var_mod, width=24)
     hk_on_entry_mod.grid(row=0, column=2, sticky="w")
-    ttk.Button(hotkey_frame_mod, text="录制", command=lambda: open_keyboard_recorder(theme_window, hk_on_val_var_mod)).grid(row=0, column=3, sticky="w")
+    ttk.Button(hotkey_frame_mod, text=t("录制"), command=lambda: open_keyboard_recorder(theme_window, hk_on_val_var_mod)).grid(row=0, column=3, sticky="w")
 
-    ttk.Label(hotkey_frame_mod, text="关闭(off)：").grid(row=1, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(hotkey_frame_mod, text=t("关闭(off)：")).grid(row=1, column=0, sticky="e", padx=8, pady=4)
     hk_off_type_combo_mod = ttk.Combobox(hotkey_frame_mod, values=_hk_type_labels_mod(), textvariable=hk_off_type_var_mod, state="readonly", width=12)
     hk_off_type_combo_mod.grid(row=1, column=1, sticky="w")
     hk_off_entry_mod = ttk.Entry(hotkey_frame_mod, textvariable=hk_off_val_var_mod, width=24)
     hk_off_entry_mod.grid(row=1, column=2, sticky="w")
-    ttk.Button(hotkey_frame_mod, text="录制", command=lambda: open_keyboard_recorder(theme_window, hk_off_val_var_mod)).grid(row=1, column=3, sticky="w")
+    ttk.Button(hotkey_frame_mod, text=t("录制"), command=lambda: open_keyboard_recorder(theme_window, hk_off_val_var_mod)).grid(row=1, column=3, sticky="w")
 
-    ttk.Label(hotkey_frame_mod, text="字母段间隔(ms)：").grid(row=2, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(hotkey_frame_mod, text=t("字母段间隔(ms)：")).grid(row=2, column=0, sticky="e", padx=8, pady=4)
     hk_char_delay_entry_mod = ttk.Entry(hotkey_frame_mod, textvariable=hk_char_delay_var_mod, width=12)
     hk_char_delay_entry_mod.grid(row=2, column=1, sticky="w")
+    ttk.Label(hotkey_frame_mod, text=t("(未测试，不保证生效)")).grid(row=2, column=2, columnspan=2, sticky="w")
 
     def _on_hk_on_type_selected_mod(_event=None):
         hk_on_type_key_var_mod.set(_hk_type_key_by_label_mod(hk_on_type_var_mod.get()))
@@ -2437,8 +2223,8 @@ def modify_custom_theme() -> None:
                 warn_fields.append("- 关闭(off)")
             if warn_fields:
                 msg = (
-                    "检测到以下热键包含中文或全角字符：\n" + "\n".join(warn_fields) +
-                    "\n\n这些字符可能无法被正确解析，导致按键不生效或行为异常。\n是否仍然要保存？"
+                    t("检测到以下热键包含中文或全角字符：\n") + "\n".join(warn_fields) +
+                    t("\n\n这些字符可能无法被正确解析，导致按键不生效或行为异常。\n是否仍然要保存？")
                 )
                 if not messagebox.askyesno(t("确认包含中文字符"), msg, parent=theme_window):
                     theme_window.lift()
@@ -2465,11 +2251,11 @@ def modify_custom_theme() -> None:
         else:
             theme_window.lift()
 
-    ttk.Button(theme_window, text="保存", command=save_theme).grid(
+    ttk.Button(theme_window, text=t("保存"), command=save_theme).grid(
         row=8, column=0, pady=PADY + 6, padx=PADX
     )
-    ttk.Button(theme_window, text="删除", command=delete_theme).grid(row=8, column=1, pady=PADY + 6, padx=PADX)
-    ttk.Button(theme_window, text="取消", command=lambda:theme_window.destroy()).grid(row=8, column=2, pady=PADY + 6, padx=PADX)
+    ttk.Button(theme_window, text=t("删除"), command=delete_theme).grid(row=8, column=1, pady=PADY + 6, padx=PADX)
+    ttk.Button(theme_window, text=t("取消"), command=lambda:theme_window.destroy()).grid(row=8, column=2, pady=PADY + 6, padx=PADX)
 
     center_window(theme_window)
 
@@ -2498,12 +2284,10 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     """
     theme_window = tk.Toplevel(root)
     theme_window.title(t("添加自定义主题"))
-    # 增加默认高度
-    try:
-        w, h = _scaled_size(theme_window, 780, 360)
-        theme_window.geometry(f"{w}x{h}")
-    except Exception:
-        pass
+    # 设置自适应
+    theme_window.geometry("")
+    theme_window.resizable(True, True)
+    
     PADX = 10
     PADY = 6
     # 允许窗口大小调整，并设置网格权重使输入控件随窗口拉伸
@@ -2516,7 +2300,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     except Exception:
         pass
 
-    ttk.Label(theme_window, text="类型：").grid(row=0, column=0, sticky="e", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text=t("类型：")).grid(row=0, column=0, sticky="e", padx=PADX, pady=PADY)
     _type_keys_add = ["程序或脚本", "服务(需管理员权限)", "命令", "按键(Hotkey)"]
     theme_type_key_var = tk.StringVar(value="程序或脚本")
     theme_type_var = tk.StringVar(value=t("程序或脚本"))
@@ -2547,25 +2331,25 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         pass
 
 
-    ttk.Label(theme_window, text="服务时主程序").grid(row=0, column=2, sticky="w", padx=PADX, pady=PADY)
-    ttk.Label(theme_window, text="需管理员权限").grid(row=1, column=2, sticky="w", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text=t("服务时主程序")).grid(row=0, column=2, sticky="w", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text=t("需管理员权限")).grid(row=1, column=2, sticky="w", padx=PADX, pady=PADY)
 
-    ttk.Label(theme_window, text="状态：").grid(row=1, column=0, sticky="e", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text=t("状态：")).grid(row=1, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_checked_var = tk.IntVar()
     ttk.Checkbutton(theme_window, variable=theme_checked_var).grid(
         row=1, column=1, sticky="w", padx=(0, PADX), pady=PADY
     )
 
-    ttk.Label(theme_window, text="昵称：").grid(row=2, column=0, sticky="e", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text=t("昵称：")).grid(row=2, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_nickname_entry = ttk.Entry(theme_window)
     theme_nickname_entry.grid(row=2, column=1, sticky="we", padx=(0, PADX), pady=PADY)
 
-    ttk.Label(theme_window, text="主题：").grid(row=3, column=0, sticky="e", padx=PADX, pady=PADY)
+    ttk.Label(theme_window, text=t("主题：")).grid(row=3, column=0, sticky="e", padx=PADX, pady=PADY)
     theme_name_entry = ttk.Entry(theme_window)
     theme_name_entry.grid(row=3, column=1, sticky="we", padx=(0, PADX), pady=PADY)
 
     # 新：程序/命令类型拆分 ON/OFF 与关闭预设；Hotkey 保持原样
-    on_label_add = ttk.Label(theme_window, text="打开(on)：")
+    on_label_add = ttk.Label(theme_window, text=t("打开(on)："))
     on_label_add.grid(row=4, column=0, sticky="e", padx=PADX, pady=PADY)
     on_frame_add = ttk.Frame(theme_window)
     on_frame_add.grid(row=4, column=1, sticky="nsew", padx=(0, PADX), pady=PADY)
@@ -2584,7 +2368,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     except Exception:
         pass
 
-    off_label_add = ttk.Label(theme_window, text="关闭(off)：")
+    off_label_add = ttk.Label(theme_window, text=t("关闭(off)："))
     off_label_add.grid(row=5, column=0, sticky="e", padx=PADX, pady=PADY)
     off_frame_add = ttk.Frame(theme_window)
     off_frame_add.grid(row=5, column=1, sticky="nsew", padx=(0, PADX), pady=PADY)
@@ -2599,7 +2383,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     except Exception:
         pass
 
-    off_preset_label_add = ttk.Label(theme_window, text="关闭预设：")
+    off_preset_label_add = ttk.Label(theme_window, text=t("关闭预设："))
     off_preset_label_add.grid(row=6, column=0, sticky="e", padx=PADX, pady=PADY)
     _preset_label_zh_by_code_add = {
         "none": "忽略",
@@ -2649,7 +2433,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
 
     previous_custom_off_value_add = ""
     def _preview_text_for_add(code: str, t_type: str, service_name: str = "") -> str:
-        if LANG == "en":
+        if LANG != "zh-CN":
             if t_type == "命令":
                 if code == "interrupt":
                     return "Preset: Interrupt — Sends CTRL+BREAK to the last recorded command process and tries to exit gracefully."
@@ -2670,20 +2454,20 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         # zh
         if t_type == "命令":
             if code == "interrupt":
-                return "预设：中断 — 向最新记录的命令进程发送 CTRL+BREAK，并尝试优雅结束。"
+                return t("预设：中断 — 向最新记录的命令进程发送 CTRL+BREAK，并尝试优雅结束。")
             if code == "kill":
-                return "预设：强制结束 — 结束所有记录的命令进程（kill/taskkill）。"
-            return "预设：忽略 — 不执行任何关闭动作。"
+                return t("预设：强制结束 — 结束所有记录的命令进程（kill/taskkill）。")
+            return t("预设：忽略 — 不执行任何关闭动作。")
         if t_type == "程序或脚本":
             if code == "kill":
-                return "预设：强制结束 — 将尝试结束由“打开(on)”目标派生的脚本/进程（cmd/bat 优先增强终止，ps1 专用终止，其它 taskkill /IM）。"
-            return "预设：忽略 — 不执行任何关闭动作。"
+                return t("预设：强制结束 — 将尝试结束由“打开(on)”目标派生的脚本/进程（cmd/bat 优先增强终止，ps1 专用终止，其它 taskkill /IM）。")
+            return t("预设：忽略 — 不执行任何关闭动作。")
         if t_type == "服务(需管理员权限)":
             if code == "stop":
-                svc = service_name or "指定服务"
-                return f"预设：停止服务 — 使用 sc stop {svc} 停止服务。"
-            return "预设：忽略 — 不执行任何关闭动作。"
-        return "预设：忽略 — 不执行任何关闭动作。"
+                svc = service_name or t("指定服务")
+                return t("预设：停止服务 — 使用 sc stop {svc} 停止服务。").format(svc=svc)
+            return t("预设：忽略 — 不执行任何关闭动作。")
+        return t("预设：忽略 — 不执行任何关闭动作。")
 
     def _update_off_editability_add(*_):
         nonlocal previous_custom_off_value_add
@@ -2801,7 +2585,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
                 return
             cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
-        if LANG == "en":
+        if LANG != "zh-CN":
             ps_script = (
                 "Write-Host 'Ready to test command:' -ForegroundColor Cyan;"
                 "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
@@ -2827,7 +2611,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         except Exception as e:
             messagebox.showerror(t("错误"), t("无法启动 PowerShell: {err}").format(err=e))
 
-    select_file_btn_add = ttk.Button(theme_window, text="选择文件", command=select_file)
+    select_file_btn_add = ttk.Button(theme_window, text=t("选择文件"), command=select_file)
     select_file_btn_add.grid(row=4, column=2, sticky="w", padx=PADX, pady=PADY)
     def select_off_file_add():
         nonlocal previous_custom_off_value_add
@@ -2863,7 +2647,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
                 return
             cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
-        if LANG == "en":
+        if LANG != "zh-CN":
             ps_script = (
                 "Write-Host 'Ready to test command:' -ForegroundColor Cyan;"
                 "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
@@ -2889,12 +2673,12 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         except Exception as e:
             messagebox.showerror(t("错误"), t("无法启动 PowerShell: {err}").format(err=e))
 
-    off_action_btn_add = ttk.Button(theme_window, text="选择文件", command=select_off_file_add)
+    off_action_btn_add = ttk.Button(theme_window, text=t("选择文件"), command=select_off_file_add)
     off_action_btn_add.grid(row=5, column=2, sticky="w", padx=PADX, pady=PADY)
     _update_off_editability_add()
 
     # Hotkey 专用设置区（默认隐藏，选中“按键(Hotkey)”时显示）
-    hotkey_frame_add = ttk.Labelframe(theme_window, text="按键(Hotkey) 设置")
+    hotkey_frame_add = ttk.Labelframe(theme_window, text=t("按键(Hotkey) 设置"))
     hk_type_items = [
         ("none", "不执行"),
         ("keyboard", "键盘组合"),
@@ -2920,23 +2704,24 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     hk_off_val_var_add = tk.StringVar(value="")
     hk_char_delay_var_add = tk.StringVar(value="0")
 
-    ttk.Label(hotkey_frame_add, text="打开(on)：").grid(row=0, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(hotkey_frame_add, text=t("打开(on)：")).grid(row=0, column=0, sticky="e", padx=8, pady=4)
     hk_on_type_combo_add = ttk.Combobox(hotkey_frame_add, values=_hk_type_labels_add(), textvariable=hk_on_type_var_add, state="readonly", width=12)
     hk_on_type_combo_add.grid(row=0, column=1, sticky="w")
     hk_on_entry_add = ttk.Entry(hotkey_frame_add, textvariable=hk_on_val_var_add, width=24)
     hk_on_entry_add.grid(row=0, column=2, sticky="w")
-    ttk.Button(hotkey_frame_add, text="录制", command=lambda: open_keyboard_recorder(theme_window, hk_on_val_var_add)).grid(row=0, column=3, sticky="w")
+    ttk.Button(hotkey_frame_add, text=t("录制"), command=lambda: open_keyboard_recorder(theme_window, hk_on_val_var_add)).grid(row=0, column=3, sticky="w")
 
-    ttk.Label(hotkey_frame_add, text="关闭(off)：").grid(row=1, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(hotkey_frame_add, text=t("关闭(off)：")).grid(row=1, column=0, sticky="e", padx=8, pady=4)
     hk_off_type_combo_add = ttk.Combobox(hotkey_frame_add, values=_hk_type_labels_add(), textvariable=hk_off_type_var_add, state="readonly", width=12)
     hk_off_type_combo_add.grid(row=1, column=1, sticky="w")
     hk_off_entry_add = ttk.Entry(hotkey_frame_add, textvariable=hk_off_val_var_add, width=24)
     hk_off_entry_add.grid(row=1, column=2, sticky="w")
-    ttk.Button(hotkey_frame_add, text="录制", command=lambda: open_keyboard_recorder(theme_window, hk_off_val_var_add)).grid(row=1, column=3, sticky="w")
+    ttk.Button(hotkey_frame_add, text=t("录制"), command=lambda: open_keyboard_recorder(theme_window, hk_off_val_var_add)).grid(row=1, column=3, sticky="w")
 
-    ttk.Label(hotkey_frame_add, text="字母段间隔(ms)：").grid(row=2, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(hotkey_frame_add, text=t("字母段间隔(ms)：")).grid(row=2, column=0, sticky="e", padx=8, pady=4)
     hk_char_delay_entry_add = ttk.Entry(hotkey_frame_add, textvariable=hk_char_delay_var_add, width=12)
     hk_char_delay_entry_add.grid(row=2, column=1, sticky="w")
+    ttk.Label(hotkey_frame_add, text=t("(未测试，不保证生效)")).grid(row=2, column=2, columnspan=2, sticky="w")
 
     def _on_hk_on_type_selected_add(_event=None):
         hk_on_type_key_var_add.set(_hk_type_key_by_label_add(hk_on_type_var_add.get()))
@@ -2959,7 +2744,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
 
     # 命令类型：命令窗口显示/隐藏 -> 改为复选框，放在“状态”后面
     cmd_window_var = tk.IntVar(value=1)
-    cmd_window_check = ttk.Checkbutton(theme_window, text="显示窗口", variable=cmd_window_var)
+    cmd_window_check = ttk.Checkbutton(theme_window, text=t("显示窗口"), variable=cmd_window_var)
 
     cmd_range_frame_add = ttk.Frame(theme_window)
     ttk.Label(cmd_range_frame_add, text=t("value 参数范围：")).grid(row=0, column=0, sticky="w")
@@ -3123,8 +2908,8 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
                 warn_fields.append("- 关闭(off)")
             if warn_fields:
                 msg = (
-                    "检测到以下热键包含中文或全角字符：\n" + "\n".join(warn_fields) +
-                    "\n\n这些字符可能无法被正确解析，导致按键不生效或行为异常。\n是否仍然要保存？"
+                    t("检测到以下热键包含中文或全角字符：\n") + "\n".join(warn_fields) +
+                    t("\n\n这些字符可能无法被正确解析，导致按键不生效或行为异常。\n是否仍然要保存？")
                 )
                 if not messagebox.askyesno(t("确认包含中文字符"), msg, parent=theme_window):
                     theme_window.lift()
@@ -3141,10 +2926,10 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         rebuild_custom_theme_tree()
         theme_window.destroy()
 
-    ttk.Button(theme_window, text="保存", command=save_theme).grid(
+    ttk.Button(theme_window, text=t("保存"), command=save_theme).grid(
         row=8, column=0, pady=PADY + 6, padx=PADX
     )
-    ttk.Button(theme_window, text="取消", command=theme_window.destroy).grid(row=8, column=2, pady=PADY + 6, padx=PADX)
+    ttk.Button(theme_window, text=t("取消"), command=theme_window.destroy).grid(row=8, column=2, pady=PADY + 6, padx=PADX)
 
     center_window(theme_window)
 
@@ -3164,6 +2949,275 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     register_lang_observer(_apply_lang_to_add_theme_win)
     _apply_lang_to_add_theme_win()
 
+
+# ---------------------------------------------------------
+# Configuration Helpers (TOML Grouping & Flattening)
+# ---------------------------------------------------------
+
+def unflatten_config(flat_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    English: Converts flat config dict to nested structure for readable TOML
+    中文: 将扁平的 config 字典转换为嵌套结构，以生成可读性更高的 TOML
+    """
+    # 按照期望的顺序初始化字典（Python 3.7+ 保持插入顺序）
+    nested = {
+        "mqtt": {},
+        "settings": {},
+        "built_in_themes": {},
+        "brightness": {},
+        "other": {},
+        "custom_themes": {
+            "applications": {},
+            "services": {},
+            "commands": {},
+            "hotkeys": {}
+        }
+    }
+    
+    # 1. Defined keys for grouping
+    mqtt_keys = {"broker", "port", "mqtt_tls", "mqtt_tls_verify", "mqtt_tls_ca_file", "auth_mode", "mqtt_username", "mqtt_password", "client_id"}
+    settings_keys = {"language", "test", "notify"}
+    
+    # 2. Built-in themes keys (from global builtin_themes list)
+    builtin_base_keys = set()
+    try:
+        for theme in builtin_themes:
+            builtin_base_keys.add(theme["key"])
+    except NameError:
+        pass # builtin_themes not defined yet, will handle dynamically below
+        
+    for k, v in flat_dict.items():
+        # MQTT
+        if k in mqtt_keys:
+            nested["mqtt"][k] = v
+        # Settings
+        elif k in settings_keys:
+            nested["settings"][k] = v
+        # Built-in Themes
+        elif k in builtin_base_keys or any(k.startswith(bk + "_") for bk in builtin_base_keys):
+            nested["built_in_themes"][k] = v
+        # Custom Themes
+        elif k.startswith("application"):
+            nested["custom_themes"]["applications"][k] = v
+        elif k.startswith("serve"):
+            nested["custom_themes"]["services"][k] = v
+        elif k.startswith("command"):
+            nested["custom_themes"]["commands"][k] = v
+        elif k.startswith("hotkey"):
+            nested["custom_themes"]["hotkeys"][k] = v
+        # Brightness/Twinkle Tray
+        elif k.startswith("brightness_") or k.startswith("twinkle_tray_"):
+            nested["brightness"][k] = v
+        # Legacy/Other known keys that should go to 'other' or 'brightness'
+        elif k in {"wmi_target", "dxva2_target"}:
+            nested["other"][k] = v
+        elif k.startswith("computer_"):
+            nested["other"][k] = v
+        elif k.startswith("sleep_"):
+            nested["built_in_themes"][k] = v
+        else:
+            # Miscellaneous
+            nested["other"][k] = v
+            
+    # 清理空分组以保持 TOML 整洁
+    for main_key in ["mqtt", "settings", "built_in_themes", "brightness", "other"]:
+        if not nested[main_key]:
+            del nested[main_key]
+    
+    # 清理自定义主题子分组
+    ct = nested["custom_themes"]
+    for sub in list(ct.keys()):
+        if not ct[sub]:
+            del ct[sub]
+    if not nested["custom_themes"]:
+        del nested["custom_themes"]
+    
+    return nested
+
+def flatten_config(nested_dict: Dict[str, Any], target_dict: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    English: Recursively flattens nested TOML structure back to flat GUI config dict
+    中文: 递归将嵌套的 TOML 结构扁平化为 GUI 使用的扁平 config 字典
+    """
+    if target_dict is None:
+        target_dict = {}
+    for k, v in nested_dict.items():
+        if isinstance(v, dict):
+            flatten_config(v, target_dict)
+        else:
+            target_dict[k] = v
+    return target_dict
+
+def save_config_toml(nested_config: Dict[str, Any], file_path: str) -> None:
+    """
+    English: Saves nested config to TOML with detailed per-item comments
+    中文: 保存嵌套配置到 TOML 文件，并添加详细的逐项注释
+    """
+    import tomli_w
+    import re
+    # 使用 tomli_w 生成基础 TOML 字符串
+    content = tomli_w.dumps(nested_config)
+    
+    # 定义详细的注释映射
+    # 包含章节注释和关键配置项的逐项说明
+    replacements = {
+        # --- Sections ---
+        "[mqtt]": "# MQTT 服务器配置 (MQTT Broker Settings)\n[mqtt]",
+        "[settings]": "\n# 常规设置 (General Settings)\n[settings]",
+        "[built_in_themes]": "\n# 内置主题 (Built-in Themes: Topic & Toggle)\n[built_in_themes]",
+        "[brightness]": "\n# 亮度控制 (Brightness Control)\n[brightness]",
+        "[other]": "\n# 其他杂项 (Miscellaneous)\n[other]",
+        "[custom_themes]": "\n# 自定义主题 (Custom Themes)\n[custom_themes]",
+        "[custom_themes.applications]": "\n# 自定义主题：程序或脚本 (Applications / Scripts)\n[custom_themes.applications]",
+        "[custom_themes.services]": "\n# 自定义主题：服务 (Windows Services)\n[custom_themes.services]",
+        "[custom_themes.commands]": "\n# 自定义主题：命令 (Shell Commands)\n[custom_themes.commands]",
+        "[custom_themes.hotkeys]": "\n# 自定义主题：热键 (Global Hotkeys)\n[custom_themes.hotkeys]",
+
+        # --- MQTT Items ---
+        "broker =": "# MQTT 服务器地址 (Broker Address)\nbroker",
+        "port =": "# 端口号 (Port: 9501 for bemfa)\nport",
+        "auth_mode =": "# 认证模式: private_key / username\nauth_mode",
+        "mqtt_username =": "# 用户名 (MQTT Username)\nmqtt_username",
+        "mqtt_password =": "# 密码 (MQTT Password)\nmqtt_password",
+        "client_id =": "# 客户端 ID (Client ID)\nclient_id",
+        "mqtt_tls =": "# 是否启用 TLS 加密 (Enable TLS: 0/1)\nmqtt_tls",
+        "mqtt_tls_verify =": "# 是否验证证书 (Verify Certificate: 0/1)\nmqtt_tls_verify",
+        "mqtt_tls_ca_file =": "# CA 证书路径 (CA File Path)\nmqtt_tls_ca_file",
+
+        # --- Settings Items ---
+        "test =": "# 测试模式 (Test Mode: 0/1)\ntest",
+        "notify =": "# 消息通知开关 (Notifications: 0/1)\nnotify",
+        "language =": "# 界面语言 (Language: zh/en)\nlanguage",
+
+        # --- Brightness Items ---
+        "brightness_mode =": "# 亮度控制模式: wmi / dxva2 / twinkle_tray / custom\nbrightness_mode",
+        "twinkle_tray_path =": "# Twinkle Tray 安装路径 (Twinkle Tray Path)\ntwinkle_tray_path",
+        "twinkle_tray_target_mode =": "# 目标模式 (Target Mode: all/id/number)\ntwinkle_tray_target_mode",
+        "twinkle_tray_target_value =": "# 目标值 (Target Value)\ntwinkle_tray_target_value",
+        "twinkle_tray_overlay =": "# 是否显示亮度浮层 (Show Overlay: 0/1)\ntwinkle_tray_overlay",
+        "brightness_custom_list =": "# 自定义控制顺序 (Custom Strategy List: e.g. wmi,dxva2)\nbrightness_custom_list",
+        "brightness_custom_strategy =": "# 自定义策略: all (全部执行) / success (成功即止)\nbrightness_custom_strategy",
+
+        # --- Other/Internal Items ---
+        "computer_on_action =": "# 电脑开启时的动作 (On Action: lock/shutdown/restart/none)\ncomputer_on_action",
+        "computer_off_action =": "# 电脑关闭时的动作 (Off Action: shutdown/lock/restart/none)\ncomputer_off_action",
+        "computer_on_delay =": "# 开启延时秒数 (On Delay Seconds)\ncomputer_on_delay",
+        "computer_off_delay =": "# 关闭延时秒数 (Off Delay Seconds)\ncomputer_off_delay",
+        "wmi_target =": "# WMI 目标显示器 (WMI Target: all/number)\nwmi_target",
+        "dxva2_target =": "# Dxva2 目标显示器 (Dxva2 Target: all/number)\ndxva2_target",
+
+        # --- Built-in Themes Items ---
+        "Computer =": "# 电脑控制主题 (Computer Control Topic)\nComputer",
+        "Computer_checked =": "# 是否启用电脑控制 (Enable Computer Control: 0/1)\nComputer_checked",
+        "screen =": "# 屏幕控制主题 (Screen Control Topic)\nscreen",
+        "screen_checked =": "# 是否启用屏幕控制 (Enable Screen Control: 0/1)\nscreen_checked",
+        "volume =": "# 音量控制主题 (Volume Control Topic)\nvolume",
+        "volume_checked =": "# 是否启用音量控制 (Enable Volume Control: 0/1)\nvolume_checked",
+        "sleep =": "# 睡眠控制主题 (Sleep Control Topic)\nsleep",
+        "sleep_checked =": "# 是否启用睡眠控制 (Enable Sleep Control: 0/1)\nsleep_checked",
+        "media =": "# 媒体控制主题 (Media Control Topic)\nmedia",
+        "media_checked =": "# 是否启用媒体控制 (Enable Media Control: 0/1)\nmedia_checked",
+        "sleep_on_action =": "# 睡眠开启时的动作 (Sleep On Action)\nsleep_on_action",
+        "sleep_off_action =": "# 睡眠关闭时的动作 (Sleep Off Action)\nsleep_off_action",
+        "sleep_on_delay =": "# 睡眠开启延时 (Sleep On Delay)\nsleep_on_delay",
+        "sleep_off_delay =": "# 睡眠关闭延时 (Sleep Off Delay)\nsleep_off_delay"
+    }
+    
+    # 为了避免替换掉不该替换的内容（如自定义主题中的 key 可能包含这些子串），
+    # 我们按照行来匹配并替换
+    lines = content.splitlines()
+    new_lines = []
+    
+    # 记录已经添加过注释的 section 或动态项类型，防止重复
+    processed_sections = set()
+    processed_dynamic_types = set()
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # 处理 Section 注释
+        if stripped in replacements and stripped.startswith("["):
+            if stripped not in processed_sections:
+                new_lines.append(replacements[stripped])
+                processed_sections.add(stripped)
+            else:
+                new_lines.append(line)
+            continue
+            
+        # 处理配置项注释
+        found_item = False
+        # 仅对基础层级的配置项添加注释，不进入自定义主题深层，避免混乱
+        # 基础层级的行通常缩进较少或没有缩进
+        if not (line.startswith(" ") or line.startswith("\t")):
+            for key, comment_block in replacements.items():
+                if not key.startswith("[") and stripped.startswith(key):
+                    # 关键修复：确保替换时保留整行内容（key = value），而不是破坏它
+                    if "=" in line:
+                        value_part = line.split("=", 1)[1]
+                        new_lines.append(comment_block + " =" + value_part)
+                        found_item = True
+                        break
+        
+        if not found_item:
+            # 检查是否是自定义主题相关的动态行 (Check for custom theme dynamic items)
+            # 匹配模式如 application1, serve2_name, command3_checked 等
+            m = re.match(r'^((application|serve|command|hotkey)\d+)(_\w+)?\s*=', stripped)
+            if m:
+                # 仅为每类自定义主题的第一个项目 (N=1) 添加注释
+                is_first_of_type = m.group(1).endswith("1")
+                
+                suffix = m.group(3) if m.group(3) else ""
+                comment = ""
+                if is_first_of_type:
+                    if suffix == "":
+                        comment = "# 主题 ID (Theme ID)"
+                    elif suffix == "_name":
+                        comment = "# 显示名称 (Display Name)"
+                    elif suffix == "_checked":
+                        comment = "# 开关状态 (Status: 0/1)"
+                    elif suffix.startswith("_directory") or suffix.startswith("_service") or \
+                         suffix.startswith("_command") or suffix.startswith("_hotkey"):
+                        comment = "# 目标路径/服务名/命令/热键 (Path/Service/Command/Hotkey)"
+                    elif suffix == "_on_value":
+                        comment = "# 开启时执行的内容 (On Action Value)"
+                    elif suffix == "_off_value":
+                        comment = "# 关闭时执行的内容 (Off Action Value)"
+                    elif suffix == "_off_preset":
+                        comment = "# 关闭预设 (Off Preset: kill/none/etc.)"
+                    elif suffix == "_value":
+                        if stripped.startswith("serve"):
+                            comment = "# 服务名 (Service Name)"
+                        elif stripped.startswith("command"):
+                            comment = "# 命令内容 (Command Content)"
+                        elif stripped.startswith("hotkey"):
+                            comment = "# 热键组合 (Hotkey Combination)"
+                    elif suffix == "_window":
+                        comment = "# 窗口模式 (Window Mode: show/hide)"
+                    elif suffix == "_value_min":
+                        comment = "# 最小值 (Min Value)"
+                    elif suffix == "_value_max":
+                        comment = "# 最大值 (Max Value)"
+                    elif suffix == "_on_type" or suffix == "_off_type":
+                        comment = "# 触发类型 (Trigger Type: keyboard/mouse/etc.)"
+                    elif suffix == "_char_delay_ms":
+                        comment = "# 字符输入延迟 (Char Delay MS)"
+                
+                if comment:
+                    new_lines.append(comment)
+            
+            new_lines.append(line)
+            
+    final_content_body = "\n".join(new_lines)
+    
+    # 在文件头部添加说明
+    header = "# Remote-Controls Configuration File (TOML Format)\n"
+    header += "# This file is automatically generated. Manual editing is supported.\n"
+    header += "# 配置文件（TOML 格式）。支持手动编辑，程序保存时会自动更新。\n\n"
+    
+    final_content = header + final_content_body
+    
+    with open(file_path, "wb") as f:
+        f.write(final_content.encode("utf-8"))
 
 def generate_config() -> None:
     """
@@ -3291,28 +3345,23 @@ def generate_config() -> None:
             config[f"{prefix}_char_delay_ms"] = int(theme.get("char_delay_ms", 0) or 0)
             hotkey_index += 1
 
-    # 保存为 JSON 文件
+    # 1. 保存为 TOML 文件 (首选格式)
     try:
-        with open(config_file_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=4)
-    except PermissionError as e:
-        messagebox.showerror(
-            t("错误"),
-            t(f"无法写入配置文件（可能没有权限）：\n{config_file_path}\n\n{e}")
-        )
-        return
+        # 将扁平字典转换为嵌套结构，以便生成可读性更好的 TOML
+        nested_config = unflatten_config(config)
+        save_config_toml(nested_config, config_toml_path)
     except Exception as e:
-        messagebox.showerror(t("错误"), t(f"保存配置文件失败：\n{config_file_path}\n\n{e}"))
+        messagebox.showerror(t("错误"), t(f"保存 TOML 配置文件失败：\n{config_toml_path}\n\n{e}"))
         return
+
+    # 2. 检查并清理旧版 JSON 文件 (如果存在且内容一致，可以选择删除，但这里为了安全先只停止生成)
+    # 提示：C 核心组件（main/tray）现在已适配 TOML 优先加载
+
     # 保存后刷新界面
     messagebox.showinfo(t("提示"), t("配置文件已保存\n请重新打开主程序以应用更改\n刷新test模式需重启本程序"))
+    
     # 重新读取配置
-    try:
-        with open(config_file_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except Exception:
-        # 不影响保存结果：读取失败则保留内存中的 config
-        pass
+    load_config_file()
     # 刷新test模式
     test_var.set(config.get("test", 0))
     # 刷新通知开关
@@ -3342,11 +3391,8 @@ def refresh_custom_themes() -> None:
         return
     
     # 从配置文件重新读取最新配置
-    if os.path.exists(config_file_path):
+    if load_config_file():
         try:
-            with open(config_file_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            
             # 刷新test模式
             test_var.set(config.get("test", 0))
             # 刷新通知开关
@@ -3367,7 +3413,7 @@ def refresh_custom_themes() -> None:
             
             messagebox.showinfo(t("提示"), t("已从配置文件刷新自定义主题列表"))
         except Exception as e:
-            messagebox.showerror(t("错误"), t("读取配置文件失败: {err}").format(err=e))
+            messagebox.showerror(t("错误"), t("刷新配置文件失败: {err}").format(err=e))
     else:
         messagebox.showwarning(t("警告"), t("配置文件不存在，无法刷新"))
 
@@ -3482,44 +3528,6 @@ def _resolve_twinkle_tray_path_for_gui() -> str | None:
             return norm
     return None
 
-
-def check_brightness_support():
-    # 检查系统亮度调节支持（test模式开启时跳过检测）
-    global brightness_disabled, brightness_status_message
-    brightness_disabled = False
-    brightness_status_message = ""
-
-    mode = (config.get("brightness_mode", "wmi") or "wmi").lower()
-
-    if mode == "twinkle_tray":
-        path = _resolve_twinkle_tray_path_for_gui()
-        if path:
-            brightness_status_message = f"使用 Twinkle Tray 控制亮度: {path}"
-        else:
-            brightness_status_message = "Twinkle Tray 模式：未找到可执行文件，请在“更多”中设置路径或安装应用。"
-        return
-
-    if mode == "wmi_priority":
-        brightness_status_message = "WMI 优先模式：优先 WMI，失败则回退 Twinkle Tray。"
-    elif mode == "twinkle_priority":
-        brightness_status_message = "Twinkle Tray 优先模式：优先 Twinkle Tray，失败则回退 WMI。"
-    elif mode == "both":
-        brightness_status_message = "同时控制模式：WMI, WinRT 和 Twinkle Tray 将同时执行。"
-
-    if not ("config" in globals() and config.get("test", 0) == 1):
-        try:
-            import wmi
-
-            brightness_controllers = wmi.WMI(namespace="wmi").WmiMonitorBrightnessMethods()
-            if not brightness_controllers:
-                brightness_status_message = "系统未暴露 WMI 亮度接口，若需调节请在“更多”中切换到 Twinkle Tray。"
-            else:
-                brightness_status_message = "系统支持亮度调节(WMI)。"
-        except Exception as e:
-            brightness_status_message = f"检测亮度控制接口失败: {e}"
-    else:
-        brightness_status_message = "test模式已开启，未检测系统亮度调节支持。"
-
 def enable_sleep_window() -> None:
     """
     
@@ -3585,7 +3593,7 @@ def check_sleep_status_window() -> None:
         enabled = _is_hibernate_enabled_from_powercfg_output(output)
 
         status_text = "已启用（可用）" if enabled else "未启用或不可用"
-        if LANG == "en":
+        if LANG != "zh-CN":
             status_text = "Enabled" if enabled else "Disabled/Unavailable"
         messagebox.showinfo(t("睡眠功能状态"), t(f"休眠/睡眠状态：{status_text}\n\n详细信息：\n{output.strip()}"))
     except Exception as e:
@@ -3604,41 +3612,76 @@ except Exception as e:
 appdata_dir: str = os.path.abspath(os.path.dirname(sys.argv[0]))
 
 # 配置文件路径
-config_file_path: str = os.path.join(appdata_dir, "config.json")
+config_json_path: str = os.path.join(appdata_dir, "config.json")
+config_toml_path: str = os.path.join(appdata_dir, "config.toml")
+config_file_path: str = config_json_path # 默认路径，用于备份等操作
 
 # 尝试读取配置文件
 config: Dict[str, Any] = {}
-if os.path.exists(config_file_path):
-    try:
-        with open(config_file_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except json.decoder.JSONDecodeError as e:
-        if LANG == "en":
-            error_msg = (
-                f"Config file is invalid:\n{str(e)}\n\nChoose:\n"
-                "• Yes: backup the broken config and continue\n"
-                "• No: exit and keep the config"
-            )
-        else:
-            error_msg = f"配置文件格式错误：\n{str(e)}\n\n请选择：\n• 点击\"是\"删除错误的配置文件并继续\n• 点击\"否\"退出程序不删除配置文件"
-        if messagebox.askyesno(t("配置文件错误"), error_msg):
-            # 用户选择删除配置文件
+
+def load_config_file():
+    global config, config_file_path
+    
+    # 1. 优先尝试读取 TOML (主要格式)
+    if os.path.exists(config_toml_path):
+        try:
+            with open(config_toml_path, "rb") as f:
+                nested_config = tomllib.load(f)
+            # 将嵌套结构扁平化回 GUI 使用的字典
+            config = flatten_config(nested_config)
+            config_file_path = config_toml_path
+            return True
+        except Exception as e:
+            if LANG != "zh-CN":
+                error_msg = f"Primary TOML config file is invalid:\n{str(e)}\n\nTry loading legacy JSON config?"
+            else:
+                error_msg = f"主要 TOML 配置文件格式错误：\n{str(e)}\n\n是否尝试加载旧版 JSON 配置文件？"
+            if not messagebox.askyesno(t("配置文件错误"), error_msg):
+                sys.exit(0)
+
+    # 2. 如果 TOML 不存在，尝试读取并迁移 JSON (旧版兼容)
+    if os.path.exists(config_json_path):
+        try:
+            with open(config_json_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            
+            # 自动迁移到 TOML
             try:
-                os.rename(config_file_path, f"{config_file_path}.bak")
-                messagebox.showinfo(t("备份完成"), t(f"已将错误的配置文件备份为：\n{config_file_path}.bak"))
-            except Exception as backup_error:
-                messagebox.showwarning(t("备份失败"), t(f"无法备份配置文件：{str(backup_error)}\n将直接删除错误的配置文件。"))           
+                nested_config = unflatten_config(config)
+                save_config_toml(nested_config, config_toml_path)
+                # 迁移成功后，将 JSON 重命名为 .bak 以示弃用
+                # os.rename(config_json_path, f"{config_json_path}.deprecated")
+                # 这里我们暂时保留 json 以供 C 核心使用，但内存中已切换到 TOML
+                config_file_path = config_toml_path
+            except Exception:
+                config_file_path = config_json_path
+                
+            return True
+        except json.decoder.JSONDecodeError as e:
+            if LANG != "zh-CN":
+                error_msg = (
+                    f"Legacy JSON config file is invalid:\n{str(e)}\n\nChoose:\n"
+                    "• Yes: backup the broken config and continue\n"
+                    "• No: exit and keep the config"
+                )
+            else:
+                error_msg = f"旧版 JSON 配置文件格式错误：\n{str(e)}\n\n请选择：\n• 点击\"是\"备份错误的配置文件并继续\n• 点击\"否\"退出程序不删除配置文件"
+            
+            if messagebox.askyesno(t("配置文件错误"), error_msg):
                 try:
-                    os.remove(config_file_path)
-                except Exception as remove_error:
-                    messagebox.showerror(t("错误"), t(f"无法删除配置文件：{str(remove_error)}\n程序将退出。"))
-                    sys.exit(1)
-            # 继续使用空配置
-            config = {}
-        else:
-            # 用户选择退出程序
-            messagebox.showinfo(t("程序退出"), t("您选择了保留配置文件并退出程序。\n请手动修复配置文件后再次运行程序。"))
-            sys.exit(0)
+                    os.rename(config_json_path, f"{config_json_path}.bak")
+                except Exception:
+                    try:
+                        os.remove(config_json_path)
+                    except Exception:
+                        pass
+                config = {}
+                return True
+            else:
+                sys.exit(0)
+    return False
+
+load_config_file()
 
 # 根据配置文件覆盖语言（如果存在）
 try:
@@ -3652,8 +3695,6 @@ except Exception:
 # 创建主窗口前启用 DPI 感知
 _enable_dpi_awareness()
 
-# 启动时检查管理员权限并请求提权（已启用 DPI/字体，避免提示窗模糊）
-check_and_request_uac()
 # 创建主窗口
 root = tk.Tk()
 _set_root_title()
@@ -3772,27 +3813,79 @@ auto_start_button.grid(row=2, column=2,  sticky="n", padx=PADX, pady=PADY)
 language_var = tk.StringVar(value=LANG)
 ttk.Label(system_frame, text=t("语言：")).grid(row=4, column=0, sticky="e", padx=PADX, pady=PADY)
 language_combo = ttk.Combobox(system_frame, state="readonly", width=18)
-language_combo["values"] = ["中文", "English"]
+
+def _get_display_langs() -> List[str]:
+    """返回用于 ComboBox 的语言列表"""
+    display_map = {
+        "zh-CN": "简体中文 (zh-CN)",
+        "zh-TW": "繁體中文 (zh-TW)",
+        "en-US": "English (en-US)"
+    }
+    items = []
+    for l in AVAILABLE_LANGS:
+        items.append(display_map.get(l, l))
+    return sorted(items)
+
+language_combo["values"] = _get_display_langs()
 language_combo.grid(row=4, column=1, sticky="w", padx=PADX, pady=PADY)
 
 def _sync_language_combo() -> None:
     try:
-        language_combo.set("English" if LANG == "en" else "中文")
+        display_map = {
+            "zh-CN": "简体中文 (zh-CN)",
+            "zh-TW": "繁體中文 (zh-TW)",
+            "en-US": "English (en-US)"
+        }
+        current_display = display_map.get(LANG, LANG)
+        language_combo.set(current_display)
     except Exception:
         pass
 
 def _on_language_change(_event=None) -> None:
     global LANG
     sel = (language_combo.get() or "").strip()
-    LANG = "en" if sel.lower().startswith("english") else "zh"
+    if "(" in sel and sel.endswith(")"):
+        new_lang = sel[sel.rfind("(")+1:-1]
+    else:
+        new_lang = sel
+    
+    if new_lang in AVAILABLE_LANGS:
+        LANG = new_lang
+    else:
+        if "english" in sel.lower(): LANG = "en-US"
+        elif "中文" in sel: LANG = "zh-CN"
+        else: LANG = new_lang
+
     language_var.set(LANG)
-    # 更新组合框显示、认证模式文案、窗口文案
+    _sync_language_combo()
+    
+    # 重载语言字典
+    global _CURRENT_LANG_DICT, _REVERSE_LANG_DICT
+    _CURRENT_LANG_DICT = {}
+    if LANG != "zh-CN" and LANG in AVAILABLE_LANGS:
+        _lang_file = AVAILABLE_LANGS[LANG]
+        if _lang_file and os.path.exists(_lang_file):
+            try:
+                with open(_lang_file, "r", encoding="utf-8") as f:
+                    _CURRENT_LANG_DICT = json.load(f)
+            except Exception:
+                pass
+    
+    _REVERSE_LANG_DICT = {}
+    for _zh, _trans in _CURRENT_LANG_DICT.items():
+        if _trans and _trans not in _REVERSE_LANG_DICT:
+            _REVERSE_LANG_DICT[_trans] = _zh
+
+    # 应用语言
     try:
         auth_mode_combo.configure(values=_auth_mode_labels())
         update_auth_mode_display()
     except Exception:
         pass
     _apply_language_everywhere()
+    
+    # 更新内存中的语言设置
+    config["language"] = LANG
 
 language_combo.bind("<<ComboboxSelected>>", _on_language_change)
 _sync_language_combo()
@@ -3980,7 +4073,20 @@ ttk.Label(theme_frame, text=t("内置")).grid(row=0, column=0, sticky="w", padx=
 def open_builtin_settings():
     win = tk.Toplevel(root)
     win.title(t("内置主题设置"))
-    # win.resizable(False, False)
+    # 设置自适应
+    win.geometry("")
+    win.resizable(True, True)
+    
+    # 设置自适应框架
+    win.columnconfigure(0, weight=1)
+    win.rowconfigure(0, weight=1)
+    
+    main_frame = ttk.Frame(win, padding=10)
+    main_frame.grid(row=0, column=0, sticky="nsew")
+    
+    # 配置 main_frame 的列权重
+    for i in range(4):
+        main_frame.columnconfigure(i, weight=1)
 
     # 计算机主题动作（去除与睡眠主题重复的“睡眠/休眠”）
     actions = [
@@ -4010,52 +4116,60 @@ def open_builtin_settings():
     cur_off_delay = int(config.get("computer_off_delay", 0) or 0)
 
     row_i = 0
-    ttk.Label(win, text=t("系统 (Computer) 控制")).grid(row=row_i, column=0, columnspan=3, padx=10, pady=(10, 6), sticky="w")
+    ttk.Label(main_frame, text=t("系统 (Computer) 控制")).grid(row=row_i, column=0, columnspan=3, padx=10, pady=(10, 6), sticky="w")
     row_i += 1
 
-    ttk.Label(win, text=t("打开(on)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(main_frame, text=t("打开(on)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     on_key_var = tk.StringVar(value=cur_on)
     on_var = tk.StringVar(value=_action_label_by_key(cur_on, "lock"))
-    on_combo = ttk.Combobox(win, values=_action_labels(), textvariable=on_var, state="readonly", width=18)
+    on_combo = ttk.Combobox(main_frame, values=_action_labels(), textvariable=on_var, state="readonly", width=18)
     on_combo.bind("<<ComboboxSelected>>", lambda e: on_key_var.set(_action_key_by_label(on_var.get())))
     on_combo.grid(row=row_i, column=1, sticky="w")
-    ttk.Label(win, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
+    ttk.Label(main_frame, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
     on_delay_var = tk.StringVar(value=str(cur_on_delay))
-    on_delay_entry = ttk.Entry(win, textvariable=on_delay_var, width=8)
+    on_delay_entry = ttk.Entry(main_frame, textvariable=on_delay_var, width=8)
     on_delay_entry.grid(row=row_i, column=3, sticky="w")
     row_i += 1
 
-    ttk.Label(win, text=t("关闭(off)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(main_frame, text=t("关闭(off)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     off_key_var = tk.StringVar(value=cur_off)
     off_var = tk.StringVar(value=_action_label_by_key(cur_off, "restart"))
-    off_combo = ttk.Combobox(win, values=_action_labels(), textvariable=off_var, state="readonly", width=18)
+    off_combo = ttk.Combobox(main_frame, values=_action_labels(), textvariable=off_var, state="readonly", width=18)
     off_combo.bind("<<ComboboxSelected>>", lambda e: off_key_var.set(_action_key_by_label(off_var.get())))
     off_combo.grid(row=row_i, column=1, sticky="w")
-    ttk.Label(win, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
+    ttk.Label(main_frame, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
     off_delay_var = tk.StringVar(value=str(cur_off_delay))
-    off_delay_entry = ttk.Entry(win, textvariable=off_delay_var, width=8)
+    off_delay_entry = ttk.Entry(main_frame, textvariable=off_delay_var, width=8)
     off_delay_entry.grid(row=row_i, column=3, sticky="w")
     row_i += 1
 
-    tip = ttk.Label(win, text=t("提示：延时仅在执行关机或重启时生效，其它动作将立即执行。"))
+    tip = ttk.Label(main_frame, text=t("提示：延时仅在执行关机或重启时生效，其它动作将立即执行。"))
     tip.grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
     row_i += 1
 
     # 亮度控制方案
-    ttk.Label(win, text=t("显示器亮度调节方案")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
+    ttk.Label(main_frame, text=t("显示器亮度调节方案")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
     row_i += 1
 
     def open_advanced_brightness_settings():
         adv_win = tk.Toplevel(win)
         adv_win.title(t("亮度调节设置"))
-        adv_win.geometry("690x650")
+        # 移除固定大小，改为自适应
+        adv_win.geometry("")
+        adv_win.resizable(True, True)
         adv_win.transient(win)
         adv_win.grab_set()
         
-        try:
-            center_window(adv_win, win)
-        except Exception:
-            pass
+        # 设置自适应框架
+        adv_win.columnconfigure(0, weight=1)
+        adv_win.rowconfigure(0, weight=1)
+        
+        adv_main_frame = ttk.Frame(adv_win, padding=10)
+        adv_main_frame.grid(row=0, column=0, sticky="nsew")
+        
+        # 配置 adv_main_frame 的列权重
+        for i in range(3):
+            adv_main_frame.columnconfigure(i, weight=1)
 
         adv_row = 0
         
@@ -4186,6 +4300,9 @@ def open_builtin_settings():
                     messagebox.showinfo(t("测试成功"), f"Dxva2 亮度已设置为 {val}%")
 
                 elif method == "twinkle_tray":
+                    if not messagebox.askokcancel(t("确认测试"), t("请先确保 Twinkle Tray 正在运行后再测试，否则将未响应，可退出Twinkle Tray解决")):
+                        return
+
                     exe_path = tt_path.get().strip()
                     if not exe_path:
                         exe_path = _resolve_twinkle_tray_path_for_gui() or "Twinkle-Tray.exe"
@@ -4210,9 +4327,9 @@ def open_builtin_settings():
             except Exception as e:
                 messagebox.showerror(t("测试失败"), f"执行测试时出错:\n{str(e)}")
 
-        ttk.Label(adv_win, text=t("控制模式:")).grid(row=adv_row, column=0, padx=10, pady=10, sticky="nw")
+        ttk.Label(adv_main_frame, text=t("控制模式:")).grid(row=adv_row, column=0, padx=10, pady=10, sticky="nw")
         
-        cb_frame = ttk.Frame(adv_win)
+        cb_frame = ttk.Frame(adv_main_frame)
         cb_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, pady=10, sticky="w")
         
         # WMI row
@@ -4230,20 +4347,21 @@ def open_builtin_settings():
         # Twinkle Tray row
         tt_row = ttk.Frame(cb_frame)
         tt_row.pack(fill="x", pady=2)
-        ttk.Checkbutton(tt_row, text=t("Twinkle Tray (第三方接口)"), variable=tt_var).pack(side="left")
+        tt_cb = ttk.Checkbutton(tt_row, text=t("Twinkle Tray (第三方接口)"), variable=tt_var)
+        tt_cb.pack(side="left")
         ttk.Button(tt_row, text=t("测试"), width=5, command=lambda: test_brightness_method("twinkle_tray")).pack(side="left", padx=10)
         
         adv_row += 1
 
-        ttk.Separator(adv_win, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=5)
+        ttk.Separator(adv_main_frame, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=5)
         adv_row += 1
 
         # 2. Custom Order
-        ttk.Label(adv_win, text=t("自定义调节顺序:")).grid(row=adv_row, column=0, columnspan=2, padx=10, pady=(5, 5), sticky="w")
+        ttk.Label(adv_main_frame, text=t("自定义调节顺序:")).grid(row=adv_row, column=0, columnspan=2, padx=10, pady=(5, 5), sticky="w")
         adv_row += 1
         
-        list_frame = ttk.Frame(adv_win)
-        list_frame.grid(row=adv_row, column=0, columnspan=3, padx=10, pady=0, sticky="ew")
+        list_frame = ttk.Frame(adv_main_frame)
+        list_frame.grid(row=adv_row, column=1, columnspan=1, padx=10, pady=0, sticky="ew")
         
         custom_list_str = config.get("brightness_custom_list", "wmi,dxva2,twinkle_tray") or "wmi,dxva2,twinkle_tray"
         # Map keys to display names
@@ -4295,45 +4413,73 @@ def open_builtin_settings():
         ttk.Button(btn_frame, text="↓", width=3, command=move_down).pack(pady=2)
         adv_row += 1
 
-        ttk.Label(adv_win, text=t("执行策略:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
-        strat_var = tk.StringVar(value=config.get("brightness_custom_strategy", "all"))
-        ttk.Combobox(adv_win, textvariable=strat_var, values=["all", "fallback"], state="readonly", width=10).grid(row=adv_row, column=1, padx=10, pady=5, sticky="w")
-        ttk.Label(adv_win, text=t("(all=同时执行, fallback=成功即止)")).grid(row=adv_row, column=2, padx=5, sticky="w")
+        ttk.Label(adv_main_frame, text=t("执行策略:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        
+        strat_options = [("all", "同时执行 (all)"), ("fallback", "成功即止 (fallback)")]
+        strat_key_var = tk.StringVar(value=config.get("brightness_custom_strategy", "all"))
+        
+        def _get_strat_label(key):
+            for k, l in strat_options:
+                if k == key: return t(l)
+            return t("同时执行 (all)")
+        
+        strat_lbl_var = tk.StringVar(value=_get_strat_label(strat_key_var.get()))
+        
+        strat_cb = ttk.Combobox(adv_main_frame, textvariable=strat_lbl_var, values=[t(l) for k, l in strat_options], state="readonly", width=28)
+        strat_cb.grid(row=adv_row, column=1, padx=10, pady=5, sticky="w")
+        
+        def _on_strat_change(e):
+            lbl = strat_lbl_var.get()
+            for k, l in strat_options:
+                if t(l) == lbl:
+                    strat_key_var.set(k)
+                    break
+        strat_cb.bind("<<ComboboxSelected>>", _on_strat_change)
         adv_row += 1
 
-        ttk.Separator(adv_win, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
+        ttk.Separator(adv_main_frame, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
         adv_row += 1
 
         # 3. Targets
-        ttk.Label(adv_win, text="WMI " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Label(adv_main_frame, text=t("WMI 目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
         wmi_target = tk.StringVar(value=config.get("wmi_target", "all"))
-        wmi_target_frame = ttk.Frame(adv_win)
-        wmi_target_frame.grid(row=adv_row, column=1, padx=10, sticky="w")
+        wmi_target_frame = ttk.Frame(adv_main_frame)
+        wmi_target_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, sticky="w")
         ttk.Entry(wmi_target_frame, textvariable=wmi_target, width=15).pack(side="left", padx=(0, 5))
         ttk.Button(wmi_target_frame, text=t("所有"), width=5, command=lambda: wmi_target.set("all")).pack(side="left")
-        ttk.Label(adv_win, text=t("('all' 或 索引 0, 1...)")).grid(row=adv_row, column=2, padx=5, sticky="w")
+        ttk.Label(wmi_target_frame, text=t("('all' 或 索引 0, 1...)")).pack(side="left", padx=5)
         adv_row += 1
         
-        ttk.Label(adv_win, text="Dxva2 " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Label(adv_main_frame, text=t("Dxva2 目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
         dxva2_target = tk.StringVar(value=config.get("dxva2_target", "all"))
-        dxva2_target_frame = ttk.Frame(adv_win)
-        dxva2_target_frame.grid(row=adv_row, column=1, padx=10, sticky="w")
+        dxva2_target_frame = ttk.Frame(adv_main_frame)
+        dxva2_target_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, sticky="w")
         ttk.Entry(dxva2_target_frame, textvariable=dxva2_target, width=15).pack(side="left", padx=(0, 5))
         ttk.Button(dxva2_target_frame, text=t("所有"), width=5, command=lambda: dxva2_target.set("all")).pack(side="left")
-        ttk.Label(adv_win, text=t("('all' 或 索引 0, 1...)")).grid(row=adv_row, column=2, padx=5, sticky="w")
+        ttk.Label(dxva2_target_frame, text=t("('all' 或 索引 0, 1...)")).pack(side="left", padx=5)
         adv_row += 1
 
-        ttk.Separator(adv_win, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
+        ttk.Separator(adv_main_frame, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
         adv_row += 1
 
         # 4. Twinkle Tray
-        ttk.Label(adv_win, text="Twinkle Tray " + t("配置:")).grid(row=adv_row, column=0, columnspan=2, padx=10, pady=5, sticky="w")
+        tt_header_frame = ttk.Frame(adv_main_frame)
+        tt_header_frame.grid(row=adv_row, column=0, columnspan=3, sticky="ew")
+        ttk.Label(tt_header_frame, text=t("Twinkle Tray 配置:")).pack(side="left", padx=10, pady=5)
+        
+        def download_tt():
+            try:
+                import webbrowser
+                webbrowser.open("https://twinkletray.com/")
+            except Exception:
+                pass
+        ttk.Button(tt_header_frame, text=t("下载 Twinkle Tray"),width=15, command=download_tt).pack(side="left", padx=15, pady=5)
         adv_row += 1
 
         default_tt = r"%LocalAppData%\Programs\twinkle-tray\Twinkle Tray.exe"
         tt_path = tk.StringVar(value=config.get("twinkle_tray_path", "") or default_tt)
-        ttk.Label(adv_win, text=t("路径:")).grid(row=adv_row, column=0, padx=10, sticky="e")
-        ttk.Entry(adv_win, textvariable=tt_path).grid(row=adv_row, column=1, padx=10, sticky="ew")
+        ttk.Label(adv_main_frame, text=t("路径:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Entry(adv_main_frame, textvariable=tt_path).grid(row=adv_row, column=1, padx=10, pady=5, sticky="ew")
         
         def browse_tt():
             try:
@@ -4341,7 +4487,7 @@ def open_builtin_settings():
                 if p: tt_path.set(p)
             except Exception as e:
                 messagebox.showerror(t("错误"), str(e))
-        ttk.Button(adv_win, text=t("选择"), width=3, command=browse_tt).grid(row=adv_row, column=2, padx=5, sticky="w")
+        ttk.Button(adv_main_frame, text=t("选择"), width=5, command=browse_tt).grid(row=adv_row, column=2, padx=5, sticky="w")
         adv_row += 1
         
         tt_modes = [("monitor_num", "按编号 (MonitorNum)"), ("monitor_id", "按 ID (MonitorID)"), ("all", "全部显示器 (All)")]
@@ -4353,14 +4499,14 @@ def open_builtin_settings():
             return t("按编号 (MonitorNum)")
         tt_mode_lbl = tk.StringVar(value=_get_tt_label(tt_mode_key.get()))
         
-        ttk.Label(adv_win, text=t("目标模式:")).grid(row=adv_row, column=0, padx=10, sticky="e")
-        tm_cb = ttk.Combobox(adv_win, textvariable=tt_mode_lbl, values=[t(l) for k,l in tt_modes], state="readonly")
+        ttk.Label(adv_main_frame, text=t("目标模式:")).grid(row=adv_row, column=0, padx=10, sticky="e")
+        tm_cb = ttk.Combobox(adv_main_frame, textvariable=tt_mode_lbl, values=[t(l) for k,l in tt_modes], state="readonly", width=28)
         tm_cb.grid(row=adv_row, column=1, padx=10, sticky="w")
         
         tt_val = tk.StringVar(value=config.get("twinkle_tray_target_value", "1"))
-        ttk.Label(adv_win, text=t("目标值:")).grid(row=adv_row + 1, column=0, padx=10, sticky="e")
-        tt_val_entry = ttk.Entry(adv_win, textvariable=tt_val)
-        tt_val_entry.grid(row=adv_row + 1, column=1, padx=10, sticky="ew")
+        ttk.Label(adv_main_frame, text=t("目标值:")).grid(row=adv_row + 1, column=0, padx=10, pady=5, sticky="e")
+        tt_val_entry = ttk.Entry(adv_main_frame, textvariable=tt_val)
+        tt_val_entry.grid(row=adv_row + 1, column=1, padx=10, pady=5, sticky="ew")
 
         def _update_tt_val_state(*args):
             if tt_mode_key.get() == "all":
@@ -4381,15 +4527,7 @@ def open_builtin_settings():
         _update_tt_val_state() # Initial state
         
         tt_overlay = tk.IntVar(value=int(config.get("twinkle_tray_overlay", 1) or 0))
-        ttk.Checkbutton(adv_win, text=t("显示亮度叠加层(Overlay)"), variable=tt_overlay).grid(row=adv_row, column=1, sticky="w", padx=10)
-        
-        def download_tt():
-            try:
-                import webbrowser
-                webbrowser.open("https://twinkletray.com/")
-            except Exception:
-                pass
-        ttk.Button(adv_win, text=t("下载 Twinkle Tray"), command=download_tt).grid(row=adv_row, column=2, padx=5, sticky="w")
+        ttk.Checkbutton(adv_main_frame, text=t("显示亮度叠加层(Overlay)"), variable=tt_overlay, command=_update_tt_val_state).grid(row=adv_row, column=1, sticky="w", padx=10)
         adv_row += 1
 
         # Toggle state based on mode
@@ -4437,7 +4575,7 @@ def open_builtin_settings():
 
             config["brightness_mode"] = new_mode
             config["brightness_custom_list"] = ",".join(final_order)
-            config["brightness_custom_strategy"] = strat_var.get()
+            config["brightness_custom_strategy"] = strat_key_var.get()
             config["wmi_target"] = wmi_target.get()
             config["dxva2_target"] = dxva2_target.get()
             config["twinkle_tray_path"] = tt_path.get()
@@ -4454,16 +4592,72 @@ def open_builtin_settings():
 
             adv_win.destroy()
             
-        btn_frame = ttk.Frame(adv_win)
+        btn_frame = ttk.Frame(adv_main_frame)
         btn_frame.grid(row=adv_row+1, column=0, columnspan=3, pady=20)
         ttk.Button(btn_frame, text=t("保存"), command=save).pack(side="left", padx=10)
         ttk.Button(btn_frame, text=t("取消"), command=adv_win.destroy).pack(side="left", padx=10)
 
-    ttk.Button(win, text=t("打开亮度调节设置"), command=open_advanced_brightness_settings).grid(row=row_i, column=1, columnspan=2, sticky="w", padx=10)
+        def _apply_lang_to_adv_win() -> None:
+            if not adv_win.winfo_exists():
+                return
+            try:
+                adv_win.title(t("亮度调节设置"))
+            except Exception:
+                pass
+            
+            # 更新 Combobox 和 Listbox 的动态文本
+            try:
+                # 1. 策略 Combobox
+                strat_cb.configure(values=[t(l) for k, l in strat_options])
+                strat_lbl_var.set(_get_strat_label(strat_key_var.get()))
+                 
+                # 2. Twinkle Tray 模式 Combobox
+                tm_cb.configure(values=[t(l) for k, l in tt_modes])
+                tt_mode_lbl.set(_get_tt_label(tt_mode_key.get()))
+                 
+                # 3. 调节顺序 Listbox
+                # 保存当前选择
+                current_sel = lb.curselection()
+                current_items = lb.get(0, tk.END)
+                keys = [rev_display_map.get(item) for item in current_items]
+                
+                # 更新映射
+                nonlocal display_map, rev_display_map
+                display_map = {
+                    "wmi": t("wmi（系统 WMI 接口）"),
+                    "dxva2": t("dxva2（物理显示器 DDC/CI）"),
+                    "twinkle_tray": t("twinkle_tray（第三方接口）")
+                }
+                rev_display_map = {v: k for k, v in display_map.items()}
+                
+                # 重新填充
+                lb.delete(0, tk.END)
+                for k in keys:
+                    if k in display_map:
+                        lb.insert(tk.END, display_map[k])
+                
+                # 恢复选择
+                if current_sel:
+                    lb.selection_set(current_sel)
+            except Exception:
+                pass
+
+        register_lang_observer(lambda: (_apply_lang_to_adv_win(), apply_language_to_widgets(adv_win)))
+        _apply_lang_to_adv_win()
+        apply_language_to_widgets(adv_win)
+
+        # 确保窗口计算完布局后再居中
+        adv_win.update_idletasks()
+        try:
+            center_window(adv_win, win)
+        except Exception:
+            pass
+
+    ttk.Button(main_frame, text=t("打开亮度调节设置"), command=open_advanced_brightness_settings).grid(row=row_i, column=1, columnspan=2, sticky="w", padx=10)
     row_i += 1
 
     # 分隔线
-    ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(10, 10))
+    ttk.Separator(main_frame, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(10, 10))
     row_i += 1
 
     # 睡眠主题设置
@@ -4506,40 +4700,40 @@ def open_builtin_settings():
     s_cur_on_delay = int(config.get("sleep_on_delay", 0) or 0)
     s_cur_off_delay = int(config.get("sleep_off_delay", 0) or 0)
 
-    ttk.Label(win, text=t("睡眠/电源 (Sleep) 动作")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
+    ttk.Label(main_frame, text=t("睡眠/电源 (Sleep) 动作")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
     row_i += 1
 
-    ttk.Label(win, text=t("打开(on)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(main_frame, text=t("打开(on)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     s_on_key_var = tk.StringVar(value=s_cur_on)
     s_on_var = tk.StringVar(value=_s_on_label_by_key(s_cur_on))
-    s_on_combo = ttk.Combobox(win, values=_s_on_labels(), textvariable=s_on_var, state="readonly", width=18)
+    s_on_combo = ttk.Combobox(main_frame, values=_s_on_labels(), textvariable=s_on_var, state="readonly", width=18)
     s_on_combo.grid(row=row_i, column=1, sticky="w")
     s_on_combo.bind("<<ComboboxSelected>>", lambda e: s_on_key_var.set(_s_on_key_by_label(s_on_var.get())))
-    ttk.Label(win, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
+    ttk.Label(main_frame, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
     s_on_delay_var = tk.StringVar(value=str(s_cur_on_delay))
-    ttk.Entry(win, textvariable=s_on_delay_var, width=8).grid(row=row_i, column=3, sticky="w")
+    ttk.Entry(main_frame, textvariable=s_on_delay_var, width=8).grid(row=row_i, column=3, sticky="w")
     row_i += 1
 
-    ttk.Label(win, text=t("关闭(off)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(main_frame, text=t("关闭(off)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     s_off_key_var = tk.StringVar(value=s_cur_off)
     s_off_var = tk.StringVar(value=_s_off_label_by_key(s_cur_off))
-    s_off_combo = ttk.Combobox(win, values=_s_off_labels(), textvariable=s_off_var, state="readonly", width=18)
+    s_off_combo = ttk.Combobox(main_frame, values=_s_off_labels(), textvariable=s_off_var, state="readonly", width=18)
     s_off_combo.grid(row=row_i, column=1, sticky="w")
     s_off_combo.bind("<<ComboboxSelected>>", lambda e: s_off_key_var.set(_s_off_key_by_label(s_off_var.get())))
-    ttk.Label(win, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
+    ttk.Label(main_frame, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
     s_off_delay_var = tk.StringVar(value=str(s_cur_off_delay))
-    ttk.Entry(win, textvariable=s_off_delay_var, width=8).grid(row=row_i, column=3, sticky="w")
+    ttk.Entry(main_frame, textvariable=s_off_delay_var, width=8).grid(row=row_i, column=3, sticky="w")
     row_i += 1
 
-    ttk.Label(win, text=t("提示：动作将在等待指定的延时秒数后执行。")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
+    ttk.Label(main_frame, text=t("提示：动作将在等待指定的延时秒数后执行。")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
     row_i += 1
 
     # 分隔线（睡眠动作 与 睡眠功能开关）
-    ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
+    ttk.Separator(main_frame, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
     row_i += 1
 
     # 睡眠支持操作：将启用/关闭睡眠功能搬到“更多”中
-    op_frame = ttk.Frame(win)
+    op_frame = ttk.Frame(main_frame)
     op_frame.grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 10), sticky="w")
     ttk.Label(op_frame, text=t("系统休眠/睡眠功能开关：")).grid(row=0, column=0, sticky="w")
     ttk.Label(op_frame, text=t("注：此操作需要管理员权限")).grid(row=0, column=1, sticky="n")
@@ -4549,10 +4743,8 @@ def open_builtin_settings():
     row_i += 1
 
     # 分隔线
-    ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
+    ttk.Separator(main_frame, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
     row_i += 1
-
-    # 移除：按键(Hotkey) 主题设置（改由自定义主题管理）
 
     def save_builtin_settings():
         try:
@@ -4602,7 +4794,7 @@ def open_builtin_settings():
         except Exception as e:
             messagebox.showerror(t("错误"), t(f"保存失败: {e}"))
 
-    btn_frame = ttk.Frame(win)
+    btn_frame = ttk.Frame(main_frame)
     btn_frame.grid(row=row_i, column=0, columnspan=4, pady=(0, 10))
     ttk.Button(btn_frame, text=t("保存"), command=save_builtin_settings).grid(row=0, column=0, padx=6)
     ttk.Button(btn_frame, text=t("取消"), command=win.destroy).grid(row=0, column=1, padx=6)
@@ -4651,7 +4843,6 @@ sleep_status_message = ""
 brightness_disabled = False
 brightness_status_message = ""
 sleep()
-check_brightness_support()
 
 for idx, theme in enumerate(builtin_themes):
     theme_key = theme["key"]
@@ -4667,7 +4858,7 @@ for idx, theme in enumerate(builtin_themes):
         entry.config(state="disabled")
         entry.grid(row=idx + 1, column=2, sticky="ew", padx=PADX, pady=PADY)
         # 改为不可点击提示
-        sleep_tip = ttk.Label(theme_frame, text="休眠/睡眠不可用\n系统未启用休眠功能")
+        sleep_tip = ttk.Label(theme_frame, text=t("休眠/睡眠不可用\n系统未启用休眠功能"))
         sleep_tip.grid(row=idx + 1, column=2, sticky="w", padx=PADX, pady=PADY)
     elif theme_key == "screen" and brightness_disabled:
         ttk.Checkbutton(theme_frame, text=theme["nickname"], variable=theme["checked"]).grid(
@@ -4699,12 +4890,10 @@ ttk.Button(theme_frame, text=t("刷新"), command=refresh_custom_themes).grid(
 ttk.Button(theme_frame, text=t("更多"), command=open_builtin_settings).grid(row=6, column=2, pady=PADY, padx=PADX, sticky="n")
 
 # 添加和修改按钮
-ttk.Button(theme_frame, text=t("添加"), command=lambda: add_custom_theme(config)).grid(
-    row=6, pady=PADY, padx=PADX, column=3, sticky="w"
-)
-ttk.Button(theme_frame, text=t("修改"), command=lambda: modify_custom_theme()).grid(
-    row=6, pady=PADY, padx=PADX, column=3, sticky="e"
-)
+custom_btn_frame = ttk.Frame(theme_frame)
+custom_btn_frame.grid(row=6, column=3, sticky="ew")
+ttk.Button(custom_btn_frame, text=t("添加"), command=lambda: add_custom_theme(config)).pack(side="left", expand=True, fill="x", padx=(PADX, 4), pady=PADY)
+ttk.Button(custom_btn_frame, text=t("修改"), command=lambda: modify_custom_theme()).pack(side="left", expand=True, fill="x", padx=(4, PADX), pady=PADY)
 
 # 绑定鼠标双击事件到自定义主题列表
 custom_theme_tree.bind("<Double-Button-1>", on_double_click)
@@ -4739,29 +4928,11 @@ root.columnconfigure(0, weight=1)
 # 调用加载自定义主题的函数
 load_custom_themes()
 
+# 启动时管理员权限检查与自动提权
+startup_admin_check()
+
 # 初始应用一次语言（确保 LabelFrame/heading/按钮在英文模式下生效）
 _apply_language_everywhere()
 
 root.mainloop()
 
-# 释放互斥体
-# ctypes.windll.kernel32.ReleaseMutex(mutex)
-
-"""
-GUI程序用来生成配置文件(用于Windows系统)
-系统配置的内容为:
-1.网站
-2.密钥
-3.端口
-4.test模式开关(用于记录是否开启测试模式)
-主题配置的内容为:
-注:2和4和5是自定义主题才有,内置主题和自定义主题要分开显示,第一次打开无自定义主题
-1.向服务器订阅用的主题名称
-2.主题昵称
-3.主题开关状态
-4.主题值(需要填写路径,或调用系统api选择文件),是一个程序或文件(绝对路径)
-5.主题类型(程序或者服务)下拉框选择(默认为程序)
-自定义主题部分有两个按钮:添加和修改
-添加按钮会弹出一个窗口,选择主题类型,主题开关状态,填写主题昵称,主题名称,主题值
-修改按钮会弹出一个窗口,修改主题,有保存和删除按钮
-"""
