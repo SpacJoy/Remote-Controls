@@ -1,4 +1,3 @@
-
 <!-- @format -->
 
 # 详细使用说明
@@ -9,10 +8,11 @@
 - 组件结构
 - 快速开始（首次使用）
 - MQTT 配置（两种认证模式）
-- 配置文件字段说明（config.json）
+- 配置文件字段说明（config.toml）
 - 主题说明（内置 + 自定义）
 - 托盘与权限
 - 安装与打包
+- 国际化 (i18n)
 - 开机自启
 - 常见问题（FAQ）
 - 反馈
@@ -21,22 +21,25 @@
 
 可接入：小爱同学、天猫精灵等，或通过 MQTT 接入 Home Assistant等自定义服务器。
 
-核心特性（版本号以 `src/python/version_info.py` / `version.txt` 为准）：
+核心特性（版本号以 `version_info.py` 为准）：
 
 基础能力：
 
+- 语言支持：多语言 (i18n) 支持，动态加载语言包，根据系统语言自动切换中/英文
 - 开关：重启/锁屏、执行命令、程序/脚本启停、服务启停（服务需管理员）
-- 灯：调节亮度（0-100）
+- 灯：调节亮度（0-100）；支持 WMI、Dxva2 DDC/CI、Twinkle Tray 多种模式
 - 窗帘：调节系统音量（0-100）、媒体控制（上一曲/下一曲/播放暂停，支持百分比映射）
 - 自定义主题：程序或脚本、服务、命令、按键(Hotkey)
-  - 命令：PowerShell 执行；支持窗口显示/隐藏；关闭发送 CTRL_BREAK 优雅中断
-  - 热键：组合键与 {down}/{up}；字母段逐字符发送，可设间隔；GUI 自带录制器
+- 命令：PowerShell 执行；支持窗口显示/隐藏；关闭发送 CTRL_BREAK 优雅中断；支持参数化指令 (`on#/off#数字`)
+- 热键：组合键与 {down}/{up}；字母段逐字符发送，可设间隔；GUI 自带录制器
 - 睡眠主题：sleep / hibernate / display_off / display_on / lock，支持 on/off 延时
 - 脚本支持：.ps1 / .py(.pyw) / .cmd(.bat) / .exe；自动选择解释器；增强精确匹配与进程树终止
 - MQTT：支持“私钥客户端ID（如巴法云）”与“用户名/密码”两种认证模式
+- 配置系统：TOML 优先，支持中文注释，集成生产级解析器
 - 托盘兜底：未启动独立托盘时，主程序自动启用内置托盘
 - 管理员与自启：自动检测与提示提权；GUI 一键设置/移除开机自启
 - 通知：Windows Toast 可开关
+- CI/CD：GitHub Actions 自动化构建，支持分支推送自动重命名标签与多测试版发布
 
 近期新增 / 强化（示例项，随版本迭代可能变化）：
 
@@ -55,8 +58,8 @@
 - `src/main/*.c` / `RC-main.exe`：主程序（MQTT、主题执行、脚本/命令管理、托盘兜底、权限与自启）
 - `src/python/GUI.py` / `RC-GUI.exe`：图形配置（MQTT、主题管理、热键录制、开机自启）
 - `src/tray/*.c` / `RC-tray.exe`：托盘（显示模式/权限、启动/重启/关闭主程序）
-- `config.json`：配置文件（首次运行 GUI 自动生成）
-- `dome_config.json`：配置示例
+- `config.toml`：配置文件（首次运行 GUI 自动生成，支持中文注释）
+- `dome_config.toml`：配置示例
 
 ## 快速开始（首次使用）
 
@@ -73,7 +76,7 @@
 ### 步骤 2：配置并保存
 
 - 运行 `RC-GUI.exe`
-- 填写 MQTT（密钥/账号密码/服务器/端口），保存生成 `config.json`
+- 填写 MQTT（密钥/账号密码/服务器/端口），保存生成 `config.toml`
 - 在 GUI 中启用所需主题（test 模式可暂不启用）
 
 - ![GUI配置界面](../res/GUI.png)
@@ -81,7 +84,7 @@
 ### 步骤 3：运行
 
 - 直接运行托盘或主程序：`RC-tray.exe` 或 `RC-main.exe`
-  - 托盘用于管理主程序（权限/启动/重启/关闭）；如未运行独立托盘，主程序会启用内置托盘
+    - 托盘用于管理主程序（权限/启动/重启/关闭）；如未运行独立托盘，主程序会启用内置托盘
 
 ### 步骤 4：米家绑定（可选）
 
@@ -117,8 +120,8 @@
 
 - `broker` / `port`：MQTT 服务器与端口（示例：`bemfa.com:9501`）
 - `auth_mode`：认证模式
-  - `private_key`：私钥模式（把私钥填到 `client_id`）
-  - `username_password`：账号密码模式（填写 `mqtt_username` / `mqtt_password`）
+    - `private_key`：私钥模式（把私钥填到 `client_id`）
+    - `username_password`：账号密码模式（填写 `mqtt_username` / `mqtt_password`）
 - `client_id`：MQTT Client ID（私钥模式下即“私钥”）
 - `mqtt_username` / `mqtt_password`：账号密码模式的用户名与密码
 - `mqtt_tls`：是否启用 TLS/SSL（0/1；启用后使用 `ssl://`）
@@ -148,8 +151,8 @@
 ### 亮度控制（Twinkle Tray 可选）
 
 - `brightness_mode`：亮度控制方案
-  - `wmi`：系统接口（默认显示器场景更稳）
-  - `twinkle_tray`：Twinkle Tray 命令行（外接显示器更友好）
+    - `wmi`：系统接口（默认显示器场景更稳）
+    - `twinkle_tray`：Twinkle Tray 命令行（外接显示器更友好）
 - `twinkle_tray_path`：Twinkle Tray 可执行文件路径（可包含引号）
 - `twinkle_tray_target_mode`：目标模式（如 `all`）
 - `twinkle_tray_target_value`：目标值（显示器编号/ID 等，取决于模式）
@@ -160,27 +163,27 @@
 自定义主题以 N 递增分组（从 1 开始），常见类型：
 
 - 程序/脚本：`applicationN*`
-  - `applicationN`：该主题 Topic
-  - `applicationN_name`：显示名称
-  - `applicationN_checked`：是否启用
-  - `applicationN_on_value` / `applicationN_off_value`：on/off 的命令或路径
-  - `applicationN_off_preset`：关闭预设（如 `kill`/`ignore`/`custom`）
-  - `applicationN_directoryN`：GUI 选择文件时写入的路径缓存（用于回显）
+    - `applicationN`：该主题 Topic
+    - `applicationN_name`：显示名称
+    - `applicationN_checked`：是否启用
+    - `applicationN_on_value` / `applicationN_off_value`：on/off 的命令或路径
+    - `applicationN_off_preset`：关闭预设（如 `kill`/`ignore`/`custom`）
+    - `applicationN_directoryN`：GUI 选择文件时写入的路径缓存（用于回显）
 
 - 服务：`serveN*`（需要管理员权限）
-  - `serveN_value` / `serveN_on_value`：服务名
-  - `serveN_off_preset`：如 `stop`
+    - `serveN_value` / `serveN_on_value`：服务名
+    - `serveN_off_preset`：如 `stop`
 
 - 命令：`commandN*`
-  - `commandN_on_value` / `commandN_off_value`：命令内容（支持 `{value}` 占位符）
-  - `commandN_off_preset`：关闭预设
-  - `commandN_window`：窗口显示模式（如 `show`）
-  - `commandN_value_min` / `commandN_value_max`：参数范围（用于 `on#数字` / `off#数字`）
+    - `commandN_on_value` / `commandN_off_value`：命令内容（支持 `{value}` 占位符）
+    - `commandN_off_preset`：关闭预设
+    - `commandN_window`：窗口显示模式（如 `show`）
+    - `commandN_value_min` / `commandN_value_max`：参数范围（用于 `on#数字` / `off#数字`）
 
 - 热键：`hotkeyN*`
-  - `hotkeyN_on_type` / `hotkeyN_off_type`：如 `keyboard` / `none`
-  - `hotkeyN_on_value` / `hotkeyN_off_value`：如 `ctrl+alt+s`
-  - `hotkeyN_char_delay_ms`：字符间隔（逐字符发送时）
+    - `hotkeyN_on_type` / `hotkeyN_off_type`：如 `keyboard` / `none`
+    - `hotkeyN_on_value` / `hotkeyN_off_value`：如 `ctrl+alt+s`
+    - `hotkeyN_char_delay_ms`：字符间隔（逐字符发送时）
 
 ## 主题说明（内置 + 自定义）
 
@@ -213,7 +216,7 @@
 1. **运行方式**：双击`RC-tray.exe`启动，推荐以管理员权限运行；单击托盘图标可直接打开配置界面
 2. **功能菜单**：
    ![tray](../res/tray.png)
-   - 显示当前运行模式(EXE/脚本)和权限状态
+    - 显示当前运行模式(EXE/脚本)和权限状态
 
 - 打开配置界面：快速访问GUI配置工具（托盘图标单击同样触发）
 - 版本菜单：点击打开项目主页
@@ -224,7 +227,7 @@
 - 关闭主程序：停止主程序运行
 - 退出托盘程序：关闭托盘但保留主程序运行
   主程序自带托盘
-   ![tray](../res/main_tray.png)
+  ![tray](../res/main_tray.png)
 
 自动管理：托盘检测主程序状态；如独立托盘未运行，主程序会启用内置简洁托盘。
 
@@ -233,8 +236,10 @@
 ### 直接使用（推荐）
 
 1. 到 Release 下载：
-  - `Remote-Controls-Installer-*.exe`（安装包）
-  - 或单文件：`RC-main.exe` / `RC-tray.exe` / `RC-GUI.exe`
+
+- `Remote-Controls-Installer-*.exe`（安装包）
+- 或单文件：`RC-main.exe` / `RC-tray.exe` / `RC-GUI.exe`
+
 2. 先运行 `RC-GUI.exe` 保存配置，再运行 `RC-tray.exe`（推荐）。
 
 ### 本地构建（开发/自行打包）

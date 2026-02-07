@@ -14,13 +14,14 @@
 - 亮度高级设置：独立配置窗口，支持自定义控制顺序、策略（同时执行/成功即止）与单显示器目标控制
 - 参数化命令：on#/off# 默认 0-100（可通过 `commandN_value_min/value_max` 自定义）+ `{value}` 占位符，GUI 测试会询问参数
 - 托盘管理：一键启动/重启/关闭主程序，显示权限与运行模式
+- 多语言支持 (i18n)：支持动态加载语言文件，根据系统语言自动切换中/英文
 - 打包与发布：一键构建（github actions），安装器自动注入版本
 - Windows Toast 通知，可开关；异常保护与弱网自动重连
 
 ## 使用教程
 
 - MQTT 认证说明与示例：`md/MQTT_AUTH_GUIDE_V2.md`
-- 配置文件字段说明（`config.json`）：`md/Detailed-introduction.md`
+- 配置文件字段说明（`config.toml`）：`md/Detailed-introduction.md`
 - 巴法云接入与小爱同学（官方文档）：<https://cloud.bemfa.com/docs/src/speaker_mi.html>
 - 主题速查（内置 + 自定义）：
   - 电脑（开关）：lock/restart/shutdown 等，支持延时
@@ -34,7 +35,7 @@
 
 - 程序或脚本：填写“打开(on)”路径或命令，关闭动作可选预设（强制结束、忽略）或自定义脚本，双按钮分别支持选择文件。
 - 服务(需管理员权限)：“打开(on)”写入服务名；关闭预设默认停止服务，也可改为忽略，自定义内容需确保具有管理员权限。
-- 命令：默认显示 PowerShell 测试按钮；打开与关闭各自支持预设，中断(`CTRL+BREAK`)为默认关闭方式，切换到自定义时可测试代码片段。支持 `{value}` 占位符，命令可由 `on#/off#数字` 注入参数；范围默认 0-100，可在 `config.json` 中用 `commandN_value_min/value_max` 自定义；越界时主程序会告警并钳制到范围内，GUI 测试会提示范围并要求输入合法值。
+- 命令：默认显示 PowerShell 测试按钮；打开与关闭各自支持预设，中断(`CTRL+BREAK`)为默认关闭方式，切换到自定义时可测试代码片段。支持 `{value}` 占位符，命令可由 `on#/off#数字` 注入参数；范围默认 0-100，可在 `config.toml` 中用 `commandN_value_min/value_max` 自定义；越界时主程序会告警并钳制到范围内，GUI 测试会提示范围并要求输入合法值。
 - 按键(Hotkey)：可录制或手动输入键盘组合，支持设置按键类型（不执行/键盘组合）和字符间隔，保存时会提示全角字符风险。
 
 ## [图文教程（宝宝巴士版）](https://blog.spacjoy.top/posts/remote-control-tutorial)
