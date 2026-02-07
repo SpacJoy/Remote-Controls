@@ -20,6 +20,7 @@
 
 ## 文档与更新日志
 - 对用户可见的变更请同时更新 `CHANGELOG.md`（Release/版本说明）。
+- 更新功能时，请同步更新 `md/Detailed-introduction.md` 中的配置说明（优先使用 `config.toml` 格式）。
 - `src/python/version_info.py` 通常由发布流程或维护者更新，不要随意更改版本号。
 
 ## 测试

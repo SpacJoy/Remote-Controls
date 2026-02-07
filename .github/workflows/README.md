@@ -10,8 +10,8 @@
 
 ```bash
 # 创建并推送新标签
-git tag V<版本号>   # 例如：V3.0.0
-git push origin V<版本号>
+git tag Vx.y.z   # 例如：V3.0.0
+git push origin Vx.y.z
 ```
 
 这将：
@@ -26,7 +26,8 @@ git push origin V<版本号>
 
 向 `dev` 分支推送代码时会：
 
--   **自动递增版本号**：基于最新发布标签（Latest Tag）自动加 `0.0.0.1`（如 `3.0.0` -> `3.0.0.1`）。
+-   **自动递增版本号**：基于最新发布标签（Latest Tag）自动递增（如 `3.0.0` -> `3.0.0.1`）。
+-   **测试版本标记**：自动带上 `-test` 后缀。
 -   自动构建并创建 **Pre-release**。
 -   方便开发者快速验证功能。
 
@@ -35,7 +36,7 @@ git push origin V<版本号>
 1. 访问 [GitHub Actions](https://github.com/SpacJoy/Remote-Controls/actions)
 2. 选择 "Build and Release Remote Controls" workflow
 3. 点击 "Run workflow"
-4. 输入版本号（如：3.0.0）
+4. 输入版本号（如：x.y.z 或 x.y.z-test1）
 5. 选择是否更新版本文件
 6. 点击运行
 
@@ -56,26 +57,26 @@ git push origin V<版本号>
 ## 🔧 构建环境
 
 -   **操作系统**: Windows (windows-latest)
--   **Python 版本**: 3.12.10
+-   **Python 版本**: 3.12.x
 -   **打包工具**: PyInstaller
 -   **依赖管理**: 虚拟环境 + requirements.txt
 
 ## ⚡ 快速测试
 
 ```bash
-# 测试版本号提取
-git tag V3.0.0-test
-git push origin V3.0.0-test
+# 测试版本号提取（支持 -test 后缀）
+git tag Vx.y.z-test
+git push origin Vx.y.z-test
 
 # 手动删除测试标签
-git tag -d V3.0.0-test
-git push origin :refs/tags/V3.0.0-test
+git tag -d Vx.y.z-test
+git push origin :refs/tags/Vx.y.z-test
 ```
 
 ## 📋 注意事项
 
 1. **标签格式**: 必须以 `V` 开头（如 V3.0.0）
-	- 以 `-test` 结尾的标签（如 `V3.0.0-test`）或 **`dev` 分支的自动构建** 会发布为 GitHub **预发布（prerelease）**
+	- 以 `-test` (或 `-test1`, `-test2` 等) 结尾的标签或 **`dev` 分支的自动构建** 会发布为 GitHub **预发布（prerelease）**
 2. **版本文件**: 构建前会通过 `installer/update_version.py` 写入/更新版本文件（以及构建所需的临时版本文件）
 3. **CI 自检**: `ci.yml` 会做最小自检（`compileall` + `pip check` + 关键依赖导入 + `update_version.py` 试跑）
 4. **权限要求**: 需要仓库的 push 权限来创建 Release

@@ -51,7 +51,7 @@ Remote-Controls/
 ├─ build_tray.ps1       # 构建 C 版托盘（输出 bin/RC-tray.exe）
 ├─ setup_python_env.ps1 # Python 虚拟环境部署脚本（支持多版本选择）
 ├─ setup_C_dev.ps1      # C 语言开发环境一键部署（MinGW/Paho/Inno Setup）
-├─ dome_config.json     # 配置示例
+├─ dome_config.toml     # 配置示例
 ├─ installer/           # 构建、版本管理与安装包脚本
 │  ├─ build_installer.ps1 # PyInstaller 打包与 Inno Setup 逻辑
 │  └─ update_version.py   # 版本号同步工具
@@ -60,7 +60,7 @@ Remote-Controls/
 │  ├─ main/             # C 版主程序源码（核心逻辑、MQTT、指令转发）
 │  ├─ tray/             # C 版托盘源码（Win32 托盘、菜单、进程管理）
 │  ├─ python/           # Python 源码（当前主要为配置 GUI）
-│  └─ *.c/h             # 跨模块共用组件（JSON 解析、通知等）
+│  └─ *.c/h             # 跨模块共用组件（TOML 解析、通知等）
 └─ scripts/             # 辅助工具脚本
 ```
 
@@ -122,7 +122,7 @@ Remote-Controls/
 ## 常见问题（精简）
 
 - MQTT 连接失败：检查地址/端口/认证，程序会在弱网下自动重连
-- MQTT 8883/TLS：默认关闭 TLS。可在 `config.json` 设置 `mqtt_tls=1` 启用 `ssl://`；若需要校验证书，可设置 `mqtt_tls_verify=1` 并指定 `mqtt_tls_ca_file`（CA 证书文件路径）。注意：启用 TLS 需要构建时链接 Paho SSL 库（如 `paho-mqtt3cs`）。
+- MQTT 8883/TLS：默认关闭 TLS。可在 `config.toml` 设置 `mqtt_tls=1` 启用 `ssl://`；若需要校验证书，可设置 `mqtt_tls_verify=1` 并指定 `mqtt_tls_ca_file`（CA 证书文件路径）。注意：启用 TLS 需要构建时链接 Paho SSL 库（如 `paho-mqtt3cs`）。
 - 休眠不可用：以管理员运行并启用休眠 `powercfg /hibernate on`
 - 托盘找不到主程序：以管理员运行托盘；或直接运行 `RC-main.exe`
 - 脚本执行策略：PowerShell 需允许脚本 `Set-ExecutionPolicy RemoteSigned`

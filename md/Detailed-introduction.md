@@ -112,24 +112,25 @@
 
 注意：启用 TLS 需要构建时链接 Paho SSL 库（如 `paho-mqtt3cs`）。
 
-## 配置文件字段说明（config.json）
+## 配置文件字段说明（config.toml）
 
-`config.json` 默认位于程序同目录（首次保存配置时由 GUI 自动生成）。建议优先使用 GUI 修改配置，手动编辑后重启程序生效。
+`config.toml` 默认位于程序同目录（首次保存配置时由 GUI 自动生成）。建议优先使用 GUI 修改配置，手动编辑后重启程序生效。
 
 ### MQTT 与基础字段
 
 - `broker` / `port`：MQTT 服务器与端口（示例：`bemfa.com:9501`）
 - `auth_mode`：认证模式
-    - `private_key`：私钥模式（把私钥填到 `client_id`）
-    - `username_password`：账号密码模式（填写 `mqtt_username` / `mqtt_password`）
+    - `"private_key"`：私钥模式（把私钥填到 `client_id`）
+    - `"username_password"`：账号密码模式（填写 `mqtt_username` / `mqtt_password`）
 - `client_id`：MQTT Client ID（私钥模式下即“私钥”）
 - `mqtt_username` / `mqtt_password`：账号密码模式的用户名与密码
 - `mqtt_tls`：是否启用 TLS/SSL（0/1；启用后使用 `ssl://`）
 - `mqtt_tls_verify`：是否校验服务器证书（0/1；启用后建议配置 CA 文件）
 - `mqtt_tls_ca_file`：CA 证书文件路径（PEM/CRT），用于证书校验
 - `test`：测试模式（一般用于调试；为 1 时可不启用主题也运行）
-- `language`：界面语言（`zh` / `en`）
+- `language`：界面语言（`"zh"` / `"en"`）
 - `notify`：通知开关（0/1）
+- `auto_update`：自动检查更新开关（0/1）
 
 ### 内置主题（Topic 与开关）
 
@@ -143,20 +144,20 @@
 
 内置主题的 on/off 动作（以“电脑/睡眠”为例）：
 
-- `computer_on_action` / `computer_off_action`：如 `lock` / `shutdown` / `restart`
+- `computer_on_action` / `computer_off_action`：如 `"lock"` / `"shutdown"` / `"restart"`
 - `computer_on_delay` / `computer_off_delay`：延时秒数
-- `sleep_on_action` / `sleep_off_action`：如 `sleep` / `hibernate` / `display_off` / `display_on` / `lock` / `none`
+- `sleep_on_action` / `sleep_off_action`：如 `"sleep"` / `"hibernate"` / `"display_off"` / `"display_on"` / `"lock"` / `"none"`
 - `sleep_on_delay` / `sleep_off_delay`：延时秒数
 
-### 亮度控制（Twinkle Tray 可选）
+### 亮度控制
 
 - `brightness_mode`：亮度控制方案
-    - `wmi`：系统接口（默认显示器场景更稳）
-    - `twinkle_tray`：Twinkle Tray 命令行（外接显示器更友好）
-- `twinkle_tray_path`：Twinkle Tray 可执行文件路径（可包含引号）
-- `twinkle_tray_target_mode`：目标模式（如 `all`）
-- `twinkle_tray_target_value`：目标值（显示器编号/ID 等，取决于模式）
-- `twinkle_tray_overlay`：是否显示 Overlay（0/1）
+    - `"wmi"`：系统接口（默认显示器场景更稳）
+    - `"dxva2"`：DDC/CI 控制（外接显示器原生调节）
+    - `"twinkle_tray"`：Twinkle Tray 命令行控制
+- `twinkle_tray_path`：Twinkle Tray 可执行文件路径
+- `brightness_fallback_order`：控制方案回退顺序
+- `brightness_strategy`：调节策略（`"fallback"` 成功即止 / `"all"` 全部执行）
 
 ### 自定义主题（字段命名规则）
 
@@ -167,22 +168,22 @@
     - `applicationN_name`：显示名称
     - `applicationN_checked`：是否启用
     - `applicationN_on_value` / `applicationN_off_value`：on/off 的命令或路径
-    - `applicationN_off_preset`：关闭预设（如 `kill`/`ignore`/`custom`）
-    - `applicationN_directoryN`：GUI 选择文件时写入的路径缓存（用于回显）
+    - `applicationN_off_preset`：关闭预设（如 `"kill"`/`"ignore"`/`"custom"`）
+    - `applicationN_directoryN`：GUI 选择文件时写入的路径缓存
 
 - 服务：`serveN*`（需要管理员权限）
     - `serveN_value` / `serveN_on_value`：服务名
-    - `serveN_off_preset`：如 `stop`
+    - `serveN_off_preset`：如 `"stop"`
 
 - 命令：`commandN*`
     - `commandN_on_value` / `commandN_off_value`：命令内容（支持 `{value}` 占位符）
     - `commandN_off_preset`：关闭预设
-    - `commandN_window`：窗口显示模式（如 `show`）
+    - `commandN_window`：窗口显示模式（如 `"show"`）
     - `commandN_value_min` / `commandN_value_max`：参数范围（用于 `on#数字` / `off#数字`）
 
 - 热键：`hotkeyN*`
-    - `hotkeyN_on_type` / `hotkeyN_off_type`：如 `keyboard` / `none`
-    - `hotkeyN_on_value` / `hotkeyN_off_value`：如 `ctrl+alt+s`
+    - `hotkeyN_on_type` / `hotkeyN_off_type`：如 `"keyboard"` / `"none"`
+    - `hotkeyN_on_value` / `hotkeyN_off_value`：如 `"ctrl+alt+s"`
     - `hotkeyN_char_delay_ms`：字符间隔（逐字符发送时）
 
 ## 主题说明（内置 + 自定义）
@@ -315,7 +316,7 @@ Set-ExecutionPolicy RemoteSigned
 
 ### 5) 找不到配置/日志
 
-- 配置：默认在程序同目录的 `config.json`
+- 配置：默认在程序同目录的 `config.toml` (旧版本可能存在 `config.json`，GUI 会自动迁移)
 - 构建日志：`logs/*.log`
 
 ## 反馈
