@@ -257,6 +257,7 @@ _ZH_TO_EN: dict[str, str] = {
     "{method} 亮度已设置为 {val}%": "{method} brightness set to {val}%",
     "执行测试时出错:\n{err}": "Error executing test:\n{err}",
     "自定义调节顺序:": "Custom Adjustment Order:",
+    "自定义控制方案": "Custom Control Scheme",
     "执行策略:": "Execution Strategy:",
     "同时执行 (all)": "Simultaneous (all)",
     "成功即止 (fallback)": "Stop on success (fallback)",
@@ -3777,44 +3778,6 @@ def _resolve_twinkle_tray_path_for_gui() -> str | None:
             return norm
     return None
 
-
-def check_brightness_support():
-    # 检查系统亮度调节支持（test模式开启时跳过检测）
-    global brightness_disabled, brightness_status_message
-    brightness_disabled = False
-    brightness_status_message = ""
-
-    mode = (config.get("brightness_mode", "wmi") or "wmi").lower()
-
-    if mode == "twinkle_tray":
-        path = _resolve_twinkle_tray_path_for_gui()
-        if path:
-            brightness_status_message = f"使用 Twinkle Tray 控制亮度: {path}"
-        else:
-            brightness_status_message = "Twinkle Tray 模式：未找到可执行文件，请在“更多”中设置路径或安装应用。"
-        return
-
-    if mode == "wmi_priority":
-        brightness_status_message = "WMI 优先模式：优先 WMI，失败则回退 Twinkle Tray。"
-    elif mode == "twinkle_priority":
-        brightness_status_message = "Twinkle Tray 优先模式：优先 Twinkle Tray，失败则回退 WMI。"
-    elif mode == "both":
-        brightness_status_message = "同时控制模式：WMI, WinRT 和 Twinkle Tray 将同时执行。"
-
-    if not ("config" in globals() and config.get("test", 0) == 1):
-        try:
-            import wmi
-
-            brightness_controllers = wmi.WMI(namespace="wmi").WmiMonitorBrightnessMethods()
-            if not brightness_controllers:
-                brightness_status_message = "系统未暴露 WMI 亮度接口，若需调节请在“更多”中切换到 Twinkle Tray。"
-            else:
-                brightness_status_message = "系统支持亮度调节(WMI)。"
-        except Exception as e:
-            brightness_status_message = f"检测亮度控制接口失败: {e}"
-    else:
-        brightness_status_message = "test模式已开启，未检测系统亮度调节支持。"
-
 def enable_sleep_window() -> None:
     """
     
@@ -4378,10 +4341,14 @@ def open_builtin_settings():
     def open_advanced_brightness_settings():
         adv_win = tk.Toplevel(win)
         adv_win.title(t("亮度调节设置"))
-        adv_win.geometry("600x680")
+        # 移除固定大小，改为自适应
+        adv_win.geometry("")
+        adv_win.resizable(True, True)
         adv_win.transient(win)
         adv_win.grab_set()
         
+        # 确保窗口计算完布局后再居中
+        adv_win.update_idletasks()
         try:
             center_window(adv_win, win)
         except Exception:
@@ -5004,7 +4971,6 @@ sleep_status_message = ""
 brightness_disabled = False
 brightness_status_message = ""
 sleep()
-check_brightness_support()
 
 for idx, theme in enumerate(builtin_themes):
     theme_key = theme["key"]
