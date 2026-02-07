@@ -227,5 +227,7 @@
     "已准备好要测试的命令：": "Ready to test command:",
     "按回车后执行": "Press Enter to run",
     "正在执行...": "Running...",
-    "发生错误: ": "Error: "
+    "发生错误: ": "Error: ",
+    "CA证书：": "CA Certificate:",
+    "校验证书": "Validate Certificate"
 }
