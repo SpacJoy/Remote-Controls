@@ -3,13 +3,11 @@
         {
             "name": "Win32",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "C:/msys64/mingw64/include",
+                "C:/msys64/mingw64/include/paho"
             ],
-            "defines": [
-                "_DEBUG",
-                "UNICODE",
-                "_UNICODE"
-            ],
+            "defines": ["_DEBUG", "UNICODE", "_UNICODE", "RC_USE_PAHO_MQTT"],
             "windowsSdkVersion": "10.0.26100.0",
             "compilerPath": "C:/msys64/mingw64/bin/gcc.exe",
             "cStandard": "c17",
