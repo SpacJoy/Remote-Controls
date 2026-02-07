@@ -209,6 +209,7 @@ _ZH_TO_EN: dict[str, str] = {
     "按键(Hotkey) 设置": "Hotkey settings",
     "录制": "Record",
     "字母段间隔(ms)：": "Char delay (ms):",
+    "(未测试，不保证生效)": "(untested, no guarantee)",
     "保存": "Save",
     "删除": "Delete",
 
@@ -2287,6 +2288,7 @@ def modify_custom_theme() -> None:
     ttk.Label(hotkey_frame_mod, text=t("字母段间隔(ms)：")).grid(row=2, column=0, sticky="e", padx=8, pady=4)
     hk_char_delay_entry_mod = ttk.Entry(hotkey_frame_mod, textvariable=hk_char_delay_var_mod, width=12)
     hk_char_delay_entry_mod.grid(row=2, column=1, sticky="w")
+    ttk.Label(hotkey_frame_mod, text=t("(未测试，不保证生效)")).grid(row=2, column=2, columnspan=2, sticky="w")
 
     def _on_hk_on_type_selected_mod(_event=None):
         hk_on_type_key_var_mod.set(_hk_type_key_by_label_mod(hk_on_type_var_mod.get()))
@@ -2968,6 +2970,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     ttk.Label(hotkey_frame_add, text=t("字母段间隔(ms)：")).grid(row=2, column=0, sticky="e", padx=8, pady=4)
     hk_char_delay_entry_add = ttk.Entry(hotkey_frame_add, textvariable=hk_char_delay_var_add, width=12)
     hk_char_delay_entry_add.grid(row=2, column=1, sticky="w")
+    ttk.Label(hotkey_frame_add, text=t("(未测试，不保证生效)")).grid(row=2, column=2, columnspan=2, sticky="w")
 
     def _on_hk_on_type_selected_add(_event=None):
         hk_on_type_key_var_add.set(_hk_type_key_by_label_add(hk_on_type_var_add.get()))
@@ -4903,8 +4906,6 @@ def open_builtin_settings():
     # 分隔线
     ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
     row_i += 1
-
-    # 移除：按键(Hotkey) 主题设置（改由自定义主题管理）
 
     def save_builtin_settings():
         try:
