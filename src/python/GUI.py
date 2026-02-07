@@ -271,7 +271,7 @@ def _apply_language_everywhere() -> None:
     # 已打开的 Toplevel
     try:
         for w in root.winfo_children():
-            if isinstance(w, tk.Toplevel):
+            if isinstance(w, tk.Toplevel) and w.winfo_exists():
                 apply_language_to_widgets(w)
     except Exception:
         pass
@@ -286,6 +286,25 @@ def _apply_language_everywhere() -> None:
             except Exception:
                 pass
         _LANG_OBSERVERS[:] = alive
+    except Exception:
+        pass
+
+    # 最后统一触发一次自适应宽度更新
+    try:
+        # 主窗口自适应
+        root.update_idletasks()
+        root.geometry("")
+
+        for w in root.winfo_children():
+            if isinstance(w, tk.Toplevel) and w.winfo_exists():
+                try:
+                    w.update_idletasks()
+                    # 只有当窗口不是固定大小时才尝试自动调整
+                    # 或者对于我们的设置窗口，强制自适应一次
+                    w.geometry("")
+                    w.update_idletasks()
+                except Exception:
+                    pass
     except Exception:
         pass
 
@@ -474,29 +493,20 @@ def check_and_request_uac():
     if IS_GUI_ADMIN:
         return True
     
-    try:
-        # 询问用户是否要提权
-        if messagebox.askyesno(t("管理员权限"), t("程序未获得管理员权限。\n是否立即请求管理员权限？\n\n选择'是'将重新启动程序并请求管理员权限。")):
-            # 以管理员权限重新启动程序
-            return restart_self_as_admin()
-        else:
-            return False
-        
-    except Exception as e:
-        messagebox.showerror(t("管理员权限"), t(f"提权失败: {e}"))
-        return False
+    return False
 
 def startup_admin_check():
     """启动时进行管理员权限检查和自动提权"""
     try:
         # 检查并请求提权（如果需要的话）
         admin_result = check_and_request_uac()
-        if admin_result is False:  # 明确检查False，因为None表示其他情况
-            messagebox.showinfo(t("管理员权限"), t("未进行提权或提权失败，程序将以当前权限继续运行"))
+        # if admin_result is False:  # 明确检查False，因为None表示其他情况
+        #     messagebox.showinfo(t("管理员权限"), t("未进行提权或提权失败，程序将以当前权限继续运行"))
         # 如果admin_result是True，说明已经有管理员权限
         # 如果函数内部重启了程序，这里的代码不会执行到
     except Exception as e:
-        messagebox.showerror(t("管理员权限检查"), t(f"管理员权限检查过程中出现异常: {e}"))
+        # messagebox.showerror(t("管理员权限检查"), t(f"管理员权限检查过程中出现异常: {e}"))
+        pass
 
 
 # DPI 与字体优化
@@ -1519,12 +1529,10 @@ def modify_custom_theme() -> None:
 
     theme_window = tk.Toplevel(root)
     theme_window.title(t("修改自定义主题"))
-    # 增加默认高度
-    try:
-        w, h = _scaled_size(theme_window, 780, 360)
-        theme_window.geometry(f"{w}x{h}")
-    except Exception:
-        pass
+    # 设置自适应
+    theme_window.geometry("")
+    theme_window.resizable(True, True)
+    
     PADX = 10
     PADY = 6
     # 允许窗口大小调整，并设置网格权重使输入控件随窗口拉伸
@@ -2279,12 +2287,10 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     """
     theme_window = tk.Toplevel(root)
     theme_window.title(t("添加自定义主题"))
-    # 增加默认高度
-    try:
-        w, h = _scaled_size(theme_window, 780, 360)
-        theme_window.geometry(f"{w}x{h}")
-    except Exception:
-        pass
+    # 设置自适应
+    theme_window.geometry("")
+    theme_window.resizable(True, True)
+    
     PADX = 10
     PADY = 6
     # 允许窗口大小调整，并设置网格权重使输入控件随窗口拉伸
@@ -4077,7 +4083,20 @@ ttk.Label(theme_frame, text=t("内置")).grid(row=0, column=0, sticky="w", padx=
 def open_builtin_settings():
     win = tk.Toplevel(root)
     win.title(t("内置主题设置"))
-    # win.resizable(False, False)
+    # 设置自适应
+    win.geometry("")
+    win.resizable(True, True)
+    
+    # 设置自适应框架
+    win.columnconfigure(0, weight=1)
+    win.rowconfigure(0, weight=1)
+    
+    main_frame = ttk.Frame(win, padding=10)
+    main_frame.grid(row=0, column=0, sticky="nsew")
+    
+    # 配置 main_frame 的列权重
+    for i in range(4):
+        main_frame.columnconfigure(i, weight=1)
 
     # 计算机主题动作（去除与睡眠主题重复的“睡眠/休眠”）
     actions = [
@@ -4107,39 +4126,39 @@ def open_builtin_settings():
     cur_off_delay = int(config.get("computer_off_delay", 0) or 0)
 
     row_i = 0
-    ttk.Label(win, text=t("系统 (Computer) 控制")).grid(row=row_i, column=0, columnspan=3, padx=10, pady=(10, 6), sticky="w")
+    ttk.Label(main_frame, text=t("系统 (Computer) 控制")).grid(row=row_i, column=0, columnspan=3, padx=10, pady=(10, 6), sticky="w")
     row_i += 1
 
-    ttk.Label(win, text=t("打开(on)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(main_frame, text=t("打开(on)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     on_key_var = tk.StringVar(value=cur_on)
     on_var = tk.StringVar(value=_action_label_by_key(cur_on, "lock"))
-    on_combo = ttk.Combobox(win, values=_action_labels(), textvariable=on_var, state="readonly", width=18)
+    on_combo = ttk.Combobox(main_frame, values=_action_labels(), textvariable=on_var, state="readonly", width=18)
     on_combo.bind("<<ComboboxSelected>>", lambda e: on_key_var.set(_action_key_by_label(on_var.get())))
     on_combo.grid(row=row_i, column=1, sticky="w")
-    ttk.Label(win, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
+    ttk.Label(main_frame, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
     on_delay_var = tk.StringVar(value=str(cur_on_delay))
-    on_delay_entry = ttk.Entry(win, textvariable=on_delay_var, width=8)
+    on_delay_entry = ttk.Entry(main_frame, textvariable=on_delay_var, width=8)
     on_delay_entry.grid(row=row_i, column=3, sticky="w")
     row_i += 1
 
-    ttk.Label(win, text=t("关闭(off)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(main_frame, text=t("关闭(off)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     off_key_var = tk.StringVar(value=cur_off)
     off_var = tk.StringVar(value=_action_label_by_key(cur_off, "restart"))
-    off_combo = ttk.Combobox(win, values=_action_labels(), textvariable=off_var, state="readonly", width=18)
+    off_combo = ttk.Combobox(main_frame, values=_action_labels(), textvariable=off_var, state="readonly", width=18)
     off_combo.bind("<<ComboboxSelected>>", lambda e: off_key_var.set(_action_key_by_label(off_var.get())))
     off_combo.grid(row=row_i, column=1, sticky="w")
-    ttk.Label(win, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
+    ttk.Label(main_frame, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
     off_delay_var = tk.StringVar(value=str(cur_off_delay))
-    off_delay_entry = ttk.Entry(win, textvariable=off_delay_var, width=8)
+    off_delay_entry = ttk.Entry(main_frame, textvariable=off_delay_var, width=8)
     off_delay_entry.grid(row=row_i, column=3, sticky="w")
     row_i += 1
 
-    tip = ttk.Label(win, text=t("提示：延时仅在执行关机或重启时生效，其它动作将立即执行。"))
+    tip = ttk.Label(main_frame, text=t("提示：延时仅在执行关机或重启时生效，其它动作将立即执行。"))
     tip.grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
     row_i += 1
 
     # 亮度控制方案
-    ttk.Label(win, text=t("显示器亮度调节方案")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
+    ttk.Label(main_frame, text=t("显示器亮度调节方案")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
     row_i += 1
 
     def open_advanced_brightness_settings():
@@ -4151,12 +4170,16 @@ def open_builtin_settings():
         adv_win.transient(win)
         adv_win.grab_set()
         
-        # 确保窗口计算完布局后再居中
-        adv_win.update_idletasks()
-        try:
-            center_window(adv_win, win)
-        except Exception:
-            pass
+        # 设置自适应框架
+        adv_win.columnconfigure(0, weight=1)
+        adv_win.rowconfigure(0, weight=1)
+        
+        adv_main_frame = ttk.Frame(adv_win, padding=10)
+        adv_main_frame.grid(row=0, column=0, sticky="nsew")
+        
+        # 配置 adv_main_frame 的列权重
+        for i in range(3):
+            adv_main_frame.columnconfigure(i, weight=1)
 
         adv_row = 0
         
@@ -4314,9 +4337,9 @@ def open_builtin_settings():
             except Exception as e:
                 messagebox.showerror(t("测试失败"), f"执行测试时出错:\n{str(e)}")
 
-        ttk.Label(adv_win, text=t("控制模式:")).grid(row=adv_row, column=0, padx=10, pady=10, sticky="nw")
+        ttk.Label(adv_main_frame, text=t("控制模式:")).grid(row=adv_row, column=0, padx=10, pady=10, sticky="nw")
         
-        cb_frame = ttk.Frame(adv_win)
+        cb_frame = ttk.Frame(adv_main_frame)
         cb_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, pady=10, sticky="w")
         
         # WMI row
@@ -4339,14 +4362,14 @@ def open_builtin_settings():
         
         adv_row += 1
 
-        ttk.Separator(adv_win, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=5)
+        ttk.Separator(adv_main_frame, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=5)
         adv_row += 1
 
         # 2. Custom Order
-        ttk.Label(adv_win, text=t("自定义调节顺序:")).grid(row=adv_row, column=0, columnspan=2, padx=10, pady=(5, 5), sticky="w")
+        ttk.Label(adv_main_frame, text=t("自定义调节顺序:")).grid(row=adv_row, column=0, columnspan=2, padx=10, pady=(5, 5), sticky="w")
         adv_row += 1
         
-        list_frame = ttk.Frame(adv_win)
+        list_frame = ttk.Frame(adv_main_frame)
         list_frame.grid(row=adv_row, column=1, columnspan=1, padx=10, pady=0, sticky="ew")
         
         custom_list_str = config.get("brightness_custom_list", "wmi,dxva2,twinkle_tray") or "wmi,dxva2,twinkle_tray"
@@ -4399,7 +4422,7 @@ def open_builtin_settings():
         ttk.Button(btn_frame, text="↓", width=3, command=move_down).pack(pady=2)
         adv_row += 1
 
-        ttk.Label(adv_win, text=t("执行策略:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Label(adv_main_frame, text=t("执行策略:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
         
         strat_options = [("all", "同时执行 (all)"), ("fallback", "成功即止 (fallback)")]
         strat_key_var = tk.StringVar(value=config.get("brightness_custom_strategy", "all"))
@@ -4411,7 +4434,7 @@ def open_builtin_settings():
         
         strat_lbl_var = tk.StringVar(value=_get_strat_label(strat_key_var.get()))
         
-        strat_cb = ttk.Combobox(adv_win, textvariable=strat_lbl_var, values=[t(l) for k, l in strat_options], state="readonly", width=28)
+        strat_cb = ttk.Combobox(adv_main_frame, textvariable=strat_lbl_var, values=[t(l) for k, l in strat_options], state="readonly", width=28)
         strat_cb.grid(row=adv_row, column=1, padx=10, pady=5, sticky="w")
         
         def _on_strat_change(e):
@@ -4423,33 +4446,33 @@ def open_builtin_settings():
         strat_cb.bind("<<ComboboxSelected>>", _on_strat_change)
         adv_row += 1
 
-        ttk.Separator(adv_win, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
+        ttk.Separator(adv_main_frame, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
         adv_row += 1
 
         # 3. Targets
-        ttk.Label(adv_win, text="WMI " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Label(adv_main_frame, text="WMI " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
         wmi_target = tk.StringVar(value=config.get("wmi_target", "all"))
-        wmi_target_frame = ttk.Frame(adv_win)
+        wmi_target_frame = ttk.Frame(adv_main_frame)
         wmi_target_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, sticky="w")
         ttk.Entry(wmi_target_frame, textvariable=wmi_target, width=15).pack(side="left", padx=(0, 5))
         ttk.Button(wmi_target_frame, text=t("所有"), width=5, command=lambda: wmi_target.set("all")).pack(side="left")
         ttk.Label(wmi_target_frame, text=t("('all' 或 索引 0, 1...)")).pack(side="left", padx=5)
         adv_row += 1
         
-        ttk.Label(adv_win, text="Dxva2 " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Label(adv_main_frame, text="Dxva2 " + t("目标:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
         dxva2_target = tk.StringVar(value=config.get("dxva2_target", "all"))
-        dxva2_target_frame = ttk.Frame(adv_win)
+        dxva2_target_frame = ttk.Frame(adv_main_frame)
         dxva2_target_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, sticky="w")
         ttk.Entry(dxva2_target_frame, textvariable=dxva2_target, width=15).pack(side="left", padx=(0, 5))
         ttk.Button(dxva2_target_frame, text=t("所有"), width=5, command=lambda: dxva2_target.set("all")).pack(side="left")
         ttk.Label(dxva2_target_frame, text=t("('all' 或 索引 0, 1...)")).pack(side="left", padx=5)
         adv_row += 1
 
-        ttk.Separator(adv_win, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
+        ttk.Separator(adv_main_frame, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
         adv_row += 1
 
         # 4. Twinkle Tray
-        tt_header_frame = ttk.Frame(adv_win)
+        tt_header_frame = ttk.Frame(adv_main_frame)
         tt_header_frame.grid(row=adv_row, column=0, columnspan=3, sticky="ew")
         ttk.Label(tt_header_frame, text="Twinkle Tray " + t("配置:")).pack(side="left", padx=10, pady=5)
         
@@ -4464,8 +4487,8 @@ def open_builtin_settings():
 
         default_tt = r"%LocalAppData%\Programs\twinkle-tray\Twinkle Tray.exe"
         tt_path = tk.StringVar(value=config.get("twinkle_tray_path", "") or default_tt)
-        ttk.Label(adv_win, text=t("路径:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
-        ttk.Entry(adv_win, textvariable=tt_path).grid(row=adv_row, column=1, padx=10, pady=5, sticky="ew")
+        ttk.Label(adv_main_frame, text=t("路径:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Entry(adv_main_frame, textvariable=tt_path).grid(row=adv_row, column=1, padx=10, pady=5, sticky="ew")
         
         def browse_tt():
             try:
@@ -4473,7 +4496,7 @@ def open_builtin_settings():
                 if p: tt_path.set(p)
             except Exception as e:
                 messagebox.showerror(t("错误"), str(e))
-        ttk.Button(adv_win, text=t("选择"), width=5, command=browse_tt).grid(row=adv_row, column=2, padx=5, sticky="w")
+        ttk.Button(adv_main_frame, text=t("选择"), width=5, command=browse_tt).grid(row=adv_row, column=2, padx=5, sticky="w")
         adv_row += 1
         
         tt_modes = [("monitor_num", "按编号 (MonitorNum)"), ("monitor_id", "按 ID (MonitorID)"), ("all", "全部显示器 (All)")]
@@ -4485,16 +4508,14 @@ def open_builtin_settings():
             return t("按编号 (MonitorNum)")
         tt_mode_lbl = tk.StringVar(value=_get_tt_label(tt_mode_key.get()))
         
-        ttk.Label(adv_win, text=t("目标模式:")).grid(row=adv_row, column=0, padx=10, sticky="e")
-        tm_cb = ttk.Combobox(adv_win, textvariable=tt_mode_lbl, values=[t(l) for k,l in tt_modes], state="readonly", width=28)
+        ttk.Label(adv_main_frame, text=t("目标模式:")).grid(row=adv_row, column=0, padx=10, sticky="e")
+        tm_cb = ttk.Combobox(adv_main_frame, textvariable=tt_mode_lbl, values=[t(l) for k,l in tt_modes], state="readonly", width=28)
         tm_cb.grid(row=adv_row, column=1, padx=10, sticky="w")
         
         tt_val = tk.StringVar(value=config.get("twinkle_tray_target_value", "1"))
-        ttk.Label(adv_win, text=t("目标值:")).grid(row=adv_row + 1, column=0, padx=10, pady=5, sticky="e")
-        tt_val_entry = ttk.Entry(adv_win, textvariable=tt_val)
+        ttk.Label(adv_main_frame, text=t("目标值:")).grid(row=adv_row + 1, column=0, padx=10, pady=5, sticky="e")
+        tt_val_entry = ttk.Entry(adv_main_frame, textvariable=tt_val)
         tt_val_entry.grid(row=adv_row + 1, column=1, padx=10, pady=5, sticky="ew")
-        tt_val_entry = ttk.Entry(adv_win, textvariable=tt_val)
-        tt_val_entry.grid(row=adv_row + 1, column=1, padx=10, sticky="ew")
 
         def _update_tt_val_state(*args):
             if tt_mode_key.get() == "all":
@@ -4515,7 +4536,7 @@ def open_builtin_settings():
         _update_tt_val_state() # Initial state
         
         tt_overlay = tk.IntVar(value=int(config.get("twinkle_tray_overlay", 1) or 0))
-        ttk.Checkbutton(adv_win, text=t("显示亮度叠加层(Overlay)"), variable=tt_overlay, command=_update_tt_val_state).grid(row=adv_row, column=1, sticky="w", padx=10)
+        ttk.Checkbutton(adv_main_frame, text=t("显示亮度叠加层(Overlay)"), variable=tt_overlay, command=_update_tt_val_state).grid(row=adv_row, column=1, sticky="w", padx=10)
         adv_row += 1
 
         # Toggle state based on mode
@@ -4580,16 +4601,72 @@ def open_builtin_settings():
 
             adv_win.destroy()
             
-        btn_frame = ttk.Frame(adv_win)
+        btn_frame = ttk.Frame(adv_main_frame)
         btn_frame.grid(row=adv_row+1, column=0, columnspan=3, pady=20)
         ttk.Button(btn_frame, text=t("保存"), command=save).pack(side="left", padx=10)
         ttk.Button(btn_frame, text=t("取消"), command=adv_win.destroy).pack(side="left", padx=10)
 
-    ttk.Button(win, text=t("打开亮度调节设置"), command=open_advanced_brightness_settings).grid(row=row_i, column=1, columnspan=2, sticky="w", padx=10)
+        def _apply_lang_to_adv_win() -> None:
+            if not adv_win.winfo_exists():
+                return
+            try:
+                adv_win.title(t("亮度调节设置"))
+            except Exception:
+                pass
+            
+            # 更新 Combobox 和 Listbox 的动态文本
+            try:
+                # 1. 策略 Combobox
+                strat_cb.configure(values=[t(l) for k, l in strat_options])
+                strat_lbl_var.set(_get_strat_label(strat_key_var.get()))
+                 
+                # 2. Twinkle Tray 模式 Combobox
+                tm_cb.configure(values=[t(l) for k, l in tt_modes])
+                tt_mode_lbl.set(_get_tt_label(tt_mode_key.get()))
+                 
+                # 3. 调节顺序 Listbox
+                # 保存当前选择
+                current_sel = lb.curselection()
+                current_items = lb.get(0, tk.END)
+                keys = [rev_display_map.get(item) for item in current_items]
+                
+                # 更新映射
+                nonlocal display_map, rev_display_map
+                display_map = {
+                    "wmi": t("wmi（系统 WMI 接口）"),
+                    "dxva2": t("dxva2（物理显示器 DDC/CI）"),
+                    "twinkle_tray": t("twinkle_tray（第三方接口）")
+                }
+                rev_display_map = {v: k for k, v in display_map.items()}
+                
+                # 重新填充
+                lb.delete(0, tk.END)
+                for k in keys:
+                    if k in display_map:
+                        lb.insert(tk.END, display_map[k])
+                
+                # 恢复选择
+                if current_sel:
+                    lb.selection_set(current_sel)
+            except Exception:
+                pass
+
+        register_lang_observer(lambda: (_apply_lang_to_adv_win(), apply_language_to_widgets(adv_win)))
+        _apply_lang_to_adv_win()
+        apply_language_to_widgets(adv_win)
+
+        # 确保窗口计算完布局后再居中
+        adv_win.update_idletasks()
+        try:
+            center_window(adv_win, win)
+        except Exception:
+            pass
+
+    ttk.Button(main_frame, text=t("打开亮度调节设置"), command=open_advanced_brightness_settings).grid(row=row_i, column=1, columnspan=2, sticky="w", padx=10)
     row_i += 1
 
     # 分隔线
-    ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(10, 10))
+    ttk.Separator(main_frame, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(10, 10))
     row_i += 1
 
     # 睡眠主题设置
@@ -4632,40 +4709,40 @@ def open_builtin_settings():
     s_cur_on_delay = int(config.get("sleep_on_delay", 0) or 0)
     s_cur_off_delay = int(config.get("sleep_off_delay", 0) or 0)
 
-    ttk.Label(win, text=t("睡眠/电源 (Sleep) 动作")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
+    ttk.Label(main_frame, text=t("睡眠/电源 (Sleep) 动作")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
     row_i += 1
 
-    ttk.Label(win, text=t("打开(on)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(main_frame, text=t("打开(on)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     s_on_key_var = tk.StringVar(value=s_cur_on)
     s_on_var = tk.StringVar(value=_s_on_label_by_key(s_cur_on))
-    s_on_combo = ttk.Combobox(win, values=_s_on_labels(), textvariable=s_on_var, state="readonly", width=18)
+    s_on_combo = ttk.Combobox(main_frame, values=_s_on_labels(), textvariable=s_on_var, state="readonly", width=18)
     s_on_combo.grid(row=row_i, column=1, sticky="w")
     s_on_combo.bind("<<ComboboxSelected>>", lambda e: s_on_key_var.set(_s_on_key_by_label(s_on_var.get())))
-    ttk.Label(win, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
+    ttk.Label(main_frame, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
     s_on_delay_var = tk.StringVar(value=str(s_cur_on_delay))
-    ttk.Entry(win, textvariable=s_on_delay_var, width=8).grid(row=row_i, column=3, sticky="w")
+    ttk.Entry(main_frame, textvariable=s_on_delay_var, width=8).grid(row=row_i, column=3, sticky="w")
     row_i += 1
 
-    ttk.Label(win, text=t("关闭(off)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
+    ttk.Label(main_frame, text=t("关闭(off)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     s_off_key_var = tk.StringVar(value=s_cur_off)
     s_off_var = tk.StringVar(value=_s_off_label_by_key(s_cur_off))
-    s_off_combo = ttk.Combobox(win, values=_s_off_labels(), textvariable=s_off_var, state="readonly", width=18)
+    s_off_combo = ttk.Combobox(main_frame, values=_s_off_labels(), textvariable=s_off_var, state="readonly", width=18)
     s_off_combo.grid(row=row_i, column=1, sticky="w")
     s_off_combo.bind("<<ComboboxSelected>>", lambda e: s_off_key_var.set(_s_off_key_by_label(s_off_var.get())))
-    ttk.Label(win, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
+    ttk.Label(main_frame, text=t("动作延时 (秒)：")).grid(row=row_i, column=2, sticky="e", padx=8)
     s_off_delay_var = tk.StringVar(value=str(s_cur_off_delay))
-    ttk.Entry(win, textvariable=s_off_delay_var, width=8).grid(row=row_i, column=3, sticky="w")
+    ttk.Entry(main_frame, textvariable=s_off_delay_var, width=8).grid(row=row_i, column=3, sticky="w")
     row_i += 1
 
-    ttk.Label(win, text=t("提示：动作将在等待指定的延时秒数后执行。")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
+    ttk.Label(main_frame, text=t("提示：动作将在等待指定的延时秒数后执行。")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
     row_i += 1
 
     # 分隔线（睡眠动作 与 睡眠功能开关）
-    ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
+    ttk.Separator(main_frame, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
     row_i += 1
 
     # 睡眠支持操作：将启用/关闭睡眠功能搬到“更多”中
-    op_frame = ttk.Frame(win)
+    op_frame = ttk.Frame(main_frame)
     op_frame.grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 10), sticky="w")
     ttk.Label(op_frame, text=t("系统休眠/睡眠功能开关：")).grid(row=0, column=0, sticky="w")
     ttk.Label(op_frame, text=t("注：此操作需要管理员权限")).grid(row=0, column=1, sticky="n")
@@ -4675,7 +4752,7 @@ def open_builtin_settings():
     row_i += 1
 
     # 分隔线
-    ttk.Separator(win, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
+    ttk.Separator(main_frame, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
     row_i += 1
 
     def save_builtin_settings():
@@ -4726,7 +4803,7 @@ def open_builtin_settings():
         except Exception as e:
             messagebox.showerror(t("错误"), t(f"保存失败: {e}"))
 
-    btn_frame = ttk.Frame(win)
+    btn_frame = ttk.Frame(main_frame)
     btn_frame.grid(row=row_i, column=0, columnspan=4, pady=(0, 10))
     ttk.Button(btn_frame, text=t("保存"), command=save_builtin_settings).grid(row=0, column=0, padx=6)
     ttk.Button(btn_frame, text=t("取消"), command=win.destroy).grid(row=0, column=1, padx=6)
