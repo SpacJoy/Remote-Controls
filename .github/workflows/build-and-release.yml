@@ -229,7 +229,14 @@ jobs:
                     }
                   }
 
-                  echo "version=$($resolved.Build)" >> $env:GITHUB_OUTPUT
+                  $finalOutVersion = $resolved.Build
+                  if ($isTagPush -or "${{ github.event_name }}" -eq "workflow_dispatch") {
+                    $finalOutVersion = $resolved.Raw
+                  } elseif ($resolved.IsTest -and ($finalOutVersion -notmatch '-test')) {
+                    $finalOutVersion = "$finalOutVersion-test"
+                  }
+
+                  echo "version=$finalOutVersion" >> $env:GITHUB_OUTPUT
                   echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
                   echo "old_tag_name=$oldTagName" >> $env:GITHUB_OUTPUT
                   echo "should_rename_tag=$shouldRenameTag" >> $env:GITHUB_OUTPUT
@@ -237,7 +244,7 @@ jobs:
                   echo "is_test_tag=$($resolved.IsTest.ToString().ToLower())" >> $env:GITHUB_OUTPUT
                   echo "skip_job=$skipJob" >> $env:GITHUB_OUTPUT
 
-                  echo "构建版本: $($resolved.Build)"
+                  echo "构建版本: $finalOutVersion"
                   echo "标签名称: $tagName"
                   echo "原始标签: $oldTagName"
                   echo "是否重命名标签: $shouldRenameTag"

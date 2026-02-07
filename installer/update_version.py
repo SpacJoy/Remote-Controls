@@ -48,7 +48,14 @@ def update_version_info(version=None):
     
     # 解析版本号
     try:
-        parts = version.split('.')
+        # 分离版本号和后缀 (例如 "1.2.3-test" -> "1.2.3", "test")
+        main_version = version
+        suffix = ""
+        if '-' in version:
+            main_version, suffix = version.split('-', 1)
+            suffix = "-" + suffix
+
+        parts = main_version.split('.')
         if len(parts) < 3:
             parts.extend(['0'] * (3 - len(parts))) # type: ignore
         major, minor, patch = parts[0:3]
@@ -58,10 +65,10 @@ def update_version_info(version=None):
     except (ValueError, IndexError):
         try:
             print(f"错误：版本号格式不正确: {version}")
-            print("正确格式: X.Y.Z 或 X.Y.Z.B")
+            print("正确格式: X.Y.Z 或 X.Y.Z.B，支持 -test 后缀")
         except UnicodeEncodeError:
             print(f"Error: Invalid version format: {version}")
-            print("Correct format: X.Y.Z or X.Y.Z.B")
+            print("Correct format: X.Y.Z or X.Y.Z.B, supports -test suffix")
         return False
     
     # 生成版本文件内容
@@ -175,7 +182,7 @@ if __name__ == "__main__":
                 # 将 BANBEN = "Vx.y.z" 替换为基于 version_info 的读取
                 # 但若项目已改为动态读取，则此替换不会生效（无 BANBEN 常量或已改造）。
                 new_src = re.sub(
-                    r'BANBEN\s*=\s*"V[\d\.]+"',
+                    r'BANBEN\s*=\s*"V[\d\.\w-]+"',
                     f'BANBEN = "V{version}"',
                     new_src
                 )

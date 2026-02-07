@@ -375,13 +375,7 @@ def get_administrator_privileges() -> None:
         
         if result:
             # 重新启动程序，请求管理员权限
-            ret = ctypes.windll.shell32.ShellExecuteW(
-                None, "runas", sys.executable, f'"{__file__}"', None, 1
-            )
-            # 只有在成功启动新进程时才退出当前程序
-            if ret > 32:  # ShellExecuteW 返回值大于32表示成功
-                sys.exit()
-            else:
+            if not restart_self_as_admin():
                 messagebox.showwarning(
                     t("权限提醒"), 
                     t("授权被取消或失败。\n\n"
@@ -3701,8 +3695,6 @@ except Exception:
 # 创建主窗口前启用 DPI 感知
 _enable_dpi_awareness()
 
-# 启动时检查管理员权限并请求提权（已启用 DPI/字体，避免提示窗模糊）
-check_and_request_uac()
 # 创建主窗口
 root = tk.Tk()
 _set_root_title()
