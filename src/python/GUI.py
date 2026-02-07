@@ -3892,13 +3892,8 @@ def _on_language_change(_event=None) -> None:
         pass
     _apply_language_everywhere()
     
-    # 持久化语言设置
+    # 更新内存中的语言设置
     config["language"] = LANG
-    try:
-        nested_config = unflatten_config(config)
-        save_config_toml(nested_config, config_toml_path)
-    except Exception:
-        pass
 
 language_combo.bind("<<ComboboxSelected>>", _on_language_change)
 _sync_language_combo()
