@@ -4,10 +4,19 @@
 
 ---
 
-# V3.1.1 (2026-02-07)
+# V3.2.0 (2026-02-07)
 
-**配置系统重构、国际化增强与 CI/CD 流程优化**  
-Full Changelog (相对于 3.1.0): <https://github.com/SpacJoy/Remote-Controls/compare/V3.0.2...V3.1.1>
+**配置系统重构、版本号显示优化、国际化增强与 CI/CD 流程优化**  
+Full Changelog (相对于 3.1.0): <https://github.com/SpacJoy/Remote-Controls/compare/V3.0.2...V3.2.0>
+
+## 🏷️ 版本号系统升级
+
+- **支持测试后缀**：版本号处理逻辑现在原生支持 `-test` 后缀（如 `3.2.0-test`, `3.2.0-test2` 等）。
+- **CI/CD 版本自动化**：
+  - `dev` 分支推送的构建产物现在会自动带上 `-test` 后缀。
+  - 支持从标签或工作流输入中直接提取并保留带后缀的版本号。
+- **解析逻辑优化**：改进了 `update_version.py` 的解析算法，确保在保留字符串后缀的同时，数字版本元组（Major.Minor.Patch.Build）依然能被正确解析。
+- **GUI 显示适配**：版本号显示正则现在兼容带字母和中划线的后缀。
 
 ## 🌍 国际化与多语言 (i18n)
 
