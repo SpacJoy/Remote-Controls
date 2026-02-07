@@ -479,7 +479,7 @@ def restart_self_as_admin():
                     time.sleep(0.1)
             os._exit(0)
         else:
-            messagebox.showwarning(t("UAC提权"), t(f"获取管理员权限失败，错误码: {result}"))
+            # UAC 被拒绝或失败，返回 False 让程序继续以普通权限运行
             return False
             
     except Exception as e:
@@ -493,19 +493,15 @@ def check_and_request_uac():
     if IS_GUI_ADMIN:
         return True
     
-    return False
+    # 自动尝试以管理员权限重启
+    return restart_self_as_admin()
 
 def startup_admin_check():
     """启动时进行管理员权限检查和自动提权"""
     try:
-        # 检查并请求提权（如果需要的话）
-        admin_result = check_and_request_uac()
-        # if admin_result is False:  # 明确检查False，因为None表示其他情况
-        #     messagebox.showinfo(t("管理员权限"), t("未进行提权或提权失败，程序将以当前权限继续运行"))
-        # 如果admin_result是True，说明已经有管理员权限
-        # 如果函数内部重启了程序，这里的代码不会执行到
-    except Exception as e:
-        # messagebox.showerror(t("管理员权限检查"), t(f"管理员权限检查过程中出现异常: {e}"))
+        # 检查并请求提权
+        check_and_request_uac()
+    except Exception:
         pass
 
 
@@ -4936,6 +4932,9 @@ root.columnconfigure(0, weight=1)
 
 # 调用加载自定义主题的函数
 load_custom_themes()
+
+# 启动时管理员权限检查与自动提权
+startup_admin_check()
 
 # 初始应用一次语言（确保 LabelFrame/heading/按钮在英文模式下生效）
 _apply_language_everywhere()
