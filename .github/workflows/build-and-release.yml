@@ -117,7 +117,21 @@ jobs:
 
                     if ($onDev -and ($tagName -notmatch '-test')) {
                       $oldTagName = $tagName
-                      $tagName = "$tagName-test"
+                      $baseTagName = $tagName
+                      $targetTag = "$baseTagName-test"
+                      
+                      # 检查远程是否存在该标签，如果存在则递增后缀
+                      # 使用 git ls-remote 检查远程标签最准确
+                      $suffix = 1
+                      $maxTries = 20
+                      while ($suffix -lt $maxTries) {
+                        $exists = git ls-remote --tags origin $targetTag
+                        if (-not $exists) { break }
+                        $suffix++
+                        $targetTag = "$baseTagName-test$suffix"
+                      }
+                      
+                      $tagName = $targetTag
                       $shouldRenameTag = "true"
                       echo "检测到在 dev 分支推送了正式标签，将重命名标签 (从 $oldTagName 到 $tagName)"
                     }
@@ -136,7 +150,7 @@ jobs:
                     if ("${{ github.ref_name }}" -eq "dev") {
                       $tags = git tag --points-at HEAD
                       if ($tags -match 'V\d+') {
-                        echo "检测到当前 commit 已有版本标签 ($tags)，跳过 dev 分支触发的构建以避免重复"
+                        echo "检测到当前 commit 已有版本标签 ($tags)，此分支推送将由标签触发的工作流处理，当前任务跳过以避免重复构建"
                         $skipJob = "true"
                       }
                     }
