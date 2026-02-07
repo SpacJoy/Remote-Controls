@@ -3882,7 +3882,14 @@ def _on_language_change(_event=None) -> None:
     except Exception:
         pass
     _apply_language_everywhere()
-    save_config()
+    
+    # 持久化语言设置
+    config["language"] = LANG
+    try:
+        nested_config = unflatten_config(config)
+        save_config_toml(nested_config, config_toml_path)
+    except Exception:
+        pass
 
 language_combo.bind("<<ComboboxSelected>>", _on_language_change)
 _sync_language_combo()
