@@ -47,6 +47,8 @@ jobs:
             tag_name: ${{ steps.version.outputs.tag_name }}
             is_tag_push: ${{ steps.version.outputs.is_tag_push }}
             is_test_tag: ${{ steps.version.outputs.is_test_tag }}
+            old_tag_name: ${{ steps.version.outputs.old_tag_name }}
+            should_rename_tag: ${{ steps.version.outputs.should_rename_tag }}
             skip_job: ${{ steps.version.outputs.skip_job }}
         steps:
             - name: Checkout code
@@ -92,6 +94,8 @@ jobs:
                   }
 
                   $tagName = ""
+                  $oldTagName = ""
+                  $shouldRenameTag = "false"
                   $isTagPush = $false
                   $skipJob = "false"
                   $resolved = $null
@@ -112,8 +116,10 @@ jobs:
                     }
 
                     if ($onDev -and ($tagName -notmatch '-test')) {
+                      $oldTagName = $tagName
                       $tagName = "$tagName-test"
-                      echo "检测到在 dev 分支推送了正式标签，强制追加 -test 后缀: $tagName"
+                      $shouldRenameTag = "true"
+                      echo "检测到在 dev 分支推送了正式标签，将重命名标签 (从 $oldTagName 到 $tagName)"
                     }
 
                     $resolved = Resolve-VersionFromTagName -TagName $tagName
@@ -211,12 +217,16 @@ jobs:
 
                   echo "version=$($resolved.Build)" >> $env:GITHUB_OUTPUT
                   echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
+                  echo "old_tag_name=$oldTagName" >> $env:GITHUB_OUTPUT
+                  echo "should_rename_tag=$shouldRenameTag" >> $env:GITHUB_OUTPUT
                   echo "is_tag_push=$($isTagPush.ToString().ToLower())" >> $env:GITHUB_OUTPUT
                   echo "is_test_tag=$($resolved.IsTest.ToString().ToLower())" >> $env:GITHUB_OUTPUT
                   echo "skip_job=$skipJob" >> $env:GITHUB_OUTPUT
 
                   echo "构建版本: $($resolved.Build)"
                   echo "标签名称: $tagName"
+                  echo "原始标签: $oldTagName"
+                  echo "是否重命名标签: $shouldRenameTag"
                   echo "是否测试标签: $($resolved.IsTest)"
                   echo "是否跳过任务: $skipJob"
 
@@ -236,6 +246,27 @@ jobs:
               uses: actions/checkout@v4.2.2
               with:
                   fetch-depth: 0
+
+            - name: Rename tag on remote
+              if: ${{ needs.prepare.outputs.should_rename_tag == 'true' }}
+              shell: pwsh
+              run: |
+                  $oldTag = "${{ needs.prepare.outputs.old_tag_name }}"
+                  $newTag = "${{ needs.prepare.outputs.tag_name }}"
+                  echo "检测到 dev 分支推送了正式标签，执行重命名: $oldTag -> $newTag"
+                  
+                  # 配置 git 身份
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  
+                  # 创建新本地标签指向当前 commit
+                  git tag $newTag HEAD
+                  # 推送新标签
+                  git push origin $newTag
+                  # 删除远程旧标签
+                  git push origin :refs/tags/$oldTag
+                  
+                  echo "✅ 标签重命名完成: 远程已删除 $oldTag，已新增 $newTag"
 
             - name: Set up MSYS2 (MinGW-w64)
               uses: msys2/setup-msys2@v2.29.0
