@@ -1,4 +1,4 @@
-﻿<#
+<#
 Remote Controls 项目打包脚本 (PowerShell)
 用法：
     - 双击运行（推荐）
@@ -364,6 +364,7 @@ function Copy-RuntimeDllIfImported {
     }
 }
 
+Copy-RuntimeDllIfImported -ExePath $BuiltMainExe -DllName 'libpaho-mqtt3cs.dll' -DestDir $DistDir
 Copy-RuntimeDllIfImported -ExePath $BuiltMainExe -DllName 'libpaho-mqtt3c.dll' -DestDir $DistDir
 
 # 打包GUI程序

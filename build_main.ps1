@@ -11,7 +11,7 @@ param(
 
   # Library name without -l prefix, e.g. paho-mqtt3c or paho-mqtt3cs
   [Parameter(Mandatory = $false)]
-  [string]$PahoLib = 'paho-mqtt3c',
+  [string]$PahoLib = 'paho-mqtt3cs',
 
   # How to link Paho library:
   # - auto: prefer static if available (e.g. libpaho-mqtt3c-static.a), otherwise dynamic
@@ -293,6 +293,10 @@ if ($linkExtra -and $linkExtra.Count -gt 0) {
 
 # Append libraries that are sensitive to link order (especially for static Paho).
 if ($PahoLinkModeResolved -eq 'static') {
+  if ($PahoLib -match 's$') {
+    # SSL version (paho-mqtt3cs) needs OpenSSL
+    $linkArgs += @('-lssl', '-lcrypto')
+  }
   $linkArgs += @('-lws2_32','-lcrypt32','-lrpcrt4','-ladvapi32')
 } else {
   $linkArgs += @('-lws2_32')

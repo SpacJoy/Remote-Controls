@@ -300,6 +300,7 @@ jobs:
                       mingw-w64-x86_64-gcc
                       mingw-w64-x86_64-binutils
                       mingw-w64-x86_64-paho.mqtt.c
+                      mingw-w64-x86_64-openssl
 
             - name: Add MinGW64 to PATH
               shell: pwsh
