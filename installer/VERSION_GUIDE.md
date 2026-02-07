@@ -27,16 +27,16 @@ Remote-Controls/
 # 顶层入口（推荐）：转发到 installer/build_installer.ps1
 
 # 方式 A：直接指定版本号
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 3.0.0
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 x.y.z
 
 # 方式 A2：指定版本号 + 无交互（跳过 Pause，适合 CI/无人值守）
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 3.0.0 -NoPause
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 x.y.z -NoPause
 
 # 方式 B：直接运行 installer/build_installer.ps1
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\installer\build_installer.ps1 3.0.0
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\installer\build_installer.ps1 x.y.z
 
 # 方式 B2：直接运行 + 无交互
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\installer\build_installer.ps1 3.0.0 -NoPause
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\installer\build_installer.ps1 x.y.z -NoPause
 ```
 
 #### 方式二：交互式输入（推荐）
@@ -45,7 +45,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\installer\build_installer.ps1 3.
 # 运行脚本，然后输入版本号
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 # 脚本会提示：请输入版本号 (格式: X.Y.Z，如 1.0.0)
-# 版本号: 3.0.0
+# 版本号: x.y.z
 ```
 
 #### 方式三：使用当前版本
@@ -59,8 +59,8 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 ### 2. 手动更新版本
 
 ```cmd
-# 更新版本到 1.0.0
-python .\installer\update_version.py 3.0.0
+# 更新版本到 x.y.z
+python .\installer\update_version.py x.y.z
 
 # 交互式输入版本
 python .\installer\update_version.py
@@ -75,7 +75,7 @@ try:
     from version_info import get_version_string, get_version_info, get_program_info
 
     # 获取版本字符串
-    version = get_version_string()  # "1.0.0"
+    version = get_version_string()  # "x.y.z"
 
     # 获取完整版本信息
     info = get_version_info()

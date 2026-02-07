@@ -91,7 +91,7 @@ Remote-Controls/
 .\build.ps1
 
 # 自动化构建：指定版本并跳过暂停
-.\build.ps1 a.b.c.x -NoPause
+.\build.ps1 x.y.z -NoPause
 ```
 
 - **产物位置**：
@@ -107,7 +107,7 @@ Remote-Controls/
     - 触发条件：`main` 分支推送或 Pull Request。
     - 操作：安装 Python 依赖、静态语法检查 (`compileall`)、关键模块导入测试。
 - **构建与发布 (Release)**：[build-and-release.yml](file:///d:/Code/Python/Remote-Controls/.github/workflows/build-and-release.yml)
-    - 触发条件：推送以 `V` 开头的标签（如 `V3.0.2`）、手动触发，或 **`dev` 分支推送（自动递增版本号）**。
+    - 触发条件：推送以 `V` 开头的标签（如 `Vx.y.z`）、手动触发，或 **`dev` 分支推送（自动递增版本号）**。
     - 操作：
         1. 自动配置 MSYS2/MinGW 和 Paho MQTT C 环境。
         2. 安装 Inno Setup 并注入版本号（`dev` 分支自动在最新标签基础上加 `0.0.0.1`）。
