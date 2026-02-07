@@ -284,14 +284,6 @@ except Exception:
 # 计划任务名称（与安装器一致）
 TASK_NAME_MAIN = "Remote Controls Main Service"
 TASK_NAME_TRAY = "Remote Controls Tray"
-# 资源路径（兼容 PyInstaller _MEIPASS）
-# 创建一个命名的互斥体
-# mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "RC-main-GUI")
-
-# 检查互斥体是否已经存在
-# if ctypes.windll.kernel32.GetLastError() == 183:
-#     messagebox.showerror("错误", "应用程序已在运行。")
-#     sys.exit()
 
 # 运行模式 & 隐藏控制台
 is_script_mode = not getattr(sys, "frozen", False)
@@ -4786,5 +4778,3 @@ _apply_language_everywhere()
 
 root.mainloop()
 
-# 释放互斥体
-# ctypes.windll.kernel32.ReleaseMutex(mutex)

@@ -1,4 +1,4 @@
-﻿;用于遥控器的 Inno 设置脚本
+;用于遥控器的 Inno 设置脚本
 ;包包括：RC-GUI.exe、RC-main.exe、RC-tray.exe、config.json、日志目录
 ;生成脱机安装程序，安装到 Program Files（需要管理员权限）
 
@@ -43,6 +43,7 @@ Name: "autostart_tray"; Description: "用户登录时运行托盘（当前用户
 Source: "dist\RC-GUI.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\RC-main.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\RC-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\res\languages\en.json"; DestDir: "{app}\res\languages"; Flags: ignoreversion
 #if FileExists("dist\\libpaho-mqtt3c.dll")
 Source: "dist\libpaho-mqtt3c.dll"; DestDir: "{app}"; Flags: ignoreversion
 #endif
