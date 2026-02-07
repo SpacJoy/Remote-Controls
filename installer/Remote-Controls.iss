@@ -43,7 +43,7 @@ Name: "autostart_tray"; Description: "用户登录时运行托盘（当前用户
 Source: "dist\RC-GUI.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\RC-main.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\RC-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\res\languages\en.json"; DestDir: "{app}\res\languages"; Flags: ignoreversion
+Source: "..\res\languages\*.json"; DestDir: "{app}\res\languages"; Flags: ignoreversion
 #if FileExists("dist\\libpaho-mqtt3c.dll")
 Source: "dist\libpaho-mqtt3c.dll"; DestDir: "{app}"; Flags: ignoreversion
 #endif

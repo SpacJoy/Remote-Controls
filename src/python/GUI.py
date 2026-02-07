@@ -56,26 +56,32 @@ def resource_path(relative_path: str) -> str:
     return relative_path
 
 # ----------------------------
-# i18n (zh/en) for GUI
+# i18n (Dynamic loading)
 # ----------------------------
 
 def _normalize_lang(lang: str | None) -> str:
     if not lang:
-        return ""
+        return "zh-CN"
     s = str(lang).strip().lower().replace("_", "-")
+    # 基础映射
     if s in ("zh", "zh-cn", "zh-hans", "cn", "zh-hans-cn"):
-        return "zh"
+        return "zh-CN"
+    if s in ("zh-tw", "zh-hk", "zh-hant"):
+        return "zh-TW"
     if s in ("en", "en-us", "en-gb"):
-        return "en"
+        return "en-US"
+    
+    # 模糊匹配
+    if s.startswith("zh-tw") or s.startswith("zh-hk") or s.startswith("zh-hant"):
+        return "zh-TW"
     if s.startswith("zh"):
-        return "zh"
+        return "zh-CN"
     if s.startswith("en"):
-        return "en"
-    return ""
+        return "en-US"
+    return s
 
 
 def _detect_default_lang() -> str:
-    # locale.getdefaultlocale() 已弃用（Python 3.15+），改用 setlocale/getlocale。
     try:
         locale.setlocale(locale.LC_ALL, "")
     except Exception:
@@ -94,40 +100,61 @@ def _detect_default_lang() -> str:
         except Exception:
             pass
 
-    # Windows 默认偏中文用户群，这里保守地按系统语言判断失败则给 zh
-    return "zh"
+    return "zh-CN"
 
 
 # 全局语言：在读取配置文件后会被覆盖
 LANG: str = _detect_default_lang()
 
-# 中文源文案 -> 英文翻译（从外置文件加载；未命中的保持原样）
-_ZH_TO_EN: dict[str, str] = {}
-_i18n_path = resource_path("res/languages/en.json")
-if os.path.exists(_i18n_path):
-    try:
-        with open(_i18n_path, "r", encoding="utf-8") as f:
-            _ZH_TO_EN = json.load(f)
-    except Exception:
-        pass
+# 扫描可用语言文件
+def _get_available_languages() -> Dict[str, str]:
+    """返回 {lang_code: file_path} 映射"""
+    langs = {"zh-CN": ""} # 内置中文不需要文件
+    lang_dir = resource_path("res/languages")
+    if os.path.exists(lang_dir):
+        for f in os.listdir(lang_dir):
+            if f.endswith(".json") and f != "template.json":
+                lang_code = f[:-5] # 移除 .json
+                langs[lang_code] = os.path.join(lang_dir, f)
+    return langs
 
-# 若未找到翻译文件或加载失败，且当前检测为英文，则禁用英文翻译回退到中文
-if not _ZH_TO_EN and LANG == "en":
-    LANG = "zh"
+AVAILABLE_LANGS = _get_available_languages()
 
-# 反向映射：用于从英文切回中文（避免某些控件在英文模式创建时无法回切）
-_EN_TO_ZH: dict[str, str] = {}
-for _zh, _en in _ZH_TO_EN.items():
-    if _en and _en not in _EN_TO_ZH:
-        _EN_TO_ZH[_en] = _zh
+# 加载当前语言字典
+_CURRENT_LANG_DICT: dict[str, str] = {}
+if LANG != "zh-CN" and LANG in AVAILABLE_LANGS:
+    _lang_file = AVAILABLE_LANGS[LANG]
+    if _lang_file and os.path.exists(_lang_file):
+        try:
+            with open(_lang_file, "r", encoding="utf-8") as f:
+                _CURRENT_LANG_DICT = json.load(f)
+        except Exception:
+            pass
 
+# 若未找到翻译文件且当前不是中文，尝试回退到 en-US
+if not _CURRENT_LANG_DICT and LANG != "zh-CN":
+    if "en-US" in AVAILABLE_LANGS and LANG != "en-US":
+        _lang_file = AVAILABLE_LANGS["en-US"]
+        if _lang_file and os.path.exists(_lang_file):
+            try:
+                with open(_lang_file, "r", encoding="utf-8") as f:
+                    _CURRENT_LANG_DICT = json.load(f)
+                    LANG = "en-US"
+            except Exception:
+                pass
+
+# 反向映射：用于从翻译语种切回中文
+_REVERSE_LANG_DICT: dict[str, str] = {}
+for _zh, _trans in _CURRENT_LANG_DICT.items():
+    if _trans and _trans not in _REVERSE_LANG_DICT:
+        _REVERSE_LANG_DICT[_trans] = _zh
 
 
 def t(s: str) -> str:
-    """Translate UI string between zh/en based on current LANG."""
-    if LANG == "en":
-        return _ZH_TO_EN.get(s, s)
-    return _EN_TO_ZH.get(s, s)
+    """Translate UI string based on current LANG."""
+    if LANG == "zh-CN":
+        return _REVERSE_LANG_DICT.get(s, s)
+    return _CURRENT_LANG_DICT.get(s, s)
 
 
 _LANG_OBSERVERS: list[callable] = []
@@ -146,10 +173,13 @@ def _set_root_title() -> None:
         base = f"远程控制-{BANBEN}"
         if IS_GUI_ADMIN:
             base = f"远程控制-{BANBEN}(管理员)"
-        if LANG == "en":
-            # 保留版本号，只替换前缀
-            base = base.replace("远程控制-", "Remote Controls - ")
-            base = base.replace("(管理员)", "(Admin)")
+        if LANG != "zh-CN":
+            # 使用翻译字典
+            base_trans = t("远程控制")
+            admin_trans = t("(管理员)")
+            base = f"{base_trans}-{BANBEN}"
+            if IS_GUI_ADMIN:
+                base = f"{base_trans}-{BANBEN}{admin_trans}"
         root.title(base)
     except Exception:
         pass
@@ -181,8 +211,8 @@ def apply_language_to_widgets(widget: tk.Misc) -> None:
                     # 若控件文本被动态改写（如“设置/关闭开机自启”），刷新源文案以保证可双向切换
                     if _has_cjk(cur):
                         src = cur
-                    elif cur in _EN_TO_ZH:
-                        src = _EN_TO_ZH.get(cur, src)
+                    elif cur in _REVERSE_LANG_DICT:
+                        src = _REVERSE_LANG_DICT.get(cur, src)
                 setattr(w, "_rc_text_src", src)
                 w.configure(text=t(src))
             except Exception:
@@ -720,7 +750,7 @@ def open_keyboard_recorder(parent: Union[tk.Tk, tk.Toplevel], target_var: tk.Str
     )
     msg = ttk.Label(
         rec,
-        text=(msg_en if LANG == "en" else msg_zh),
+        text=(msg_en if LANG != "zh-CN" else msg_zh),
         justify="left",
     )
     msg.pack(padx=10, pady=8, anchor="w")
@@ -763,7 +793,7 @@ def open_keyboard_recorder(parent: Union[tk.Tk, tk.Toplevel], target_var: tk.Str
 
     def _update_pressed_label():
         keys = _current_keys()
-        if LANG == "en":
+        if LANG != "zh-CN":
             pressed_var.set("Pressed: " + (" + ".join(keys) if keys else "(empty)"))
         else:
             pressed_var.set("已按下：" + (" + ".join(keys) if keys else "(空)"))
@@ -816,7 +846,7 @@ def open_keyboard_recorder(parent: Union[tk.Tk, tk.Toplevel], target_var: tk.Str
         except Exception:
             pass
         try:
-            msg.configure(text=(msg_en if LANG == "en" else msg_zh))
+            msg.configure(text=(msg_en if LANG != "zh-CN" else msg_zh))
         except Exception:
             pass
         try:
@@ -1293,7 +1323,7 @@ def show_detail_window():
                 "content_zh": content_zh,
                 "content_en": content_en,
             }
-            _fill_text(txt, content_en if LANG == "en" else content_zh)
+            _fill_text(txt, content_en if LANG != "zh-CN" else content_zh)
             return entry
 
         builtin_content_zh = """
@@ -1441,7 +1471,7 @@ Instance Management:
             try:
                 for ent in _detail_entries:
                     notebook.tab(ent["frame"], text=t(ent["title_zh"]))
-                    _fill_text(ent["txt"], ent["content_en"] if LANG == "en" else ent["content_zh"])
+                    _fill_text(ent["txt"], ent["content_en"] if LANG != "zh-CN" else ent["content_zh"])
             except Exception:
                 pass
             try:
@@ -1655,7 +1685,7 @@ def modify_custom_theme() -> None:
     # 记录自定义内容以便在预设与自定义切换时还原
     previous_custom_off_value_mod = theme.get("off_value", "")
     def _preview_text_for_mod(code: str, t_type: str, service_name: str = "") -> str:
-        if LANG == "en":
+        if LANG != "zh-CN":
             if t_type == "命令":
                 if code == "interrupt":
                     return "Preset: Interrupt — Sends CTRL+BREAK to the last recorded command process and tries to exit gracefully."
@@ -1849,7 +1879,7 @@ def modify_custom_theme() -> None:
             cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
         # 在 PowerShell 中显示命令，等待用户按回车后再执行
-        if LANG == "en":
+        if LANG != "zh-CN":
             ps_script = (
                 "Write-Host 'Ready to test command:' -ForegroundColor Cyan;"
                 "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
@@ -1911,7 +1941,7 @@ def modify_custom_theme() -> None:
                 return
             cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
-        if LANG == "en":
+        if LANG != "zh-CN":
             ps_script = (
                 "Write-Host 'Ready to test command:' -ForegroundColor Cyan;"
                 "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
@@ -2400,7 +2430,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
 
     previous_custom_off_value_add = ""
     def _preview_text_for_add(code: str, t_type: str, service_name: str = "") -> str:
-        if LANG == "en":
+        if LANG != "zh-CN":
             if t_type == "命令":
                 if code == "interrupt":
                     return "Preset: Interrupt — Sends CTRL+BREAK to the last recorded command process and tries to exit gracefully."
@@ -2552,7 +2582,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
                 return
             cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
-        if LANG == "en":
+        if LANG != "zh-CN":
             ps_script = (
                 "Write-Host 'Ready to test command:' -ForegroundColor Cyan;"
                 "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
@@ -2614,7 +2644,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
                 return
             cmd = cmd.replace("{value}", val)
         cmd = _normalize_command_for_powershell(cmd)
-        if LANG == "en":
+        if LANG != "zh-CN":
             ps_script = (
                 "Write-Host 'Ready to test command:' -ForegroundColor Cyan;"
                 "\n$cmd = @'\n" + cmd.replace("'@", "'@@") + "\n'@;"
@@ -3560,7 +3590,7 @@ def check_sleep_status_window() -> None:
         enabled = _is_hibernate_enabled_from_powercfg_output(output)
 
         status_text = "已启用（可用）" if enabled else "未启用或不可用"
-        if LANG == "en":
+        if LANG != "zh-CN":
             status_text = "Enabled" if enabled else "Disabled/Unavailable"
         messagebox.showinfo(t("睡眠功能状态"), t(f"休眠/睡眠状态：{status_text}\n\n详细信息：\n{output.strip()}"))
     except Exception as e:
@@ -3599,7 +3629,7 @@ def load_config_file():
             config_file_path = config_toml_path
             return True
         except Exception as e:
-            if LANG == "en":
+            if LANG != "zh-CN":
                 error_msg = f"Primary TOML config file is invalid:\n{str(e)}\n\nTry loading legacy JSON config?"
             else:
                 error_msg = f"主要 TOML 配置文件格式错误：\n{str(e)}\n\n是否尝试加载旧版 JSON 配置文件？"
@@ -3625,7 +3655,7 @@ def load_config_file():
                 
             return True
         except json.decoder.JSONDecodeError as e:
-            if LANG == "en":
+            if LANG != "zh-CN":
                 error_msg = (
                     f"Legacy JSON config file is invalid:\n{str(e)}\n\nChoose:\n"
                     "• Yes: backup the broken config and continue\n"
@@ -3782,27 +3812,77 @@ auto_start_button.grid(row=2, column=2,  sticky="n", padx=PADX, pady=PADY)
 language_var = tk.StringVar(value=LANG)
 ttk.Label(system_frame, text=t("语言：")).grid(row=4, column=0, sticky="e", padx=PADX, pady=PADY)
 language_combo = ttk.Combobox(system_frame, state="readonly", width=18)
-language_combo["values"] = ["中文", "English"]
+
+def _get_display_langs() -> List[str]:
+    """返回用于 ComboBox 的语言列表"""
+    display_map = {
+        "zh-CN": "简体中文 (zh-CN)",
+        "zh-TW": "繁體中文 (zh-TW)",
+        "en-US": "English (en-US)"
+    }
+    items = []
+    for l in AVAILABLE_LANGS:
+        items.append(display_map.get(l, l))
+    return sorted(items)
+
+language_combo["values"] = _get_display_langs()
 language_combo.grid(row=4, column=1, sticky="w", padx=PADX, pady=PADY)
 
 def _sync_language_combo() -> None:
     try:
-        language_combo.set("English" if LANG == "en" else "中文")
+        display_map = {
+            "zh-CN": "简体中文 (zh-CN)",
+            "zh-TW": "繁體中文 (zh-TW)",
+            "en-US": "English (en-US)"
+        }
+        current_display = display_map.get(LANG, LANG)
+        language_combo.set(current_display)
     except Exception:
         pass
 
 def _on_language_change(_event=None) -> None:
     global LANG
     sel = (language_combo.get() or "").strip()
-    LANG = "en" if sel.lower().startswith("english") else "zh"
+    if "(" in sel and sel.endswith(")"):
+        new_lang = sel[sel.rfind("(")+1:-1]
+    else:
+        new_lang = sel
+    
+    if new_lang in AVAILABLE_LANGS:
+        LANG = new_lang
+    else:
+        if "english" in sel.lower(): LANG = "en-US"
+        elif "中文" in sel: LANG = "zh-CN"
+        else: LANG = new_lang
+
     language_var.set(LANG)
-    # 更新组合框显示、认证模式文案、窗口文案
+    _sync_language_combo()
+    
+    # 重载语言字典
+    global _CURRENT_LANG_DICT, _REVERSE_LANG_DICT
+    _CURRENT_LANG_DICT = {}
+    if LANG != "zh-CN" and LANG in AVAILABLE_LANGS:
+        _lang_file = AVAILABLE_LANGS[LANG]
+        if _lang_file and os.path.exists(_lang_file):
+            try:
+                with open(_lang_file, "r", encoding="utf-8") as f:
+                    _CURRENT_LANG_DICT = json.load(f)
+            except Exception:
+                pass
+    
+    _REVERSE_LANG_DICT = {}
+    for _zh, _trans in _CURRENT_LANG_DICT.items():
+        if _trans and _trans not in _REVERSE_LANG_DICT:
+            _REVERSE_LANG_DICT[_trans] = _zh
+
+    # 应用语言
     try:
         auth_mode_combo.configure(values=_auth_mode_labels())
         update_auth_mode_display()
     except Exception:
         pass
     _apply_language_everywhere()
+    save_config()
 
 language_combo.bind("<<ComboboxSelected>>", _on_language_change)
 _sync_language_combo()
