@@ -509,17 +509,22 @@ def startup_admin_check():
 def _enable_dpi_awareness() -> None:
     """
     Windows: 使进程 DPI 感知，避免高分屏字体/控件发糊。
-    优先 Per-Monitor (v1)，回退到 System DPI Aware。
+    优先 Per-Monitor V2（Windows 10 1703+），回退到 V1，再回退到 System DPI Aware。
     """
     try:
+        # Windows 10 Creators Update+: 每个监视器 DPI 感知 V2（最佳）
+        # 4 = PROCESS_PER_MONITOR_DPI_AWARE (v2)
         shcore = ctypes.windll.shcore
-        # 2 = PROCESS_PER_MONITOR_DPI_AWARE # 每个监视器 DPI 感知
-        shcore.SetProcessDpiAwareness(2)
+        shcore.SetProcessDpiAwareness(4)
     except Exception:
         try:
-            ctypes.windll.user32.SetProcessDPIAware()
+            shcore = ctypes.windll.shcore
+            shcore.SetProcessDpiAwareness(2)
         except Exception:
-            pass
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
 
 def _apply_font_readability_and_scaling(root: tk.Tk) -> None:
     """
