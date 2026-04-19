@@ -1478,6 +1478,21 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
     if (!dxva2Target || !*dxva2Target)
         dxva2Target = "all";
 
+    // Read brightness limits for WMI/Dxva2 (default 0-100)
+    int wmiMin = RC_JsonGetInt(RC_JsonObjectGet(r->config, "wmi_brightness_min"), 0);
+    int wmiMax = RC_JsonGetInt(RC_JsonObjectGet(r->config, "wmi_brightness_max"), 100);
+    int dxva2Min = RC_JsonGetInt(RC_JsonObjectGet(r->config, "dxva2_brightness_min"), 0);
+    int dxva2Max = RC_JsonGetInt(RC_JsonObjectGet(r->config, "dxva2_brightness_max"), 100);
+
+    // Clamp limits to valid range
+    if (wmiMin < 0) wmiMin = 0;
+    if (wmiMax > 100) wmiMax = 100;
+    if (wmiMin > wmiMax) { int tmp = wmiMin; wmiMin = wmiMax; wmiMax = tmp; }
+    
+    if (dxva2Min < 0) dxva2Min = 0;
+    if (dxva2Max > 100) dxva2Max = 100;
+    if (dxva2Min > dxva2Max) { int tmp = dxva2Min; dxva2Min = dxva2Max; dxva2Max = tmp; }
+
     // Read Twinkle Tray config (shared across modes)
     const char *ttPath = cfg_str(r->config, "twinkle_tray_path");
     const char *ttMode = cfg_str(r->config, "twinkle_tray_target_mode");
@@ -1485,13 +1500,25 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
     bool ttOverlay = cfg_bool(r->config, "twinkle_tray_overlay", true);
     bool ttPanel = cfg_bool(r->config, "twinkle_tray_panel", false);
 
+    // Apply brightness limits based on mode
+    int vWmi = v;
+    int vDxva2 = v;
+    
+    // Apply WMI limits
+    if (vWmi < wmiMin) vWmi = wmiMin;
+    if (vWmi > wmiMax) vWmi = wmiMax;
+    
+    // Apply Dxva2 limits
+    if (vDxva2 < dxva2Min) vDxva2 = dxva2Min;
+    if (vDxva2 > dxva2Max) vDxva2 = dxva2Max;
+
     if (!mode || _stricmp(mode, "wmi") == 0)
     {
-        RC_ActionSetBrightnessWmiPercent(v, wmiTarget);
+        RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
     }
     else if (_stricmp(mode, "dxva2") == 0)
     {
-        RC_ActionSetBrightnessDxva2Percent(v, dxva2Target);
+        RC_ActionSetBrightnessDxva2Percent(vDxva2, dxva2Target);
     }
     else if (_stricmp(mode, "twinkle_tray") == 0)
     {
@@ -1499,7 +1526,7 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
     }
     else if (_stricmp(mode, "wmi_priority") == 0)
     {
-        if (!RC_ActionSetBrightnessWmiPercent(v, wmiTarget))
+        if (!RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget))
         {
             RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
         }
@@ -1508,14 +1535,14 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
     {
         if (!RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel))
         {
-            RC_ActionSetBrightnessWmiPercent(v, wmiTarget);
+            RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
         }
     }
     else if (_stricmp(mode, "both") == 0)
     {
         // "both" means all enabled methods simultaneously (WMI + Dxva2 + Twinkle)
-        RC_ActionSetBrightnessWmiPercent(v, wmiTarget);
-        RC_ActionSetBrightnessDxva2Percent(v, dxva2Target);
+        RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
+        RC_ActionSetBrightnessDxva2Percent(vDxva2, dxva2Target);
         RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
     }
     else if (_stricmp(mode, "custom") == 0)
@@ -1545,11 +1572,11 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
                     bool ok = false;
                     if (_stricmp(token, "wmi") == 0)
                     {
-                        ok = RC_ActionSetBrightnessWmiPercent(v, wmiTarget);
+                        ok = RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
                     }
                     else if (_stricmp(token, "dxva2") == 0)
                     {
-                        ok = RC_ActionSetBrightnessDxva2Percent(v, dxva2Target);
+                        ok = RC_ActionSetBrightnessDxva2Percent(vDxva2, dxva2Target);
                     }
                     else if (_stricmp(token, "twinkle_tray") == 0)
                     {

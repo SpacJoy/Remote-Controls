@@ -96,8 +96,16 @@ computer_on_delay = 0
 computer_off_delay = 0
 # WMI 目标显示器 (WMI Target: all/number)
 wmi_target = "all"
+# WMI 亮度下限 (WMI Brightness Min: 0-100)
+wmi_brightness_min = 0
+# WMI 亮度上限 (WMI Brightness Max: 0-100)
+wmi_brightness_max = 100
 # Dxva2 目标显示器 (Dxva2 Target: all/number)
 dxva2_target = "all"
+# Dxva2 亮度下限 (Dxva2 Brightness Min: 0-100)
+dxva2_brightness_min = 0
+# Dxva2 亮度上限 (Dxva2 Brightness Max: 0-100)
+dxva2_brightness_max = 100
 
 
 # 自定义主题：程序或脚本 (Applications / Scripts)

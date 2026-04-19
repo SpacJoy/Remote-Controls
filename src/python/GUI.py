@@ -3103,7 +3103,11 @@ def save_config_toml(nested_config: Dict[str, Any], file_path: str) -> None:
         "computer_on_delay =": "# 开启延时秒数 (On Delay Seconds)\ncomputer_on_delay",
         "computer_off_delay =": "# 关闭延时秒数 (Off Delay Seconds)\ncomputer_off_delay",
         "wmi_target =": "# WMI 目标显示器 (WMI Target: all/number)\nwmi_target",
+        "wmi_brightness_min =": "# WMI 亮度下限 (WMI Brightness Min: 0-100)\nwmi_brightness_min",
+        "wmi_brightness_max =": "# WMI 亮度上限 (WMI Brightness Max: 0-100)\nwmi_brightness_max",
         "dxva2_target =": "# Dxva2 目标显示器 (Dxva2 Target: all/number)\ndxva2_target",
+        "dxva2_brightness_min =": "# Dxva2 亮度下限 (Dxva2 Brightness Min: 0-100)\ndxva2_brightness_min",
+        "dxva2_brightness_max =": "# Dxva2 亮度上限 (Dxva2 Brightness Max: 0-100)\ndxva2_brightness_max",
 
         # --- Built-in Themes Items ---
         "Computer =": "# 电脑控制主题 (Computer Control Topic)\nComputer",
@@ -4416,6 +4420,43 @@ def open_builtin_settings():
         ttk.Label(dxva2_target_frame, text=t("('all' 或 索引 0, 1...)")).pack(side="left", padx=5)
         adv_row += 1
 
+        # 3.1 Brightness Limits
+        ttk.Label(adv_main_frame, text=t("WMI 亮度范围:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        wmi_limits_frame = ttk.Frame(adv_main_frame)
+        wmi_limits_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, sticky="w")
+        
+        wmi_min = tk.IntVar(value=config.get("wmi_brightness_min", 0))
+        wmi_max = tk.IntVar(value=config.get("wmi_brightness_max", 100))
+        
+        ttk.Label(wmi_limits_frame, text=t("最小:")).pack(side="left", padx=(0, 2))
+        wmi_min_spin = ttk.Spinbox(wmi_limits_frame, from_=0, to=100, textvariable=wmi_min, width=5)
+        wmi_min_spin.pack(side="left", padx=(0, 10))
+        
+        ttk.Label(wmi_limits_frame, text=t("最大:")).pack(side="left", padx=(0, 2))
+        wmi_max_spin = ttk.Spinbox(wmi_limits_frame, from_=0, to=100, textvariable=wmi_max, width=5)
+        wmi_max_spin.pack(side="left", padx=(0, 10))
+        
+        ttk.Button(wmi_limits_frame, text=t("重置"), width=5, command=lambda: (wmi_min.set(0), wmi_max.set(100))).pack(side="left")
+        adv_row += 1
+        
+        ttk.Label(adv_main_frame, text=t("Dxva2 亮度范围:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        dxva2_limits_frame = ttk.Frame(adv_main_frame)
+        dxva2_limits_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, sticky="w")
+        
+        dxva2_min = tk.IntVar(value=config.get("dxva2_brightness_min", 0))
+        dxva2_max = tk.IntVar(value=config.get("dxva2_brightness_max", 100))
+        
+        ttk.Label(dxva2_limits_frame, text=t("最小:")).pack(side="left", padx=(0, 2))
+        dxva2_min_spin = ttk.Spinbox(dxva2_limits_frame, from_=0, to=100, textvariable=dxva2_min, width=5)
+        dxva2_min_spin.pack(side="left", padx=(0, 10))
+        
+        ttk.Label(dxva2_limits_frame, text=t("最大:")).pack(side="left", padx=(0, 2))
+        dxva2_max_spin = ttk.Spinbox(dxva2_limits_frame, from_=0, to=100, textvariable=dxva2_max, width=5)
+        dxva2_max_spin.pack(side="left", padx=(0, 10))
+        
+        ttk.Button(dxva2_limits_frame, text=t("重置"), width=5, command=lambda: (dxva2_min.set(0), dxva2_max.set(100))).pack(side="left")
+        adv_row += 1
+
         ttk.Separator(adv_main_frame, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
         adv_row += 1
 
@@ -4534,7 +4575,11 @@ def open_builtin_settings():
             config["brightness_custom_list"] = ",".join(final_order)
             config["brightness_custom_strategy"] = strat_key_var.get()
             config["wmi_target"] = wmi_target.get()
+            config["wmi_brightness_min"] = wmi_min.get()
+            config["wmi_brightness_max"] = wmi_max.get()
             config["dxva2_target"] = dxva2_target.get()
+            config["dxva2_brightness_min"] = dxva2_min.get()
+            config["dxva2_brightness_max"] = dxva2_max.get()
             config["twinkle_tray_path"] = tt_path.get()
             config["twinkle_tray_target_mode"] = tt_mode_key.get()
             config["twinkle_tray_target_value"] = tt_val.get()
