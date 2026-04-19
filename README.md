@@ -1,6 +1,6 @@
-# 远程控制工具（RC-remote-controls）
+# 远程控制工具（Remote-Controls）
 
-让 Windows 电脑接入智能家居：通过 MQTT 控制开关、脚本、媒体/亮度/音量、热键等，一键配置、托盘管理、支持 EXE 打包与自启。
+让 Windows 电脑接入智能家居：通过 MQTT 控制开关、脚本、媒体/亮度/音量、热键等，配置热重载、托盘管理、支持 EXE 打包与自启。
 
 [使用教程](#使用教程) • [图文教程](https://blog.spacjoy.top/posts/remote-control-tutorial) • [项目结构](#项目结构) • [更新日志](CHANGELOG.md) • [贡献指南](CONTRIBUTING.md)
 
@@ -9,19 +9,18 @@
 ## 未来计划
 
 - 短期计划：
-
- - [x] 配置文件迁移为TOML（支持注释和增加可读性）  
- - [ ] 项目更名为更简洁合适的名字（可任意方式投稿）
- 
+  - [ ] 项目更名为更简洁合适的名字（可任意方式投稿）
+  - [ ] GUI 界面全面现代化升级-不一定改（如 Fluent Design / WinUI 风格）
 - 长期计划：
-
- - [ ] 适配Linux、MacOS（遥遥无期）
+  - [ ] 适配 Linux、MacOS（遥遥无期）
 
 ## 特性一览
 
-- MQTT 控制：支持“私钥客户端ID（巴法云等）”与“用户名/密码”两种认证
+- MQTT 控制：支持"私钥客户端ID（巴法云等）"与"用户名/密码"两种认证
 - 设备动作：锁屏/关机/重启；亮度（支持 WMI、Dxva2 DDC/CI、Twinkle Tray 多种模式）；音量与媒体控制；热键发送
 - 自定义主题：支持程序/脚本、服务、命令、热键四类，开关动作可分别配置
+- 配置热重载：`config.toml` 保存后自动加载，零 CPU 占用监听，无需重启主程序
+- 亮度/音量上下限：支持为 WMI、Dxva2 分别设置亮度范围，支持全局音量范围限制，防止误操作
 - 亮度高级设置：独立配置窗口，支持自定义控制顺序、策略（同时执行/成功即止）与单显示器目标控制
 - 参数化命令：on#/off# 默认 0-100（可通过 `commandN_value_min/value_max` 自定义）+ `{value}` 占位符，GUI 测试会询问参数
 - 托盘管理：一键启动/重启/关闭主程序，显示权限与运行模式
@@ -39,7 +38,7 @@
   - 屏幕（灯）：on=100，off=0，`on#数字` 设亮度；支持通过“高级亮度设置”切换 WMI、Dxva2、Twinkle Tray 模式，适配外接显示器与 DDC/CI 控制。
   - 音量（窗帘）：on=100，off=0，`on#数字` 设音量；pause=静音
   - 媒体（窗帘）：上一曲/下一曲/播放暂停；`on#百分比` 映射三段操作
-  - 睡眠（开关）：sleep/hibernate/display_off/display_on/lock
+  - 睡眠（开关）：sleep/hibernate/display\_off/display\_on/lock
   - 自定义：脚本/程序/服务/命令/热键（支持 {down}/{up}、逐字符、录制器）
 
 ### 自定义主题详解
@@ -62,16 +61,18 @@ Remote-Controls/
 ├─ build_tray.ps1       # 构建 C 版托盘（输出 bin/RC-tray.exe）
 ├─ setup_python_env.ps1 # Python 虚拟环境部署脚本（支持多版本选择）
 ├─ setup_C_dev.ps1      # C 语言开发环境一键部署（MinGW/Paho/Inno Setup）
-├─ dome_config.toml     # 配置示例
+├─ dome_config.toml     # 配置示例（TOML 格式）
 ├─ installer/           # 构建、版本管理与安装包脚本
 │  ├─ build_installer.ps1 # PyInstaller 打包与 Inno Setup 逻辑
 │  └─ update_version.py   # 版本号同步工具
-├─ res/                 # 图标、图片等静态资源
+├─ res/                 # 图标、图片、多语言等静态资源
+│  └─ languages/        # 多语言翻译文件（zh/en + 模板）
 ├─ src/
-│  ├─ main/             # C 版主程序源码（核心逻辑、MQTT、指令转发）
+│  ├─ main/             # C 版主程序源码（MQTT、指令转发、配置热重载等）
 │  ├─ tray/             # C 版托盘源码（Win32 托盘、菜单、进程管理）
-│  ├─ python/           # Python 源码（当前主要为配置 GUI）
-│  └─ *.c/h             # 跨模块共用组件（TOML 解析、通知等）
+│  ├─ python/           # Python 源码（配置 GUI）
+│  └─ *.c/h             # 跨模块共用组件（TOML 解析、通知、工具函数等）
+├─ md/                  # 详细文档与教程
 └─ scripts/             # 辅助工具脚本
 ```
 
@@ -106,8 +107,8 @@ Remote-Controls/
 ```
 
 - **产物位置**：
-    - 独立程序：`installer/dist/*.exe`
-    - 安装包：`installer/dist/installer/Remote-Controls-Installer-*.exe`
+  - 独立程序：`installer/dist/*.exe`
+  - 安装包：`installer/dist/installer/Remote-Controls-Installer-*.exe`
 - **构建日志**：详细日志保存在 `logs/` 目录下（如 `build_main.log`）。
 
 ## GitHub CI/CD
@@ -115,16 +116,16 @@ Remote-Controls/
 项目集成了完善的自动化流水线，确保代码质量与发布效率：
 
 - **代码检查 (CI)**：[ci.yml](file:///d:/Code/Python/Remote-Controls/.github/workflows/ci.yml)
-    - 触发条件：`main` 分支推送或 Pull Request。
-    - 操作：安装 Python 依赖、静态语法检查 (`compileall`)、关键模块导入测试。
+  - 触发条件：`main` 分支推送或 Pull Request。
+  - 操作：安装 Python 依赖、静态语法检查 (`compileall`)、关键模块导入测试。
 - **构建与发布 (Release)**：[build-and-release.yml](file:///d:/Code/Python/Remote-Controls/.github/workflows/build-and-release.yml)
-    - 触发条件：推送以 `V` 开头的标签（如 `Vx.y.z`）、手动触发，或 **`dev` 分支推送（自动递增版本号）**。
-    - 操作：
-        1. 自动配置 MSYS2/MinGW 和 Paho MQTT C 环境。
-        2. 安装 Inno Setup 并注入版本号（`dev` 分支自动在最新标签基础上加 `0.0.0.1`）。
-        3. 编译 C 语言主程序与托盘。
-        4. 使用 PyInstaller 打包 Python GUI。
-        5. 生成最终安装包并自动创建 GitHub Release / Pre-release 上传产物。
+  - 触发条件：推送以 `V` 开头的标签（如 `Vx.y.z`）、手动触发，或 **`dev`** **分支推送（自动递增版本号）**。
+  - 操作：
+    1. 自动配置 MSYS2/MinGW 和 Paho MQTT C 环境。
+    2. 安装 Inno Setup 并注入版本号（`dev` 分支自动在最新标签基础上加 `0.0.0.1`）。
+    3. 编译 C 语言主程序与托盘。
+    4. 使用 PyInstaller 打包 Python GUI。
+    5. 生成最终安装包并自动创建 GitHub Release / Pre-release 上传产物。
 
 更多工作流细节请参考 [.github/workflows/README.md](file:///d:/Code/Python/Remote-Controls/.github/workflows/README.md)。
 
@@ -132,6 +133,7 @@ Remote-Controls/
 
 ## 常见问题（精简）
 
+- 配置文件如何热重载？V3.3.0+ 支持配置文件自动监听，编辑并保存 `config.toml` 后立即生效，无需重启主程序。失败时会有托盘通知提示。
 - MQTT 连接失败：检查地址/端口/认证，程序会在弱网下自动重连
 - MQTT 8883/TLS：默认支持 TLS。可在 `config.toml` 设置 `mqtt_tls=1` 启用 `ssl://`；若需要校验证书，可设置 `mqtt_tls_verify=1` 并指定 `mqtt_tls_ca_file`（CA 证书文件路径）。项目默认已链接 Paho SSL 库 (`paho-mqtt3cs`)。
 - 休眠不可用：以管理员运行并启用休眠 `powercfg /hibernate on`
@@ -139,9 +141,10 @@ Remote-Controls/
 - 脚本执行策略：PowerShell 需允许脚本 `Set-ExecutionPolicy RemoteSigned`
 - 打包异常：优先使用 `build.ps1`（PyInstaller）
 
----
+***
 
 - 更新日志：`CHANGELOG.md`
 - 贡献指南：`CONTRIBUTING.md`
 - 发布页（下载）：<https://github.com/SpacJoy/Remote-Controls/releases>
 - 反馈与支持：提交 Issue 或邮件 `mc_chen6019@qq.com`
+
