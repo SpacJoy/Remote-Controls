@@ -1721,7 +1721,7 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
 {
     BrightnessSmoothCtx *ctx = (BrightnessSmoothCtx *)param;
 
-    RC_LogInfo("平滑亮度渐变: 开始 (target=%d, step=%d, interval=%dms)", ctx->targetValue, ctx->step, ctx->intervalMs);
+    RC_LogInfo("亮度平滑渐进: 开始 (target=%d, step=%d, interval=%dms)", ctx->targetValue, ctx->step, ctx->intervalMs);
 
     int currentBrightness = -1;
     char psCmd[1024];
@@ -1745,11 +1745,11 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
     if (currentBrightness < 0)
     {
         currentBrightness = ctx->targetValue > 50 ? 0 : 100;
-        RC_LogWarn("平滑亮度渐变: 无法获取当前亮度，使用估计值 %d%%", currentBrightness);
+        RC_LogWarn("亮度平滑渐进: 无法获取当前亮度，使用估计值 %d%%", currentBrightness);
     }
     else
     {
-        RC_LogInfo("平滑亮度渐变: 当前亮度=%d%%, 目标=%d%%", currentBrightness, ctx->targetValue);
+        RC_LogInfo("亮度平滑渐进: 当前亮度=%d%%, 目标=%d%%", currentBrightness, ctx->targetValue);
     }
 
     int start = currentBrightness;
@@ -1798,11 +1798,11 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
             Sleep(ctx->intervalMs);
         }
 
-        RC_LogInfo("平滑亮度渐变: 完成 (共%d步, 耗时约%dms)", iterations, iterations * ctx->intervalMs);
+        RC_LogInfo("亮度平滑渐进: 完成 (共%d步, 耗时约%dms)", iterations, iterations * ctx->intervalMs);
     }
     else
     {
-        RC_LogInfo("平滑亮度渐变: 当前亮度已是目标值，无需过渡");
+        RC_LogInfo("亮度平滑渐进: 当前亮度已是目标值，无需过渡");
     }
 
     router_notify_action(NULL, ctx->topicUtf8, ctx->payloadUtf8);

@@ -4467,7 +4467,7 @@ def open_builtin_settings():
         ttk.Separator(adv_main_frame, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
         adv_row += 1
 
-        ttk.Label(adv_main_frame, text=t("平滑亮度渐变:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Label(adv_main_frame, text=t("亮度平滑渐进:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
         
         smooth_frame = ttk.Frame(adv_main_frame)
         smooth_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, sticky="w")
@@ -4499,7 +4499,7 @@ def open_builtin_settings():
         adv_row += 1
 
         # Per-interface smooth toggles
-        ttk.Label(adv_main_frame, text=t("分别启用平滑:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Label(adv_main_frame, text=t("分别启用渐进:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
         
         smooth_iface_frame = ttk.Frame(adv_main_frame)
         smooth_iface_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, sticky="w")
