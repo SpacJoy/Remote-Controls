@@ -1773,8 +1773,7 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
     int step = ctx->step;
     if (step < 1) step = 1;
 
-    if (target < ctx->wmiMin) target = ctx->wmiMin;
-    if (target > ctx->wmiMax) target = ctx->wmiMax;
+    // Do NOT clamp target globally - let each interface apply its own limits
 
     // Determine which interfaces are active for this mode
     bool useWmi = false, useDxva2 = false, useTT = false;
