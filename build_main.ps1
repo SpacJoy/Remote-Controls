@@ -179,6 +179,9 @@ if ([string]::IsNullOrWhiteSpace($PahoRoot)) {
   }
 }
 
+# 默认使用静态链接 Paho（消除 libpaho-mqtt3cs.dll/libcrypto/libssl 运行时依赖）
+if ($PahoLink -eq 'auto') { $PahoLink = 'static' }
+
 $linkExtra = @()
 $PahoLinkModeResolved = 'none'
 if ($UsePaho) {
@@ -296,9 +299,11 @@ if ($linkExtra -and $linkExtra.Count -gt 0) {
 
 # Append libraries that are sensitive to link order (especially for static Paho).
 if ($PahoLinkModeResolved -eq 'static') {
+  # 静态链接 OpenSSL 和 GCC 运行时（消除 libcrypto-3-x64.dll/libssl-3-x64.dll 依赖）
   if ($PahoLib -match 's$') {
-    # SSL version (paho-mqtt3cs) needs OpenSSL
+    $linkArgs += @('-Wl,-Bstatic')
     $linkArgs += @('-lssl', '-lcrypto')
+    $linkArgs += @('-Wl,-Bdynamic')
   }
   $linkArgs += @('-lws2_32','-lcrypt32','-lrpcrt4','-ladvapi32')
 } else {
