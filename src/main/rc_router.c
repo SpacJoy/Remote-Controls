@@ -1776,6 +1776,53 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
     if (target < ctx->wmiMin) target = ctx->wmiMin;
     if (target > ctx->wmiMax) target = ctx->wmiMax;
 
+    // Determine which interfaces are active for this mode
+    bool useWmi = false, useDxva2 = false, useTT = false;
+    if (ctx->mode && _stricmp(ctx->mode, "wmi") == 0) { useWmi = true; }
+    else if (_stricmp(ctx->mode, "dxva2") == 0) { useDxva2 = true; }
+    else if (_stricmp(ctx->mode, "twinkle_tray") == 0) { useTT = true; }
+    else if (_stricmp(ctx->mode, "wmi_priority") == 0) { useWmi = true; useTT = true; }
+    else if (_stricmp(ctx->mode, "twinkle_priority") == 0) { useTT = true; useWmi = true; }
+    else if (_stricmp(ctx->mode, "both") == 0) { useWmi = true; useDxva2 = true; useTT = true; }
+    else if (_stricmp(ctx->mode, "custom") == 0)
+    {
+        if (ctx->customList && *ctx->customList)
+        {
+            char *tmp = _strdup(ctx->customList);
+            if (tmp)
+            {
+                char *tk = NULL;
+                char *tok = strtok_s(tmp, ",", &tk);
+                while (tok)
+                {
+                    while (*tok == ' ') tok++;
+                    size_t tl = strlen(tok);
+                    while (tl > 0 && tok[tl - 1] == ' ') tok[--tl] = 0;
+                    if (_stricmp(tok, "wmi") == 0) useWmi = true;
+                    else if (_stricmp(tok, "dxva2") == 0) useDxva2 = true;
+                    else if (_stricmp(tok, "twinkle_tray") == 0) useTT = true;
+                    tok = strtok_s(NULL, ",", &tk);
+                }
+                free(tmp);
+            }
+        }
+    }
+
+    // Set non-smooth interfaces to the final target value before starting
+    int vFinalWmi = target;
+    int vFinalDxva2 = target;
+    if (vFinalWmi < ctx->wmiMin) vFinalWmi = ctx->wmiMin;
+    if (vFinalWmi > ctx->wmiMax) vFinalWmi = ctx->wmiMax;
+    if (vFinalDxva2 < ctx->dxva2Min) vFinalDxva2 = ctx->dxva2Min;
+    if (vFinalDxva2 > ctx->dxva2Max) vFinalDxva2 = ctx->dxva2Max;
+
+    if (useWmi && !ctx->smoothWmi)
+        RC_ActionSetBrightnessWmiPercent(vFinalWmi, ctx->wmiTarget);
+    if (useDxva2 && !ctx->smoothDxva2)
+        RC_ActionSetBrightnessDxva2Percent(vFinalDxva2, ctx->dxva2Target);
+    if (useTT && !ctx->smoothTT)
+        RC_ActionSetBrightnessTwinkleTrayPercentUtf8(target, ctx->ttPath, ctx->ttMode, ctx->ttVal, ctx->ttOverlay, ctx->ttPanel);
+
     if (start != target)
     {
         int v = start;
