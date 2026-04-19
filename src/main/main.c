@@ -386,9 +386,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
             MessageBoxW(NULL, L"Invalid MQTT config: broker/port.", L"RC-main", MB_ICONERROR);
         else
             MessageBoxW(NULL, L"MQTT 配置不完整：broker/port 无效。", L"RC-main", MB_ICONERROR);
-        OpenGuiOrNotepadConfig(appDir, configPath, true);
+        OpenGuiOrNotepadConfig(appDir, tomlPath, true);
         RC_JsonFree(root);
-        free(jsonText);
+        free(tomlText);
         CloseHandle(hMutex);
         return 1;
     }
@@ -484,7 +484,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     if (!stopFlag)
     {
         // 鉴权失败或致命错误：引导用户修复配置。
-        OpenGuiOrNotepadConfig(appDir, configPath, true);
+        OpenGuiOrNotepadConfig(appDir, tomlPath, true);
     }
     RC_RouterDestroy(router);
 
