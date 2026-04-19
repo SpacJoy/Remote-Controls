@@ -7,7 +7,7 @@
 # V3.3.0 (2026-04-19)
 
 **配置文件热重载、亮度/音量上下限与界面优化**\
-Full Changelog (相对于 3.2.0): [https://github.com/SpacJoy/Remote-Controls/compare/V3.2.0...V3.3.0](https://github.com/SpacJoy/Remote-Controls/compare/V3.2.0...V3.2.1)
+Full Changelog (相对于 3.2.0): [https://github.com/SpacJoy/Remote-Controls/compare/V3.2.0...V3.3.0](https://github.com/SpacJoy/Remote-Controls/compare/V3.2.0...V3.3.0)
 
 ## 🔄 配置文件实时热重载
 
