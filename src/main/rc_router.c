@@ -1647,18 +1647,24 @@ static void _brightness_set_all(const char *mode, int v, int vWmi, int vDxva2,
                     bool ok = false;
                     if (_stricmp(token, "wmi") == 0)
                     {
-                        int val = smoothWmi ? vWmi : targetFinal;
-                        ok = RC_ActionSetBrightnessWmiPercent(val, wmiTarget);
+                        if (smoothWmi)
+                        {
+                            ok = RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
+                        }
                     }
                     else if (_stricmp(token, "dxva2") == 0)
                     {
-                        int val = smoothDxva2 ? vDxva2 : targetFinal;
-                        ok = RC_ActionSetBrightnessDxva2Percent(val, dxva2Target);
+                        if (smoothDxva2)
+                        {
+                            ok = RC_ActionSetBrightnessDxva2Percent(vDxva2, dxva2Target);
+                        }
                     }
                     else if (_stricmp(token, "twinkle_tray") == 0)
                     {
-                        int val = smoothTT ? v : targetFinal;
-                        ok = RC_ActionSetBrightnessTwinkleTrayPercentUtf8(val, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+                        if (smoothTT)
+                        {
+                            ok = RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+                        }
                     }
 
                     if (ok) success = true;
@@ -1674,45 +1680,55 @@ static void _brightness_set_all(const char *mode, int v, int vWmi, int vDxva2,
     {
         if (!mode || _stricmp(mode, "wmi") == 0)
         {
-            int val = smoothWmi ? vWmi : targetFinal;
-            RC_ActionSetBrightnessWmiPercent(val, wmiTarget);
+            if (smoothWmi)
+                RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
         }
         else if (_stricmp(mode, "dxva2") == 0)
         {
-            int val = smoothDxva2 ? vDxva2 : targetFinal;
-            RC_ActionSetBrightnessDxva2Percent(val, dxva2Target);
+            if (smoothDxva2)
+                RC_ActionSetBrightnessDxva2Percent(vDxva2, dxva2Target);
         }
         else if (_stricmp(mode, "twinkle_tray") == 0)
         {
-            int val = smoothTT ? v : targetFinal;
-            RC_ActionSetBrightnessTwinkleTrayPercentUtf8(val, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+            if (smoothTT)
+                RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
         }
         else if (_stricmp(mode, "wmi_priority") == 0)
         {
-            int val = smoothWmi ? vWmi : targetFinal;
-            if (!RC_ActionSetBrightnessWmiPercent(val, wmiTarget))
+            if (smoothWmi)
             {
-                int val2 = smoothTT ? v : targetFinal;
-                RC_ActionSetBrightnessTwinkleTrayPercentUtf8(val2, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+                if (!RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget) && smoothTT)
+                {
+                    RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+                }
+            }
+            else if (smoothTT)
+            {
+                RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
             }
         }
         else if (_stricmp(mode, "twinkle_priority") == 0)
         {
-            int val = smoothTT ? v : targetFinal;
-            if (!RC_ActionSetBrightnessTwinkleTrayPercentUtf8(val, ttPath, ttMode, ttVal, ttOverlay, ttPanel))
+            if (smoothTT)
             {
-                int val2 = smoothWmi ? vWmi : targetFinal;
-                RC_ActionSetBrightnessWmiPercent(val2, wmiTarget);
+                if (!RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel) && smoothWmi)
+                {
+                    RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
+                }
+            }
+            else if (smoothWmi)
+            {
+                RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
             }
         }
         else if (_stricmp(mode, "both") == 0)
         {
-            int valW = smoothWmi ? vWmi : targetFinal;
-            int valD = smoothDxva2 ? vDxva2 : targetFinal;
-            int valT = smoothTT ? v : targetFinal;
-            RC_ActionSetBrightnessWmiPercent(valW, wmiTarget);
-            RC_ActionSetBrightnessDxva2Percent(valD, dxva2Target);
-            RC_ActionSetBrightnessTwinkleTrayPercentUtf8(valT, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+            if (smoothWmi)
+                RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
+            if (smoothDxva2)
+                RC_ActionSetBrightnessDxva2Percent(vDxva2, dxva2Target);
+            if (smoothTT)
+                RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
         }
     }
 }
@@ -1759,6 +1775,21 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
 
     if (target < ctx->wmiMin) target = ctx->wmiMin;
     if (target > ctx->wmiMax) target = ctx->wmiMax;
+
+    // Set non-smooth interfaces to the final target value at the start
+    int vFinalWmi = target;
+    int vFinalDxva2 = target;
+    if (vFinalWmi < ctx->wmiMin) vFinalWmi = ctx->wmiMin;
+    if (vFinalWmi > ctx->wmiMax) vFinalWmi = ctx->wmiMax;
+    if (vFinalDxva2 < ctx->dxva2Min) vFinalDxva2 = ctx->dxva2Min;
+    if (vFinalDxva2 > ctx->dxva2Max) vFinalDxva2 = ctx->dxva2Max;
+
+    if (!ctx->smoothWmi)
+        RC_ActionSetBrightnessWmiPercent(vFinalWmi, ctx->wmiTarget);
+    if (!ctx->smoothDxva2)
+        RC_ActionSetBrightnessDxva2Percent(vFinalDxva2, ctx->dxva2Target);
+    if (!ctx->smoothTT)
+        RC_ActionSetBrightnessTwinkleTrayPercentUtf8(target, ctx->ttPath, ctx->ttMode, ctx->ttVal, ctx->ttOverlay, ctx->ttPanel);
 
     if (start != target)
     {
