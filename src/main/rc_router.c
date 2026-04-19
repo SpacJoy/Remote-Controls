@@ -1350,7 +1350,33 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
         if (_stricmp(base, "off") == 0)
             percent = 0;
         else if (_stricmp(base, "on") == 0)
-            percent = hasValue ? clamp0_100(value) : 100;
+        {
+            int raw = hasValue ? clamp0_100(value) : 100;
+            // 应用亮度限制
+            const char *mode = cfg_str(r->config, "brightness_mode");
+            int finalVal = raw;
+            if (mode && (_stricmp(mode, "wmi") == 0))
+            {
+                int wmiMin = cfg_int(r->config, "wmi_brightness_min", 0);
+                int wmiMax = cfg_int(r->config, "wmi_brightness_max", 100);
+                if (wmiMin < 0) wmiMin = 0;
+                if (wmiMax > 100) wmiMax = 100;
+                if (wmiMin > wmiMax) { int tmp = wmiMin; wmiMin = wmiMax; wmiMax = tmp; }
+                if (finalVal < wmiMin) finalVal = wmiMin;
+                if (finalVal > wmiMax) finalVal = wmiMax;
+            }
+            else if (mode && (_stricmp(mode, "dxva2") == 0))
+            {
+                int dxva2Min = cfg_int(r->config, "dxva2_brightness_min", 0);
+                int dxva2Max = cfg_int(r->config, "dxva2_brightness_max", 100);
+                if (dxva2Min < 0) dxva2Min = 0;
+                if (dxva2Max > 100) dxva2Max = 100;
+                if (dxva2Min > dxva2Max) { int tmp = dxva2Min; dxva2Min = dxva2Max; dxva2Max = tmp; }
+                if (finalVal < dxva2Min) finalVal = dxva2Min;
+                if (finalVal > dxva2Max) finalVal = dxva2Max;
+            }
+            percent = finalVal;
+        }
         if (r && r->langEnglish)
             _snprintf(msg, sizeof(msg), "Screen brightness: %d%%", percent);
         else
@@ -1362,7 +1388,18 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
         if (_stricmp(base, "off") == 0 || _stricmp(base, "pause") == 0)
             percent = 0;
         else if (_stricmp(base, "on") == 0)
-            percent = hasValue ? clamp0_100(value) : 100;
+        {
+            int raw = hasValue ? clamp0_100(value) : 100;
+            // 应用音量限制
+            int volMin = cfg_int(r->config, "volume_min", 0);
+            int volMax = cfg_int(r->config, "volume_max", 100);
+            if (volMin < 0) volMin = 0;
+            if (volMax > 100) volMax = 100;
+            if (volMin > volMax) { int tmp = volMin; volMin = volMax; volMax = tmp; }
+            if (raw < volMin) raw = volMin;
+            if (raw > volMax) raw = volMax;
+            percent = raw;
+        }
         if (r && r->langEnglish)
             _snprintf(msg, sizeof(msg), "Volume: %d%%", percent);
         else
