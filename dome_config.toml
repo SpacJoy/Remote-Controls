@@ -106,6 +106,10 @@ dxva2_target = "all"
 dxva2_brightness_min = 0
 # Dxva2 亮度上限 (Dxva2 Brightness Max: 0-100)
 dxva2_brightness_max = 100
+# 音量下限 (Volume Min: 0-100)
+volume_min = 0
+# 音量上限 (Volume Max: 0-100)
+volume_max = 100
 
 
 # 自定义主题：程序或脚本 (Applications / Scripts)

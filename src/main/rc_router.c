@@ -1948,10 +1948,22 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
 
     if (r->checkedVolume && r->topicVolume && topic_eq(topicUtf8, r->topicVolume))
     {
-        if (_stricmp(base, "off") == 0)
+        // Read volume limits (default 0-100)
+        int volMin = cfg_int(r->config, "volume_min", 0);
+        int volMax = cfg_int(r->config, "volume_max", 100);
+        
+        // Clamp limits to valid range
+        if (volMin < 0) volMin = 0;
+        if (volMax > 100) volMax = 100;
+        if (volMin > volMax) { int tmp = volMin; volMin = volMax; volMax = tmp; }
+
+        if (_stricmp(base, "off") == 0 || _stricmp(base, "pause") == 0)
+        {
             RC_ActionSetVolumePercent(0);
+        }
         else if (_stricmp(base, "on") == 0)
         {
+            int targetVol;
             if (hasValue)
             {
                 if (value < 0 || value > 100)
@@ -1959,13 +1971,19 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
                     RC_LogWarn("音量百分比超出范围 0-100：%d (topic=%s)", value, r->topicVolume);
                     return;
                 }
-                RC_ActionSetVolumePercent(value);
+                targetVol = value;
             }
             else
-                RC_ActionSetVolumePercent(100);
+            {
+                targetVol = 100;
+            }
+            
+            // Apply volume limits
+            if (targetVol < volMin) targetVol = volMin;
+            if (targetVol > volMax) targetVol = volMax;
+            
+            RC_ActionSetVolumePercent(targetVol);
         }
-        else if (_stricmp(base, "pause") == 0)
-            RC_ActionSetVolumePercent(0);
         else
             RC_LogWarn("未知音量指令：%s", payloadUtf8);
 

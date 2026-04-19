@@ -3116,6 +3116,8 @@ def save_config_toml(nested_config: Dict[str, Any], file_path: str) -> None:
         "screen_checked =": "# 是否启用屏幕控制 (Enable Screen Control: 0/1)\nscreen_checked",
         "volume =": "# 音量控制主题 (Volume Control Topic)\nvolume",
         "volume_checked =": "# 是否启用音量控制 (Enable Volume Control: 0/1)\nvolume_checked",
+        "volume_min =": "# 音量下限 (Volume Min: 0-100)\nvolume_min",
+        "volume_max =": "# 音量上限 (Volume Max: 0-100)\nvolume_max",
         "sleep =": "# 睡眠控制主题 (Sleep Control Topic)\nsleep",
         "sleep_checked =": "# 是否启用睡眠控制 (Enable Sleep Control: 0/1)\nsleep_checked",
         "media =": "# 媒体控制主题 (Media Control Topic)\nmedia",
@@ -4108,6 +4110,10 @@ def open_builtin_settings():
     tip.grid(row=row_i, column=0, columnspan=4, padx=10, pady=(6, 10), sticky="w")
     row_i += 1
 
+    # 分隔线
+    ttk.Separator(main_frame, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
+    row_i += 1
+
     # 亮度控制方案
     ttk.Label(main_frame, text=t("显示器亮度调节方案")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
     row_i += 1
@@ -4662,7 +4668,32 @@ def open_builtin_settings():
     ttk.Separator(main_frame, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(10, 10))
     row_i += 1
 
+    # 音量上下限设置
+    ttk.Label(main_frame, text=t("系统音量范围:")).grid(row=row_i, column=0, padx=10, pady=5, sticky="e")
+    vol_limits_frame = ttk.Frame(main_frame)
+    vol_limits_frame.grid(row=row_i, column=1, columnspan=2, padx=10, sticky="w")
+    
+    vol_min = tk.IntVar(value=config.get("volume_min", 0))
+    vol_max = tk.IntVar(value=config.get("volume_max", 100))
+    
+    ttk.Label(vol_limits_frame, text=t("最小:")).pack(side="left", padx=(0, 2))
+    vol_min_spin = ttk.Spinbox(vol_limits_frame, from_=0, to=100, textvariable=vol_min, width=5)
+    vol_min_spin.pack(side="left", padx=(0, 10))
+    
+    ttk.Label(vol_limits_frame, text=t("最大:")).pack(side="left", padx=(0, 2))
+    vol_max_spin = ttk.Spinbox(vol_limits_frame, from_=0, to=100, textvariable=vol_max, width=5)
+    vol_max_spin.pack(side="left", padx=(0, 10))
+    
+    ttk.Button(vol_limits_frame, text=t("重置"), width=5, command=lambda: (vol_min.set(0), vol_max.set(100))).pack(side="left")
+    row_i += 1
+
+    # 分隔线
+    ttk.Separator(main_frame, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
+    row_i += 1
+
     # 睡眠主题设置
+    ttk.Label(main_frame, text=t("睡眠/电源 (Sleep) 动作")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
+    row_i += 1
     sleep_actions_on = [
         ("sleep", "睡眠"),
         ("hibernate", "休眠"),
@@ -4701,9 +4732,6 @@ def open_builtin_settings():
     s_cur_off = config.get("sleep_off_action", "none")
     s_cur_on_delay = int(config.get("sleep_on_delay", 0) or 0)
     s_cur_off_delay = int(config.get("sleep_off_delay", 0) or 0)
-
-    ttk.Label(main_frame, text=t("睡眠/电源 (Sleep) 动作")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
-    row_i += 1
 
     ttk.Label(main_frame, text=t("打开(on)：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=4)
     s_on_key_var = tk.StringVar(value=s_cur_on)
@@ -4787,6 +4815,10 @@ def open_builtin_settings():
                 config["sleep_off_delay"] = max(0, int(s_off_delay_var.get()))
             except Exception:
                 config["sleep_off_delay"] = 0
+
+            # 音量上下限
+            config["volume_min"] = vol_min.get()
+            config["volume_max"] = vol_max.get()
 
             # Hotkey 不在内置设置中保存
 
