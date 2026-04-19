@@ -64,6 +64,14 @@ extern "C"
      */
     bool RC_RouterIsEnglish(const RC_Router *r);
 
+    /*
+     * 重新加载配置：
+     * - 从磁盘读取 config.toml 并解析
+     * - 更新路由器内部状态（topic 列表、动作表等）
+     * - 返回 true 表示成功，false 表示失败
+     */
+    bool RC_RouterReloadConfig(RC_Router *r, const wchar_t *configPath);
+
 #ifdef __cplusplus
 }
 #endif

@@ -1138,6 +1138,143 @@ void RC_RouterDestroy(RC_Router *r)
     free(r);
 }
 
+/* 读取文件内容为 UTF-8 字符串（调用方需 free） */
+static char *read_file_utf8(const wchar_t *path)
+{
+    FILE *f = NULL;
+    _wfopen_s(&f, path, L"rb");
+    if (!f)
+        return NULL;
+
+    if (fseek(f, 0, SEEK_END) != 0)
+    {
+        fclose(f);
+        return NULL;
+    }
+    long sz = ftell(f);
+    if (sz < 0)
+    {
+        fclose(f);
+        return NULL;
+    }
+    rewind(f);
+
+    char *buf = (char *)malloc((size_t)sz + 1);
+    if (!buf)
+    {
+        fclose(f);
+        return NULL;
+    }
+
+    size_t rd = fread(buf, 1, (size_t)sz, f);
+    buf[rd] = '\0';
+    fclose(f);
+    return buf;
+}
+
+/* 释放路由器中动态分配的资源（不释放 RC_Router 本身） */
+static void router_free_resources(RC_Router *r)
+{
+    RC_JsonFree(r->config);
+
+    // 注销日志 toast 回调
+    RC_LogSetNotifyCallback(NULL, NULL);
+
+    free(r->topicComputer);
+    r->topicComputer = NULL;
+    free(r->topicScreen);
+    r->topicScreen = NULL;
+    free(r->topicVolume);
+    r->topicVolume = NULL;
+    free(r->topicSleep);
+    r->topicSleep = NULL;
+    free(r->topicMedia);
+    r->topicMedia = NULL;
+
+    free_apps(r->apps, r->appsCount);
+    r->apps = NULL;
+    r->appsCount = 0;
+    free_cmds(r->cmds, r->cmdsCount);
+    r->cmds = NULL;
+    r->cmdsCount = 0;
+    free_serves(r->serves, r->servesCount);
+    r->serves = NULL;
+    r->servesCount = 0;
+    free_hotkeys(r->hotkeys, r->hotkeysCount);
+    r->hotkeys = NULL;
+    r->hotkeysCount = 0;
+
+    for (int i = 0; i < r->cmdProcsCount; i++)
+    {
+        free(r->cmdProcs[i].topic);
+        free(r->cmdProcs[i].pids);
+    }
+    free(r->cmdProcs);
+    r->cmdProcs = NULL;
+    r->cmdProcsCount = 0;
+
+    free(r->topics);
+    r->topics = NULL;
+    r->topicsCount = 0;
+}
+
+/* 重新初始化路由器（在释放资源后重新加载配置） */
+static void router_reinit(RC_Router *r, RC_Json *newConfig)
+{
+    r->config = newConfig;
+    r->notifyEnabled = (cfg_int(r->config, "notify", 1) != 0);
+    r->langEnglish = str_is_english(cfg_str(r->config, "language"));
+
+    load_builtins(r);
+    load_applications(r);
+    load_commands(r);
+    load_serves(r);
+    load_hotkeys(r);
+
+    RC_LogSetNotifyCallback(router_log_toast_cb, r);
+}
+
+bool RC_RouterReloadConfig(RC_Router *r, const wchar_t *configPath)
+{
+    if (!r || !configPath)
+        return false;
+
+    // 读取配置文件
+    char *tomlText = read_file_utf8(configPath);
+    if (!tomlText)
+    {
+        RC_LogWarn("配置重载失败：无法读取配置文件");
+        return false;
+    }
+
+    // 解析 TOML
+    RC_JsonError jerr = {0};
+    RC_Json *newConfig = RC_JsonParseToml(tomlText, &jerr);
+    free(tomlText);
+
+    if (!newConfig || !RC_JsonIsObject(newConfig))
+    {
+        RC_LogWarn("配置重载失败：TOML 解析失败 (%s, 偏移: %zu)", jerr.message ? jerr.message : "未知错误", jerr.offset);
+        if (newConfig)
+            RC_JsonFree(newConfig);
+        return false;
+    }
+
+    // 释放旧资源
+    router_free_resources(r);
+
+    // 重新初始化
+    router_reinit(r, newConfig);
+
+    // 获取新订阅列表
+    int subCount = 0;
+    RC_RouterGetTopics(r, &subCount);
+
+    RC_LogInfo("配置已成功重载（%d 个主题），注意：MQTT 重连后新主题才会生效", subCount);
+    
+    return true;
+}
+
 static int clamp0_100(int v)
 {
     if (v < 0)

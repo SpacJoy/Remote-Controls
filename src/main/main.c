@@ -28,6 +28,7 @@
 #include "rc_router.h"
 #include "rc_mqtt.h"
 #include "rc_main_tray.h"
+#include "rc_config_watcher.h"
 
 #define RC_STR2(x) #x
 #define RC_STR(x) RC_STR2(x)
@@ -251,6 +252,29 @@ static void OpenGuiOrNotepadConfig(const wchar_t *appDir, const wchar_t *configP
 }
 
 /*
+ * 配置变更回调：当 config.toml 被修改时触发
+ */
+static void on_config_changed(const wchar_t *configPath, void *userContext)
+{
+    RC_Router *router = (RC_Router *)userContext;
+    if (!router)
+        return;
+    
+    RC_LogInfo("检测到配置文件变化，正在重载...");
+    
+    if (RC_RouterReloadConfig(router, configPath))
+    {
+        RC_RouterNotifyUtf8(router, 
+            RC_RouterIsEnglish(router) ? "Remote Controls" : "远程控制",
+            RC_RouterIsEnglish(router) ? "Configuration reloaded successfully" : "配置已成功重载");
+    }
+    else
+    {
+        RC_LogWarn("配置文件重载失败");
+    }
+}
+
+/*
  * 主程序入口（GUI-less Win32 应用）：
  *
  * 执行顺序（高层）：
@@ -436,6 +460,17 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     else
         RC_LogInfo("路由已就绪。主题数=%d", subCount);
 
+    // 启动配置文件监听
+    RC_ConfigWatcher *watcher = RC_ConfigWatcherCreate(tomlPath, on_config_changed, router);
+    if (watcher)
+    {
+        RC_LogInfo("配置文件实时监听已启动");
+    }
+    else
+    {
+        RC_LogWarn("配置文件实时监听启动失败，将不会自动重载配置");
+    }
+
     if (subCount <= 0 && testMode != 1)
     {
         // 正常模式下必须至少订阅一个主题，否则主程序无事可做。
@@ -486,6 +521,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
         // 鉴权失败或致命错误：引导用户修复配置。
         OpenGuiOrNotepadConfig(appDir, tomlPath, true);
     }
+    
+    // 停止配置文件监听
+    if (watcher)
+    {
+        RC_ConfigWatcherDestroy(watcher);
+    }
+    
     RC_RouterDestroy(router);
 
     free(tomlText);

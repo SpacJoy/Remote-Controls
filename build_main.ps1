@@ -138,6 +138,7 @@ Remove-Item -LiteralPath (Join-Path $root 'src\main\rc_actions.o') -Force -Error
 Remove-Item -LiteralPath (Join-Path $root 'src\main\rc_router.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'src\main\rc_mqtt.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'src\main\rc_main_tray.o') -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $root 'src\main\rc_config_watcher.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'src\rc_json_main.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'src\toml_main.o') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $root 'src\rc_notify_main.o') -Force -ErrorAction SilentlyContinue
@@ -258,6 +259,7 @@ Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_log.c','-o',
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_utf.c','-o','src\main\rc_utf.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_actions.c','-o','src\main\rc_actions.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_router.c','-o','src\main\rc_router.o'))
+Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_config_watcher.c','-o','src\main\rc_config_watcher.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_mqtt.c','-o','src\main\rc_mqtt.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\rc_main_tray.c','-o','src\main\rc_main_tray.o'))
 Invoke-Exe -FilePath 'gcc' -Arguments ($flags + @('-c','src\main\main.c','-o','src\main\main.o'))
@@ -270,6 +272,7 @@ $linkArgs = @(
   'src\main\rc_utf.o',
   'src\main\rc_actions.o',
   'src\main\rc_router.o',
+  'src\main\rc_config_watcher.o',
   'src\main\rc_mqtt.o',
   'src\main\rc_main_tray.o',
   'src\main\main_res.o',
