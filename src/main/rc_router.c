@@ -1776,21 +1776,6 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
     if (target < ctx->wmiMin) target = ctx->wmiMin;
     if (target > ctx->wmiMax) target = ctx->wmiMax;
 
-    // Set non-smooth interfaces to the final target value at the start
-    int vFinalWmi = target;
-    int vFinalDxva2 = target;
-    if (vFinalWmi < ctx->wmiMin) vFinalWmi = ctx->wmiMin;
-    if (vFinalWmi > ctx->wmiMax) vFinalWmi = ctx->wmiMax;
-    if (vFinalDxva2 < ctx->dxva2Min) vFinalDxva2 = ctx->dxva2Min;
-    if (vFinalDxva2 > ctx->dxva2Max) vFinalDxva2 = ctx->dxva2Max;
-
-    if (!ctx->smoothWmi)
-        RC_ActionSetBrightnessWmiPercent(vFinalWmi, ctx->wmiTarget);
-    if (!ctx->smoothDxva2)
-        RC_ActionSetBrightnessDxva2Percent(vFinalDxva2, ctx->dxva2Target);
-    if (!ctx->smoothTT)
-        RC_ActionSetBrightnessTwinkleTrayPercentUtf8(target, ctx->ttPath, ctx->ttMode, ctx->ttVal, ctx->ttOverlay, ctx->ttPanel);
-
     if (start != target)
     {
         int v = start;
