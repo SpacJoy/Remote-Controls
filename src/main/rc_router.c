@@ -1656,6 +1656,8 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
 {
     BrightnessSmoothCtx *ctx = (BrightnessSmoothCtx *)param;
 
+    RC_LogInfo("平滑亮度渐变: 开始 (target=%d, step=%d, interval=%dms)", ctx->targetValue, ctx->step, ctx->intervalMs);
+
     int currentBrightness = -1;
     char psCmd[1024];
     snprintf(psCmd, sizeof(psCmd),
@@ -1678,6 +1680,11 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
     if (currentBrightness < 0)
     {
         currentBrightness = ctx->targetValue > 50 ? 0 : 100;
+        RC_LogWarn("平滑亮度渐变: 无法获取当前亮度，使用估计值 %d%%", currentBrightness);
+    }
+    else
+    {
+        RC_LogInfo("平滑亮度渐变: 当前亮度=%d%%, 目标=%d%%", currentBrightness, ctx->targetValue);
     }
 
     int start = currentBrightness;
@@ -1691,6 +1698,7 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
     if (start != target)
     {
         int v = start;
+        int iterations = 0;
         while ((v < target) || (v > target))
         {
             if (v < target)
@@ -1716,9 +1724,17 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
                                   ctx->ttPath, ctx->ttMode, ctx->ttVal,
                                   ctx->ttOverlay, ctx->ttPanel);
 
+            iterations++;
+
             if (v == target) break;
             Sleep(ctx->intervalMs);
         }
+
+        RC_LogInfo("平滑亮度渐变: 完成 (共%d步, 耗时约%dms)", iterations, iterations * ctx->intervalMs);
+    }
+    else
+    {
+        RC_LogInfo("平滑亮度渐变: 当前亮度已是目标值，无需过渡");
     }
 
     router_notify_action(NULL, ctx->topicUtf8, ctx->payloadUtf8);
@@ -1820,6 +1836,10 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
     int bStep = cfg_int(r->config, "brightness_step", 2);
     int bIntervalMs = cfg_int(r->config, "brightness_interval_ms", 30);
     if (bIntervalMs < 10) bIntervalMs = 10;
+
+    // Log smooth config for debugging
+    RC_LogInfo("亮度配置: mode=%s, smoothEnabled=%d, step=%d, interval=%dms",
+               mode ? mode : "(null)", smoothEnabled ? 1 : 0, bStep, bIntervalMs);
 
     // Apply brightness limits based on mode
     int vWmi = v;

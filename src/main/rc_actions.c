@@ -477,7 +477,9 @@ bool RC_ActionSetBrightnessDxva2Percent(int percent0to100, const char *target)
     }
 
     EnumDisplayMonitors(NULL, NULL, enum_monitors_set_brightness, (LPARAM)&ctx);
-    if (!ctx.ok)
+    if (ctx.ok)
+        RC_LogInfo("Dxva2 亮度已设置为 %d%% (target=%s)", v, target ? target : "all");
+    else
         RC_LogWarn("Dxva2 设置亮度失败或不支持 (percent=%d, target=%s)", v, target ? target : "all");
     return ctx.ok;
 }
