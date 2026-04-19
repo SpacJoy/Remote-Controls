@@ -304,91 +304,57 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     EnsureDirW(logsDir);
     WriteAdminStatusFile(logsDir);
 
-    wchar_t configPath[MAX_PATH] = {0};
     wchar_t tomlPath[MAX_PATH] = {0};
     BuildPathW(tomlPath, MAX_PATH, appDir, L"config.toml");
-    BuildPathW(configPath, MAX_PATH, appDir, L"config.json");
 
     const bool sysEnglish = IsSystemEnglishUI();
-    char *jsonText = NULL;
-    bool isToml = false;
+    char *tomlText = NULL;
 
-    // 1. 优先尝试读取 config.toml
-    if (PathFileExistsW(tomlPath))
+    if (!PathFileExistsW(tomlPath))
     {
-        RC_LogInfo("检测到 config.toml，尝试优先加载...");
-        jsonText = ReadFileUtf8Alloc(tomlPath);
-        if (jsonText)
-        {
-            isToml = true;
-            RC_LogInfo("成功读取 config.toml");
-        }
-        else
-        {
-            RC_LogWarn("读取 config.toml 失败，回退到 config.json");
-        }
-    }
-
-    // 2. 如果 TOML 不存在或读取失败，尝试读取 config.json
-    if (!jsonText)
-    {
-        if (PathFileExistsW(configPath))
-        {
-            RC_LogInfo("尝试加载备用方案 config.json...");
-            jsonText = ReadFileUtf8Alloc(configPath);
-            if (jsonText)
-            {
-                RC_LogInfo("成功读取 config.json");
-            }
-            else
-            {
-                RC_LogError("读取 config.json 失败");
-            }
-        }
-    }
-
-    if (!jsonText)
-    {
-        // 两个配置文件都不可用
         if (sysEnglish)
-            MessageBoxW(NULL, L"Configuration file (config.toml or config.json) not found. Please open RC-GUI to configure.", L"RC-main", MB_ICONERROR);
+            MessageBoxW(NULL, L"Configuration file (config.toml) not found. Please open RC-GUI to configure.", L"RC-main", MB_ICONERROR);
         else
-            MessageBoxW(NULL, L"配置文件 (config.toml 或 config.json) 不存在，请先打开 RC-GUI 进行配置。", L"RC-main", MB_ICONERROR);
+            MessageBoxW(NULL, L"配置文件 (config.toml) 不存在，请先打开 RC-GUI 进行配置。", L"RC-main", MB_ICONERROR);
         OpenGuiOrNotepadConfig(appDir, tomlPath, true);
         CloseHandle(hMutex);
         return 1;
     }
 
+    RC_LogInfo("检测到 config.toml，尝试加载...");
+    tomlText = ReadFileUtf8Alloc(tomlPath);
+    if (!tomlText)
+    {
+        RC_LogError("读取 config.toml 失败");
+        if (sysEnglish)
+            MessageBoxW(NULL, L"Failed to read config.toml. Please check file permissions.", L"RC-main", MB_ICONERROR);
+        else
+            MessageBoxW(NULL, L"读取 config.toml 失败，请检查文件权限。", L"RC-main", MB_ICONERROR);
+        OpenGuiOrNotepadConfig(appDir, tomlPath, true);
+        CloseHandle(hMutex);
+        return 1;
+    }
+    RC_LogInfo("成功读取 config.toml");
+
     RC_JsonError jerr = {0};
     RC_Json *root = NULL;
 
-    if (isToml)
-    {
-        
-        RC_LogInfo("正在解析 TOML 格式配置...");
-        root = RC_JsonParseToml(jsonText, &jerr); // 我们需要实现这个函数
-    }
-    else
-    {
-        RC_LogInfo("正在解析 JSON 格式配置...");
-        root = RC_JsonParse(jsonText, &jerr);
-    }
+    RC_LogInfo("正在解析 TOML 格式配置...");
+    root = RC_JsonParseToml(tomlText, &jerr);
 
     if (!root || !RC_JsonIsObject(root))
     {
-        // 解析失败
-        free(jsonText);
+        free(tomlText);
         if (root)
             RC_JsonFree(root);
         
-        const wchar_t *errFile = isToml ? L"config.toml" : L"config.json";
         if (sysEnglish)
             MessageBoxW(NULL, L"Invalid configuration format. Please fix it in RC-GUI.", L"RC-main", MB_ICONERROR);
         else
             MessageBoxW(NULL, L"配置文件格式错误，请使用 RC-GUI 修复。", L"RC-main", MB_ICONERROR);
         
-        RC_LogError("解析 %ls 失败: %s (偏移: %zu)", errFile, jerr.message ? jerr.message : "未知错误", jerr.offset);
-        OpenGuiOrNotepadConfig(appDir, isToml ? tomlPath : configPath, true);
+        RC_LogError("解析 config.toml 失败: %s (偏移: %zu)", jerr.message ? jerr.message : "未知错误", jerr.offset);
+        OpenGuiOrNotepadConfig(appDir, tomlPath, true);
         CloseHandle(hMutex);
         return 1;
     }
@@ -436,9 +402,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
                 MessageBoxW(NULL, L"In private_key mode, client_id is required. Please set it in RC-GUI.", L"RC-main", MB_ICONERROR);
             else
                 MessageBoxW(NULL, L"私钥模式下 client_id 不能为空（请在 RC-GUI 中配置客户端ID/私钥）。", L"RC-main", MB_ICONERROR);
-            OpenGuiOrNotepadConfig(appDir, configPath, true);
+            OpenGuiOrNotepadConfig(appDir, tomlPath, true);
             RC_JsonFree(root);
-            free(jsonText);
+            free(tomlText);
             CloseHandle(hMutex);
             return 1;
         }
@@ -449,12 +415,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     {
         // 路由初始化失败：通常是配置缺字段/结构异常导致。
         RC_JsonFree(root);
-        free(jsonText);
+        free(tomlText);
         if (langEnglish)
             MessageBoxW(NULL, L"Failed to load configuration (router init failed).", L"RC-main", MB_ICONERROR);
         else
             MessageBoxW(NULL, L"配置加载失败（路由初始化失败）。", L"RC-main", MB_ICONERROR);
-        OpenGuiOrNotepadConfig(appDir, configPath, true);
+        OpenGuiOrNotepadConfig(appDir, tomlPath, true);
         CloseHandle(hMutex);
         return 1;
     }
@@ -477,9 +443,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
             MessageBoxW(NULL, L"No topics enabled. Please open RC-GUI and enable at least one theme (unless test mode is on).", L"RC-main", MB_ICONERROR);
         else
             MessageBoxW(NULL, L"主题不能一个都没有吧！（除非开启测试模式）\n请先打开 RC-GUI 勾选至少一个主题。", L"RC-main", MB_ICONERROR);
-        OpenGuiOrNotepadConfig(appDir, configPath, true);
+        OpenGuiOrNotepadConfig(appDir, tomlPath, true);
         RC_RouterDestroy(router);
-        free(jsonText);
+        free(tomlText);
         CloseHandle(hMutex);
         return 1;
     }
@@ -522,7 +488,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     }
     RC_RouterDestroy(router);
 
-    free(jsonText);
+    free(tomlText);
 
     CloseHandle(hMutex);
     return 0;

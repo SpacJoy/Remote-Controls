@@ -11,7 +11,6 @@ import tkinter as tk
 from tkinter import messagebox, filedialog, simpledialog
 import tkinter.ttk as ttk
 import tkinter.font as tkfont
-import json
 try:
     import tomllib
 except ImportError:
@@ -3612,9 +3611,8 @@ except Exception as e:
 appdata_dir: str = os.path.abspath(os.path.dirname(sys.argv[0]))
 
 # 配置文件路径
-config_json_path: str = os.path.join(appdata_dir, "config.json")
 config_toml_path: str = os.path.join(appdata_dir, "config.toml")
-config_file_path: str = config_json_path # 默认路径，用于备份等操作
+config_file_path: str = config_toml_path
 
 # 尝试读取配置文件
 config: Dict[str, Any] = {}
@@ -3622,64 +3620,23 @@ config: Dict[str, Any] = {}
 def load_config_file():
     global config, config_file_path
     
-    # 1. 优先尝试读取 TOML (主要格式)
-    if os.path.exists(config_toml_path):
-        try:
-            with open(config_toml_path, "rb") as f:
-                nested_config = tomllib.load(f)
-            # 将嵌套结构扁平化回 GUI 使用的字典
-            config = flatten_config(nested_config)
-            config_file_path = config_toml_path
-            return True
-        except Exception as e:
-            if LANG != "zh-CN":
-                error_msg = f"Primary TOML config file is invalid:\n{str(e)}\n\nTry loading legacy JSON config?"
-            else:
-                error_msg = f"主要 TOML 配置文件格式错误：\n{str(e)}\n\n是否尝试加载旧版 JSON 配置文件？"
-            if not messagebox.askyesno(t("配置文件错误"), error_msg):
-                sys.exit(0)
-
-    # 2. 如果 TOML 不存在，尝试读取并迁移 JSON (旧版兼容)
-    if os.path.exists(config_json_path):
-        try:
-            with open(config_json_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            
-            # 自动迁移到 TOML
-            try:
-                nested_config = unflatten_config(config)
-                save_config_toml(nested_config, config_toml_path)
-                # 迁移成功后，将 JSON 重命名为 .bak 以示弃用
-                # os.rename(config_json_path, f"{config_json_path}.deprecated")
-                # 这里我们暂时保留 json 以供 C 核心使用，但内存中已切换到 TOML
-                config_file_path = config_toml_path
-            except Exception:
-                config_file_path = config_json_path
-                
-            return True
-        except json.decoder.JSONDecodeError as e:
-            if LANG != "zh-CN":
-                error_msg = (
-                    f"Legacy JSON config file is invalid:\n{str(e)}\n\nChoose:\n"
-                    "• Yes: backup the broken config and continue\n"
-                    "• No: exit and keep the config"
-                )
-            else:
-                error_msg = f"旧版 JSON 配置文件格式错误：\n{str(e)}\n\n请选择：\n• 点击\"是\"备份错误的配置文件并继续\n• 点击\"否\"退出程序不删除配置文件"
-            
-            if messagebox.askyesno(t("配置文件错误"), error_msg):
-                try:
-                    os.rename(config_json_path, f"{config_json_path}.bak")
-                except Exception:
-                    try:
-                        os.remove(config_json_path)
-                    except Exception:
-                        pass
-                config = {}
-                return True
-            else:
-                sys.exit(0)
-    return False
+    if not os.path.exists(config_toml_path):
+        return False
+    
+    try:
+        with open(config_toml_path, "rb") as f:
+            nested_config = tomllib.load(f)
+        config = flatten_config(nested_config)
+        config_file_path = config_toml_path
+        return True
+    except Exception as e:
+        if LANG != "zh-CN":
+            error_msg = f"TOML config file is invalid:\n{str(e)}\n\nPlease fix the config file manually."
+        else:
+            error_msg = f"TOML 配置文件格式错误：\n{str(e)}\n\n请手动修复配置文件。"
+        if not messagebox.askyesno(t("配置文件错误"), error_msg):
+            sys.exit(0)
+        return False
 
 load_config_file()
 

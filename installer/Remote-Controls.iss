@@ -1,5 +1,5 @@
 ;用于遥控器的 Inno 设置脚本
-;包包括：RC-GUI.exe、RC-main.exe、RC-tray.exe、config.json、日志目录
+;包包括：RC-GUI.exe、RC-main.exe、RC-tray.exe、config.toml、日志目录
 ;生成脱机安装程序，安装到 Program Files（需要管理员权限）
 
 ; 通过命令行参数或临时文件动态读取版本信息
@@ -48,7 +48,7 @@ Source: "..\res\languages\*.json"; DestDir: "{app}\res\languages"; Flags: ignore
 Source: "dist\libpaho-mqtt3c.dll"; DestDir: "{app}"; Flags: ignoreversion
 #endif
 ; Optional: ship default config, but do not overwrite user changes
-; Source: "..\config.json"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
+; Source: "..\config.toml"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
 
 [Icons]
 Name: "{commonprograms}\Remote Controls"; Filename: "{app}\RC-tray.exe"
@@ -318,7 +318,7 @@ begin
     exit;
 
   // 询问用户是否删除配置文件
-  if MsgBox('卸载程序将移除 Remote Controls。' #13#10 #13#10 '是否同时删除配置文件 (config.json) ' #13#10 '点击“是”删除配置文件，点击“否”保留配置文件。', mbConfirmation, MB_YESNO) = IDYES then
+  if MsgBox('卸载程序将移除 Remote Controls。' #13#10 #13#10 '是否同时删除配置文件 (config.toml) ' #13#10 '点击"是"删除配置文件，点击"否"保留配置文件。', mbConfirmation, MB_YESNO) = IDYES then
   begin
     KeepConfig := False;
   end;
@@ -353,11 +353,11 @@ begin
   if CurStep = ssPostInstall then begin
     // 尝试迁移旧版本配置文件 (从 x86 目录)
     // 只有当新目录没有配置文件时才迁移
-    NewConfigPath := ExpandConstant('{app}\config.json');
+    NewConfigPath := ExpandConstant('{app}\config.toml');
     if not FileExists(NewConfigPath) then begin
       // 假设旧版本安装在 Program Files (x86) 下
       // 注意：{commonpf32} 在 64 位系统上指向 Program Files (x86)
-      OldConfigPath := ExpandConstant('{commonpf32}\Remote-Controls\config.json');
+      OldConfigPath := ExpandConstant('{commonpf32}\Remote-Controls\config.toml');
       if FileExists(OldConfigPath) then begin
         CopyFile(OldConfigPath, NewConfigPath, False);
       end;
@@ -387,7 +387,7 @@ begin
 
     // 根据用户选择删除或保留配置文件（默认保留；静默卸载也保留）
     if not KeepConfig then begin
-      ConfigFile := ExpandConstant('{app}\config.json');
+      ConfigFile := ExpandConstant('{app}\config.toml');
       if FileExists(ConfigFile) then
         DeleteFile(ConfigFile);
     end;

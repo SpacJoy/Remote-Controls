@@ -1061,13 +1061,8 @@ void OpenConfigGui(void)
     wchar_t configPathW[MAX_PATH] = {0};
     if (!Utf8ToWide(configPathA, configPathW, MAX_PATH) || !PathFileExistsW(configPathW))
     {
-        // 如果 config.toml 不存在，尝试 config.json
-        sprintf_s(configPathA, MAX_PATH, "%s\\config.json", g_appDir);
-        if (!Utf8ToWide(configPathA, configPathW, MAX_PATH) || !PathFileExistsW(configPathW))
-        {
-            ShowNotificationDirect(g_lang->errorPromptTitle, g_lang->configNotExists);
-            return;
-        }
+        ShowNotificationDirect(g_lang->errorPromptTitle, g_lang->configNotExists);
+        return;
     }
 
     // 使用记事本打开
