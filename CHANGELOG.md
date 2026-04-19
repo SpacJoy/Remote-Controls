@@ -2,11 +2,50 @@
 
 # CHANGELOG
 
----
+***
+
+# V3.3.0 (2026-04-19)
+
+**配置文件热重载、亮度/音量上下限与界面优化**\
+Full Changelog (相对于 3.2.0): [https://github.com/SpacJoy/Remote-Controls/compare/V3.2.0...V3.3.0](https://github.com/SpacJoy/Remote-Controls/compare/V3.2.0...V3.2.1)
+
+## 🔄 配置文件实时热重载
+
+- **零 CPU 占用监听**：使用 Windows `ReadDirectoryChangesW` API 实现内核级文件事件通知，等待期间零 CPU 消耗。
+- **即时响应**：配置文件保存后立即触发重载（延迟 < 100ms + 500ms 防抖），无需重启主程序。
+- **自动重新加载**：检测到 `config.toml` 变化时自动解析并更新路由器内部状态（主题列表、动作表等）。
+- **通知提示**：配置重载成功/失败均会通过托盘通知反馈给用户。
+- **优雅退出**：程序退出时自动停止监听线程并释放资源。
+
+## 🎚️ 亮度与音量上下限控制
+
+- **WMI/Dxva2 亮度范围限制**：支持为 WMI 和 Dxva2 分别设置亮度上下限（0-100），超出范围的亮度值会自动限制到边界。
+- **系统音量范围限制**：支持设置全局音量上下限（0-100），防止音量过大或过小。
+- **Toast 通知显示实际值**：修正通知提示中显示原始值而非限制后值的问题，确保 toast 显示与实际执行一致。
+- **GUI 设置界面**：内置主题设置窗口新增亮度范围（WMI/Dxva2 分别设置）和音量范围控制，支持 Spinbox 输入和一键重置。
+
+## 💄 GUI 界面优化
+
+- **内置主题设置分隔线**：在"显示器亮度调节方案"和"睡眠/电源 (Sleep) 动作"区域上方添加视觉分隔线，布局更清晰。
+- **配置注释增强**：`config.toml` 自动生成 `volume_min` 和 `volume_max` 字段的中文注释。
+
+## 🗣️ 国际化增强
+
+- **新增翻译条目**：亮度/音量上下限相关控件完整支持中英文切换。
+- **语言模板更新**：`template.json` 和 `en-US.json` 同步新增相关翻译键。
+
+## 🔧 技术细节
+
+- **新增模块**：`rc_config_watcher.c/.h` 实现独立后台线程的文件监听。
+- **配置重载逻辑**：`RC_RouterReloadConfig` 函数安全释放旧资源并重新初始化路由器。
+- **构建系统更新**：`build_main.ps1` 自动编译并链接新模块。
+- **JSON 配置完全移除**：主程序不再支持 JSON 配置文件回退，纯净 TOML 配置。
+
+***
 
 # V3.2.0 (2026-02-07)
 
-**配置系统重构、版本号显示优化、国际化增强与 CI/CD 流程优化**  
+**配置系统重构、版本号显示优化、国际化增强与 CI/CD 流程优化**\
 Full Changelog (相对于 3.1.0): <https://github.com/SpacJoy/Remote-Controls/compare/V3.0.2...V3.2.0>
 
 ## 🏷️ 版本号系统升级
@@ -47,7 +86,7 @@ Full Changelog (相对于 3.1.0): <https://github.com/SpacJoy/Remote-Controls/co
 - **文件关联优化**：当通过托盘打开配置时，优先尝试使用记事本打开 `config.toml`，确保编辑体验一致。
 - **环境兼容性提升**：优化了 TOML 库的导入逻辑，确保在 Python 3.11 以下版本也能通过 `tomli` 正常运行。
 
-##  🧰 CI/CD 自动化与构建
+## 🧰 CI/CD 自动化与构建
 
 - **标签重命名机制**：修复了 `dev` 分支推送正式标签导致主分支被误打标签的问题。现在 `dev` 分支的正式标签会自动重命名为带 `-test` 后缀的测试标签。
 - **自动冲突处理**：支持 `-testN` 自动递增后缀，通过 `git ls-remote` 实时检查远程标签冲突。
@@ -56,11 +95,11 @@ Full Changelog (相对于 3.1.0): <https://github.com/SpacJoy/Remote-Controls/co
 - **构建脚本适配**：更新 `build_main.ps1` 与 `build_tray.ps1`，自动化处理 `tomlc99` 库的编译与链接。
 - **单实例逻辑微调**：优化了主程序的互斥体检查流程，确保配置加载过程中的稳定性。
 
----
+***
 
 # V3.1.0 (2026-02-04)
 
-**全新的亮度调节系统、更完善的 GUI 交互与 CI/CD 自动化递增**  
+**全新的亮度调节系统、更完善的 GUI 交互与 CI/CD 自动化递增**\
 Full Changelog (相对于 3.0.2): <https://github.com/SpacJoy/Remote-Controls/compare/V3.0.2...V3.1.0>
 
 ## ✨ 屏幕亮度调节系统深度重构
@@ -95,11 +134,11 @@ Full Changelog (相对于 3.0.2): <https://github.com/SpacJoy/Remote-Controls/co
 - **代码重构**：优化亮度控制的 PowerShell 调用逻辑，提升 Dxva2 DDC/CI 控制的稳定性。
 - **规范化**：更新 `LICENSE`，重构 `.gitignore`，并清理了 README 中的过时章节。
 
----
+***
 
 # V3.0.2 (2025-12-27)
 
-**图标更新、亮度优先策略增强、Twinkle Tray 适配优化与构建链路增强**  
+**图标更新、亮度优先策略增强、Twinkle Tray 适配优化与构建链路增强**\
 Full Changelog (相对于 3.0.1): <https://github.com/SpacJoy/Remote-Controls/compare/V3.0.1...V3.0.2>
 
 ## 🎨 图标与通知
@@ -141,7 +180,7 @@ Full Changelog (相对于 3.0.1): <https://github.com/SpacJoy/Remote-Controls/co
 
 # V3.0.1 (2025-12-15)
 
-**MQTT TLS 增强、构建链路更稳、GUI 体验优化**  
+**MQTT TLS 增强、构建链路更稳、GUI 体验优化**\
 Full Changelog (相对于 3.0.0): <https://github.com/SpacJoy/Remote-Controls/compare/V3.0.0...V3.0.1>
 
 ## 🔐 MQTT / TLS
@@ -167,7 +206,7 @@ Full Changelog (相对于 3.0.0): <https://github.com/SpacJoy/Remote-Controls/co
 
 # V3.0.0 (2025-12-15)
 
-**C 版主程序/托盘重构、全面多语言与安全增强**  
+**C 版主程序/托盘重构、全面多语言与安全增强**\
 Full Changelog (相对于 2.4.0): <https://github.com/SpacJoy/Remote-Controls/compare/V2.4.0...V3.0.0>
 
 ## 🚀 重大变更（Breaking Changes）
@@ -211,7 +250,7 @@ Full Changelog (相对于 2.4.0): <https://github.com/SpacJoy/Remote-Controls/co
 
 # V2.4.0 (2025-12-11)
 
-**Twinkle Tray 亮度控制可选方案**  
+**Twinkle Tray 亮度控制可选方案**\
 Full Changelog (相对于 2.3.10): <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.10...V2.4.0>
 
 ## ✨ 新增与优化
@@ -225,7 +264,7 @@ Full Changelog (相对于 2.3.10): <https://github.com/SpacJoy/Remote-Controls/c
 - README 说明亮度可选 Twinkle Tray，并补充外接显示器提示。
 - 默认配置新增亮度控制模式与 Twinkle Tray 相关键，便于直接填写路径和目标。
 
----
+***
 
 # V2.3.10 (2025-12-08)
 
@@ -274,7 +313,6 @@ Full Changelog (相对于 2.3.8): <https://github.com/SpacJoy/Remote-Controls/co
   2. 失败则遍历进程列表查找 `explorer.exe`，并优先匹配当前活动控制台会话（Active Console Session）。
   3. 最后兜底使用任意找到的 `explorer.exe`。
   - 这显著提高了在开机自启、多用户或 Shell 重启等复杂场景下成功发送通知的概率。
-
 - **动态托盘菜单**：
   - “退出”菜单项文案现在根据主程序状态动态变化：
     - 主程序运行时显示：“退出托盘（使用主程序自带托盘）”。
@@ -294,7 +332,7 @@ Full Changelog (相对于 2.3.8): <https://github.com/SpacJoy/Remote-Controls/co
   - 移除自定义卸载界面，回归原生体验。
   - 卸载时若选择不保留配置文件，将彻底清理安装目录，不残留垃圾文件。
 
----
+***
 
 # V2.3.8 (2025-11-10)
 
@@ -322,7 +360,7 @@ Full Changelog (相对于 2.3.7): <https://github.com/SpacJoy/Remote-Controls/co
 - 无需修改现有配置；新增功能向后兼容。
 - 自定义主题用户可享受更丰富的控制选项和更好的用户体验。
 
----
+***
 
 # V2.3.7 (2025-11-09)
 
@@ -360,11 +398,11 @@ Full Changelog (相对于 2.3.6): <https://github.com/SpacJoy/Remote-Controls/co
   - 依次点击“托盘状态”“打开配置界面”等，toast 能正常显示，托盘不退出。
   - 如个别环境仍有第一次 toast 失败，后续应用将自动熔断到安全回退，不再崩溃。
 
----
+***
 
 # V2.3.6 (2025-10-04)
 
-**Hotkey 输入兼容性修复与内部健壮性补丁**  
+**Hotkey 输入兼容性修复与内部健壮性补丁**\
 Full Changelog (相对于 2.3.5): <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.5...V2.3.6>
 
 ## 🐛 核心修复
@@ -398,7 +436,7 @@ Full Changelog (相对于 2.3.5): <https://github.com/SpacJoy/Remote-Controls/co
 
 小规模补丁版本；针对特定输入法/自动化脚本场景的正确性修复，推荐所有使用回车热键的用户升级。
 
----
+***
 
 # V2.3.5 (2025-09-27)
 
@@ -436,7 +474,7 @@ Full Changelog (相对于 2.3.5): <https://github.com/SpacJoy/Remote-Controls/co
 - **零学习成本**：所有错误处理在后台自动进行
 - **建议更新**：强烈推荐更新到此版本，获得更稳定的开机自启体验
 
----
+***
 
 # V2.3.4 (2025-09-15)
 
@@ -459,11 +497,11 @@ Full Changelog (相对于 2.3.5): <https://github.com/SpacJoy/Remote-Controls/co
 - 正常网络启动：程序应常驻并自动订阅主题，通知中心仅短暂显示“正在连接…”并在成功后自动清除。
 - 无网络启动：程序不应退出，会显示替换式“正在重试”通知；恢复网络后提示自动消失并继续正常工作。
 
----
+***
 
 # V2.3.2 (2025-09-03)
 
-**稳定性加固与打包精简**  
+**稳定性加固与打包精简**\
 **Full Changelog**: <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.1...V2.3.2>
 
 ## 🛡 稳定性 / 崩溃防护
@@ -479,7 +517,7 @@ Full Changelog (相对于 2.3.5): <https://github.com/SpacJoy/Remote-Controls/co
 
 ## 🧹 打包脚本与资源
 
-- PyInstaller / Nuitka 打包脚本移除对本地彩蛋图片 (cd1~cd5) 的收集与捆绑逻辑，减小构建体积 & 降低差异变更导致的打包失败风险。
+- PyInstaller / Nuitka 打包脚本移除对本地彩蛋图片 (cd1\~cd5) 的收集与捆绑逻辑，减小构建体积 & 降低差异变更导致的打包失败风险。
 - `tray.py` 头部打包说明同步：当前仅需 `icon.ico`。
 
 ## 🔔 通知与可用性
@@ -500,7 +538,7 @@ Full Changelog (相对于 2.3.5): <https://github.com/SpacJoy/Remote-Controls/co
 
 # V2.3.1 (2025-08-29)
 
-**托盘交互与通知系统实时性强化**  
+**托盘交互与通知系统实时性强化**\
 Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.0...V2.3.1>
 
 ## 🛎 通知系统重构（低延迟）
@@ -510,7 +548,7 @@ Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.0...V2.
 - 通知模式支持：
   - replace（默认）：使用固定 tag/group 覆盖上一条，实现“状态面板式”实时刷新，不等待旧通知消失。
   - stack：保留原叠加显示方式（需要时显式传入 `mode="stack"`）。
-- 加入唯一 tag 逻辑与 fallback，兼容不同版本 `win11toast` 参数（title/body/app_id/icon）。
+- 加入唯一 tag 逻辑与 fallback，兼容不同版本 `win11toast` 参数（title/body/app\_id/icon）。
 - 失败降级：参数不兼容/图标异常时自动回退最简通知，保证不中断。
 
 ## 🧊 托盘交互与菜单体验
@@ -536,11 +574,11 @@ Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.3.0...V2.
 - 通知封装集中缓存缩放图标，避免重复磁盘 I/O。
 - 统一主/托盘两处封装接口参数（message / mode / unique / icon 自动处理）。
 
----
+***
 
 # V2.3.0 (2025-08-22)
 
-**单实例与脚本模式体验重构**  
+**单实例与脚本模式体验重构**\
 Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.2.13...V2.3.0>
 
 ## 🔐 单实例 / 互斥体机制
@@ -577,7 +615,7 @@ Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.2.13...V2
 - 赋予用户可控的实例冲突处理选项，提升容错与自救能力。
 - 提权 / 重启流程更加平滑，避免界面闪烁与不确定等待。
 
----
+***
 
 # V2.2.13 (2025-08-22)
 
@@ -605,7 +643,7 @@ Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.2.13...V2
 - GitHub Actions 与本地构建流程完全兼容。
 - 构建失败时改进错误提示和清理机制。
 
----
+***
 
 # V2.2.12 (2025-08-22)
 
@@ -626,7 +664,7 @@ Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.2.13...V2
 - 菜单文本根据不同状态显示相应版本信息。
 - 改进版本比较逻辑，准确显示版本关系，统一菜单显示格式。
 
----
+***
 
 # V2.2.11 (2025-08-22)
 
@@ -646,7 +684,7 @@ Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.2.13...V2
 
 - 记录程序各初始化阶段详细信息，提供启动性能与状态监控数据，便于诊断。
 
----
+***
 
 # V2.2.10 (2025-08-21)
 
@@ -672,7 +710,7 @@ Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.2.13...V2
 
 - 开发者只需修改 `version_info.py` 一个文件，打包时自动同步，避免版本不一致。
 
----
+***
 
 # V2.2.9 (2025-08-20)
 
@@ -702,7 +740,7 @@ Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.2.13...V2
 - 重复版本构建保留完整历史信息。
 - 用户能获得完整的版本变更历史与构建信息。
 
----
+***
 
 # V2.2.8 (2025-08-20)
 
@@ -724,4 +762,5 @@ Full Changelog: <https://github.com/SpacJoy/Remote-Controls/compare/V2.2.13...V2
 - 构建脚本自动更新 `version_info.py`，确保版本一致。
 - Actions 日志包含详细依赖检查、构建验证与错误输出，便于排查。
 
----
+***
+
