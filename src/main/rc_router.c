@@ -1966,8 +1966,8 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
 
     // Read smooth transition config
     bool smoothEnabled = cfg_bool(r->config, "brightness_smooth_enabled", false);
-    int bStep = cfg_int(r->config, "brightness_step", 2);
-    int bIntervalMs = cfg_int(r->config, "brightness_interval_ms", 30);
+    int bStep = cfg_int(r->config, "brightness_step", 10);
+    int bIntervalMs = cfg_int(r->config, "brightness_interval_ms", 10);
     if (bIntervalMs < 1) bIntervalMs = 1;
 
     // Log smooth config for debugging

@@ -4475,8 +4475,8 @@ def open_builtin_settings():
         smooth_enabled = tk.IntVar(value=config.get("brightness_smooth_enabled", 0))
         ttk.Checkbutton(smooth_frame, text=t("启用平滑渐变"), variable=smooth_enabled).pack(side="left", padx=(0, 15))
         
-        bStep = tk.IntVar(value=config.get("brightness_step", 2))
-        bIntervalMs = tk.IntVar(value=config.get("brightness_interval_ms", 30))
+        bStep = tk.IntVar(value=config.get("brightness_step", 10))
+        bIntervalMs = tk.IntVar(value=config.get("brightness_interval_ms", 10))
         
         ttk.Label(smooth_frame, text=t("步长:")).pack(side="left", padx=(0, 2))
         step_spin = ttk.Spinbox(smooth_frame, from_=1, to=20, textvariable=bStep, width=5)
