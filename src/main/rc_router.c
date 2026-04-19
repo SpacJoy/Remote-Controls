@@ -1609,46 +1609,111 @@ typedef struct
     int dxva2Min, dxva2Max;
     bool ttOverlay;
     bool ttPanel;
+    bool smoothWmi;
+    bool smoothDxva2;
+    bool smoothTT;
+    // Custom mode extras
+    char *customList;
+    char *customStrategy;
     char *topicUtf8;
     char *payloadUtf8;
 } BrightnessSmoothCtx;
 
-static void _brightness_set_direct(const char *mode, int v, int vWmi, int vDxva2,
+static void _brightness_set_all(const char *mode, int v, int vWmi, int vDxva2,
                                    const char *wmiTarget, const char *dxva2Target,
                                    const char *ttPath, const char *ttMode, const char *ttVal,
-                                   bool ttOverlay, bool ttPanel)
+                                   bool ttOverlay, bool ttPanel,
+                                   const char *customList, const char *customStrategy,
+                                   bool smoothWmi, bool smoothDxva2, bool smoothTT,
+                                   int targetFinal)
 {
-    if (!mode || _stricmp(mode, "wmi") == 0)
+    if (mode && _stricmp(mode, "custom") == 0)
     {
-        RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
-    }
-    else if (_stricmp(mode, "dxva2") == 0)
-    {
-        RC_ActionSetBrightnessDxva2Percent(vDxva2, dxva2Target);
-    }
-    else if (_stricmp(mode, "twinkle_tray") == 0)
-    {
-        RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
-    }
-    else if (_stricmp(mode, "wmi_priority") == 0)
-    {
-        if (!RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget))
+        bool fallback = (customStrategy && _stricmp(customStrategy, "fallback") == 0);
+        if (customList && *customList)
         {
-            RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+            char *copy = dupstr0(customList);
+            if (copy)
+            {
+                char *ctx = NULL;
+                char *token = strtok_s(copy, ",", &ctx);
+                bool success = false;
+                while (token)
+                {
+                    while (*token == ' ') token++;
+                    size_t len = strlen(token);
+                    while (len > 0 && token[len - 1] == ' ') token[--len] = 0;
+
+                    bool ok = false;
+                    if (_stricmp(token, "wmi") == 0)
+                    {
+                        int val = smoothWmi ? vWmi : targetFinal;
+                        ok = RC_ActionSetBrightnessWmiPercent(val, wmiTarget);
+                    }
+                    else if (_stricmp(token, "dxva2") == 0)
+                    {
+                        int val = smoothDxva2 ? vDxva2 : targetFinal;
+                        ok = RC_ActionSetBrightnessDxva2Percent(val, dxva2Target);
+                    }
+                    else if (_stricmp(token, "twinkle_tray") == 0)
+                    {
+                        int val = smoothTT ? v : targetFinal;
+                        ok = RC_ActionSetBrightnessTwinkleTrayPercentUtf8(val, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+                    }
+
+                    if (ok) success = true;
+                    if (fallback && success) break;
+
+                    token = strtok_s(NULL, ",", &ctx);
+                }
+                free(copy);
+            }
         }
     }
-    else if (_stricmp(mode, "twinkle_priority") == 0)
+    else
     {
-        if (!RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel))
+        if (!mode || _stricmp(mode, "wmi") == 0)
         {
-            RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
+            int val = smoothWmi ? vWmi : targetFinal;
+            RC_ActionSetBrightnessWmiPercent(val, wmiTarget);
         }
-    }
-    else if (_stricmp(mode, "both") == 0)
-    {
-        RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
-        RC_ActionSetBrightnessDxva2Percent(vDxva2, dxva2Target);
-        RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+        else if (_stricmp(mode, "dxva2") == 0)
+        {
+            int val = smoothDxva2 ? vDxva2 : targetFinal;
+            RC_ActionSetBrightnessDxva2Percent(val, dxva2Target);
+        }
+        else if (_stricmp(mode, "twinkle_tray") == 0)
+        {
+            int val = smoothTT ? v : targetFinal;
+            RC_ActionSetBrightnessTwinkleTrayPercentUtf8(val, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+        }
+        else if (_stricmp(mode, "wmi_priority") == 0)
+        {
+            int val = smoothWmi ? vWmi : targetFinal;
+            if (!RC_ActionSetBrightnessWmiPercent(val, wmiTarget))
+            {
+                int val2 = smoothTT ? v : targetFinal;
+                RC_ActionSetBrightnessTwinkleTrayPercentUtf8(val2, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+            }
+        }
+        else if (_stricmp(mode, "twinkle_priority") == 0)
+        {
+            int val = smoothTT ? v : targetFinal;
+            if (!RC_ActionSetBrightnessTwinkleTrayPercentUtf8(val, ttPath, ttMode, ttVal, ttOverlay, ttPanel))
+            {
+                int val2 = smoothWmi ? vWmi : targetFinal;
+                RC_ActionSetBrightnessWmiPercent(val2, wmiTarget);
+            }
+        }
+        else if (_stricmp(mode, "both") == 0)
+        {
+            int valW = smoothWmi ? vWmi : targetFinal;
+            int valD = smoothDxva2 ? vDxva2 : targetFinal;
+            int valT = smoothTT ? v : targetFinal;
+            RC_ActionSetBrightnessWmiPercent(valW, wmiTarget);
+            RC_ActionSetBrightnessDxva2Percent(valD, dxva2Target);
+            RC_ActionSetBrightnessTwinkleTrayPercentUtf8(valT, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
+        }
     }
 }
 
@@ -1719,10 +1784,13 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
             if (vDxva2 < ctx->dxva2Min) vDxva2 = ctx->dxva2Min;
             if (vDxva2 > ctx->dxva2Max) vDxva2 = ctx->dxva2Max;
 
-            _brightness_set_direct(ctx->mode, v, vWmi, vDxva2,
-                                  ctx->wmiTarget, ctx->dxva2Target,
-                                  ctx->ttPath, ctx->ttMode, ctx->ttVal,
-                                  ctx->ttOverlay, ctx->ttPanel);
+            _brightness_set_all(ctx->mode, v, vWmi, vDxva2,
+                               ctx->wmiTarget, ctx->dxva2Target,
+                               ctx->ttPath, ctx->ttMode, ctx->ttVal,
+                               ctx->ttOverlay, ctx->ttPanel,
+                               ctx->customList, ctx->customStrategy,
+                               ctx->smoothWmi, ctx->smoothDxva2, ctx->smoothTT,
+                               target);
 
             iterations++;
 
@@ -1745,6 +1813,8 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
     free(ctx->ttPath);
     free(ctx->ttMode);
     free(ctx->ttVal);
+    free(ctx->customList);
+    free(ctx->customStrategy);
     free(ctx->topicUtf8);
     free(ctx->payloadUtf8);
     free(ctx);
@@ -1835,7 +1905,7 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
     bool smoothEnabled = cfg_bool(r->config, "brightness_smooth_enabled", false);
     int bStep = cfg_int(r->config, "brightness_step", 2);
     int bIntervalMs = cfg_int(r->config, "brightness_interval_ms", 30);
-    if (bIntervalMs < 10) bIntervalMs = 10;
+    if (bIntervalMs < 1) bIntervalMs = 1;
 
     // Log smooth config for debugging
     RC_LogInfo("亮度配置: mode=%s, smoothEnabled=%d, step=%d, interval=%dms",
@@ -1854,7 +1924,7 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
     if (vDxva2 > dxva2Max) vDxva2 = dxva2Max;
 
     // If smooth transition is enabled, use a background thread
-    if (smoothEnabled && bStep > 0 && mode && _stricmp(mode, "custom") != 0)
+    if (smoothEnabled && bStep > 0 && mode)
     {
         BrightnessSmoothCtx *ctx = (BrightnessSmoothCtx *)calloc(1, sizeof(BrightnessSmoothCtx));
         if (!ctx)
@@ -1875,6 +1945,11 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
         ctx->dxva2Max = dxva2Max;
         ctx->ttOverlay = ttOverlay;
         ctx->ttPanel = ttPanel;
+        ctx->smoothWmi = cfg_bool(r->config, "brightness_smooth_wmi", true);
+        ctx->smoothDxva2 = cfg_bool(r->config, "brightness_smooth_dxva2", true);
+        ctx->smoothTT = cfg_bool(r->config, "brightness_smooth_twinkle_tray", true);
+        ctx->customList = dupstr0(cfg_str(r->config, "brightness_custom_list"));
+        ctx->customStrategy = dupstr0(cfg_str(r->config, "brightness_custom_strategy"));
         ctx->topicUtf8 = dupstr0(topicUtf8 ? topicUtf8 : "");
         ctx->payloadUtf8 = dupstr0(payloadUtf8 ? payloadUtf8 : "");
         
@@ -1892,6 +1967,8 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
             free(ctx->ttPath);
             free(ctx->ttMode);
             free(ctx->ttVal);
+            free(ctx->customList);
+            free(ctx->customStrategy);
             free(ctx->topicUtf8);
             free(ctx->payloadUtf8);
             free(ctx);
@@ -1899,60 +1976,15 @@ static void _do_brightness_action(RC_Router *r, int value, const char *topicUtf8
     }
 
 direct_set:
-    // Handle custom mode or fallback to direct set
-    if (mode && _stricmp(mode, "custom") == 0)
     {
-        // Custom order and strategy
-        // brightness_custom_list: e.g. "wmi,dxva2,twinkle_tray"
-        // brightness_custom_strategy: "all" (simultaneous) or "fallback" (stop on success)
-        const char *list = cfg_str(r->config, "brightness_custom_list");
-        const char *strategy = cfg_str(r->config, "brightness_custom_strategy");
-        bool fallback = (strategy && _stricmp(strategy, "fallback") == 0);
-
-        if (list && *list)
-        {
-            char *copy = dupstr0(list);
-            if (copy)
-            {
-                char *ctx = NULL;
-                char *token = strtok_s(copy, ",", &ctx);
-                bool success = false;
-                while (token)
-                {
-                    // trim whitespace
-                    while (*token == ' ') token++;
-                    size_t len = strlen(token);
-                    while (len > 0 && token[len - 1] == ' ') token[--len] = 0;
-
-                    bool ok = false;
-                    if (_stricmp(token, "wmi") == 0)
-                    {
-                        ok = RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
-                    }
-                    else if (_stricmp(token, "dxva2") == 0)
-                    {
-                        ok = RC_ActionSetBrightnessDxva2Percent(vDxva2, dxva2Target);
-                    }
-                    else if (_stricmp(token, "twinkle_tray") == 0)
-                    {
-                        ok = RC_ActionSetBrightnessTwinkleTrayPercentUtf8(v, ttPath, ttMode, ttVal, ttOverlay, ttPanel);
-                    }
-
-                    if (ok) success = true;
-                    if (fallback && success) break;
-
-                    token = strtok_s(NULL, ",", &ctx);
-                }
-                free(copy);
-            }
-        }
-    }
-    else
-    {
-        _brightness_set_direct(mode, v, vWmi, vDxva2,
-                              wmiTarget, dxva2Target,
-                              ttPath, ttMode, ttVal,
-                              ttOverlay, ttPanel);
+        const char *customList = cfg_str(r->config, "brightness_custom_list");
+        const char *customStrategy = cfg_str(r->config, "brightness_custom_strategy");
+        _brightness_set_all(mode, v, vWmi, vDxva2,
+                           wmiTarget, dxva2Target,
+                           ttPath, ttMode, ttVal,
+                           ttOverlay, ttPanel,
+                           customList, customStrategy,
+                           true, true, true, v);
     }
 
     router_notify_action(r, topicUtf8, payloadUtf8);

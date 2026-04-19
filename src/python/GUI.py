@@ -3143,7 +3143,10 @@ def save_config_toml(nested_config: Dict[str, Any], file_path: str) -> None:
         "brightness_custom_strategy =": "# 自定义策略: all (全部执行) / success (成功即止)\nbrightness_custom_strategy",
         "brightness_smooth_enabled =": "# 是否启用平滑亮度渐变 (Smooth Brightness: 0/1)\nbrightness_smooth_enabled",
         "brightness_step =": "# 平滑渐变步长 (Step per interval: 1-20)\nbrightness_step",
-        "brightness_interval_ms =": "# 平滑渐变间隔毫秒 (Interval in ms: 10-500)\nbrightness_interval_ms",
+        "brightness_interval_ms =": "# 平滑渐变间隔毫秒 (Interval in ms: 1-500)\nbrightness_interval_ms",
+        "brightness_smooth_wmi =": "# WMI平滑开关 (WMI Smooth: 0/1)\nbrightness_smooth_wmi",
+        "brightness_smooth_dxva2 =": "# Dxva2平滑开关 (Dxva2 Smooth: 0/1)\nbrightness_smooth_dxva2",
+        "brightness_smooth_twinkle_tray =": "# Twinkle Tray平滑开关 (TT Smooth: 0/1)\nbrightness_smooth_twinkle_tray",
 
         # --- Other/Internal Items ---
         "computer_on_action =": "# 电脑开启时的动作 (On Action: lock/shutdown/restart/none)\ncomputer_on_action",
@@ -4480,7 +4483,7 @@ def open_builtin_settings():
         step_spin.pack(side="left", padx=(0, 10))
         
         ttk.Label(smooth_frame, text=t("间隔(ms):")).pack(side="left", padx=(0, 2))
-        interval_spin = ttk.Spinbox(smooth_frame, from_=10, to=500, textvariable=bIntervalMs, width=5)
+        interval_spin = ttk.Spinbox(smooth_frame, from_=1, to=500, textvariable=bIntervalMs, width=5)
         interval_spin.pack(side="left", padx=(0, 10))
         
         def _on_smooth_toggle():
@@ -4493,6 +4496,21 @@ def open_builtin_settings():
         
         _on_smooth_toggle()
         smooth_enabled.trace_add("write", lambda *_: _on_smooth_toggle())
+        adv_row += 1
+
+        # Per-interface smooth toggles
+        ttk.Label(adv_main_frame, text=t("分别启用平滑:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        
+        smooth_iface_frame = ttk.Frame(adv_main_frame)
+        smooth_iface_frame.grid(row=adv_row, column=1, columnspan=2, padx=10, sticky="w")
+        
+        smooth_wmi = tk.IntVar(value=config.get("brightness_smooth_wmi", 1))
+        smooth_dxva2 = tk.IntVar(value=config.get("brightness_smooth_dxva2", 1))
+        smooth_tt = tk.IntVar(value=config.get("brightness_smooth_twinkle_tray", 1))
+        
+        ttk.Checkbutton(smooth_iface_frame, text="WMI", variable=smooth_wmi).pack(side="left", padx=(0, 10))
+        ttk.Checkbutton(smooth_iface_frame, text="Dxva2", variable=smooth_dxva2).pack(side="left", padx=(0, 10))
+        ttk.Checkbutton(smooth_iface_frame, text="Twinkle Tray", variable=smooth_tt).pack(side="left")
         adv_row += 1
 
         ttk.Separator(adv_main_frame, orient="horizontal").grid(row=adv_row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
@@ -4674,6 +4692,9 @@ def open_builtin_settings():
             config["brightness_smooth_enabled"] = smooth_enabled.get()
             config["brightness_step"] = bStep.get()
             config["brightness_interval_ms"] = bIntervalMs.get()
+            config["brightness_smooth_wmi"] = smooth_wmi.get()
+            config["brightness_smooth_dxva2"] = smooth_dxva2.get()
+            config["brightness_smooth_twinkle_tray"] = smooth_tt.get()
             config["wmi_target"] = wmi_target.get()
             config["wmi_brightness_min"] = wmi_min.get()
             config["wmi_brightness_max"] = wmi_max.get()
