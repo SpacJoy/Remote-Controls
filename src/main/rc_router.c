@@ -1619,7 +1619,8 @@ typedef struct
     char *payloadUtf8;
 } BrightnessSmoothCtx;
 
-static void _brightness_set_all(const char *mode, int v, int vWmi, int vDxva2,
+static void _brightness_set_all(BrightnessSmoothCtx *ctx_smooth,
+                                   const char *mode, int v, int vWmi, int vDxva2,
                                    const char *wmiTarget, const char *dxva2Target,
                                    const char *ttPath, const char *ttMode, const char *ttVal,
                                    bool ttOverlay, bool ttPanel,
@@ -1635,8 +1636,8 @@ static void _brightness_set_all(const char *mode, int v, int vWmi, int vDxva2,
             char *copy = dupstr0(customList);
             if (copy)
             {
-                char *ctx = NULL;
-                char *token = strtok_s(copy, ",", &ctx);
+                char *tk = NULL;
+                char *token = strtok_s(copy, ",", &tk);
                 bool success = false;
                 while (token)
                 {
@@ -1649,14 +1650,34 @@ static void _brightness_set_all(const char *mode, int v, int vWmi, int vDxva2,
                     {
                         if (smoothWmi)
                         {
-                            ok = RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
+                            // If targetFinal is outside limits, skip redundant calls ONLY if we've already passed the limit
+                            // but ALWAYS allow the final target step to ensure the clamped limit is reached.
+                            bool skip = false;
+                            if (ctx_smooth && v != targetFinal) {
+                                if (targetFinal > ctx_smooth->wmiMax && v > ctx_smooth->wmiMax) skip = true;
+                                if (targetFinal < ctx_smooth->wmiMin && v < ctx_smooth->wmiMin) skip = true;
+                            }
+
+                            if (!skip)
+                                ok = RC_ActionSetBrightnessWmiPercent(vWmi, wmiTarget);
+                            else
+                                ok = true; // treat as success to avoid fallback
                         }
                     }
                     else if (_stricmp(token, "dxva2") == 0)
                     {
                         if (smoothDxva2)
                         {
-                            ok = RC_ActionSetBrightnessDxva2Percent(vDxva2, dxva2Target);
+                            bool skip = false;
+                            if (ctx_smooth && v != targetFinal) {
+                                if (targetFinal > ctx_smooth->dxva2Max && v > ctx_smooth->dxva2Max) skip = true;
+                                if (targetFinal < ctx_smooth->dxva2Min && v < ctx_smooth->dxva2Min) skip = true;
+                            }
+
+                            if (!skip)
+                                ok = RC_ActionSetBrightnessDxva2Percent(vDxva2, dxva2Target);
+                            else
+                                ok = true;
                         }
                     }
                     else if (_stricmp(token, "twinkle_tray") == 0)
@@ -1670,7 +1691,7 @@ static void _brightness_set_all(const char *mode, int v, int vWmi, int vDxva2,
                     if (ok) success = true;
                     if (fallback && success) break;
 
-                    token = strtok_s(NULL, ",", &ctx);
+                    token = strtok_s(NULL, ",", &tk);
                 }
                 free(copy);
             }
@@ -1846,7 +1867,7 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
             if (vDxva2 < ctx->dxva2Min) vDxva2 = ctx->dxva2Min;
             if (vDxva2 > ctx->dxva2Max) vDxva2 = ctx->dxva2Max;
 
-            _brightness_set_all(ctx->mode, v, vWmi, vDxva2,
+            _brightness_set_all(ctx, ctx->mode, v, vWmi, vDxva2,
                                ctx->wmiTarget, ctx->dxva2Target,
                                ctx->ttPath, ctx->ttMode, ctx->ttVal,
                                ctx->ttOverlay, ctx->ttPanel,
@@ -2041,7 +2062,7 @@ direct_set:
     {
         const char *customList = cfg_str(r->config, "brightness_custom_list");
         const char *customStrategy = cfg_str(r->config, "brightness_custom_strategy");
-        _brightness_set_all(mode, v, vWmi, vDxva2,
+        _brightness_set_all(NULL, mode, v, vWmi, vDxva2,
                            wmiTarget, dxva2Target,
                            ttPath, ttMode, ttVal,
                            ttOverlay, ttPanel,
