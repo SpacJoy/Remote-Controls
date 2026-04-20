@@ -4584,8 +4584,7 @@ def open_builtin_settings():
         adv_row += 1
 
         # 2. Custom Order
-        custom_order_label = ttk.Label(adv_main_frame, text=t("自定义调节顺序:"))
-        custom_order_label.grid(row=adv_row, column=0, columnspan=2, padx=10, pady=(5, 5), sticky="w")
+        ttk.Label(adv_main_frame, text=t("自定义调节顺序:")).grid(row=adv_row, column=0, columnspan=2, padx=10, pady=(5, 5), sticky="w")
         adv_row += 1
         
         list_frame = ttk.Frame(adv_main_frame)
@@ -4637,14 +4636,11 @@ def open_builtin_settings():
             lb.insert(idx+1, txt)
             lb.selection_set(idx+1)
             
-        order_up_btn = ttk.Button(btn_frame, text="↑", width=3, command=move_up)
-        order_up_btn.pack(pady=2)
-        order_down_btn = ttk.Button(btn_frame, text="↓", width=3, command=move_down)
-        order_down_btn.pack(pady=2)
+        ttk.Button(btn_frame, text="↑", width=3, command=move_up).pack(pady=2)
+        ttk.Button(btn_frame, text="↓", width=3, command=move_down).pack(pady=2)
         adv_row += 1
 
-        strat_label = ttk.Label(adv_main_frame, text=t("执行策略:"))
-        strat_label.grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
+        ttk.Label(adv_main_frame, text=t("执行策略:")).grid(row=adv_row, column=0, padx=10, pady=5, sticky="e")
         
         strat_options = [("all", "同时执行 (all)"), ("fallback", "成功即止 (fallback)")]
         strat_key_var = tk.StringVar(value=config.get("brightness_custom_strategy", "all"))
@@ -4695,21 +4691,9 @@ def open_builtin_settings():
             if smooth_enabled.get():
                 step_spin.configure(state="normal")
                 interval_spin.configure(state="normal")
-                lb.configure(state=tk.DISABLED)
-                order_up_btn.configure(state="disabled")
-                order_down_btn.configure(state="disabled")
-                strat_cb.configure(state="disabled")
-                custom_order_label.configure(foreground="gray")
-                strat_label.configure(foreground="gray")
             else:
                 step_spin.configure(state="disabled")
                 interval_spin.configure(state="disabled")
-                lb.configure(state=tk.NORMAL)
-                order_up_btn.configure(state="normal")
-                order_down_btn.configure(state="normal")
-                strat_cb.configure(state="readonly")
-                custom_order_label.configure(foreground="")
-                strat_label.configure(foreground="")
         
         _on_smooth_toggle()
         smooth_enabled.trace_add("write", lambda *_: _on_smooth_toggle())
