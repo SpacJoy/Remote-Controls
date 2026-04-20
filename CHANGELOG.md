@@ -4,6 +4,17 @@
 
 ***
 
+# V3.4.3 (2026-04-21)
+
+**亮度平滑渐变自定义顺序支持**\
+Full Changelog (相对于 3.4.2): [https://github.com/SpacJoy/Remote-Controls/compare/V3.4.2...V3.4.3](https://github.com/SpacJoy/Remote-Controls/compare/V3.4.2...V3.4.3)
+
+## ⚙️ 平滑渐变优化
+
+- **自定义调节顺序控制平滑渐变执行顺序**：启用平滑渐变后，非平滑接口（未勾选平滑开关的亮度控制接口）的设置顺序现在也会遵循 `brightness_custom_list` 定义的自定义调节顺序，同时支持 `fallback`（成功即止）策略。此前非平滑接口在渐变开始前一次性设置为目标值时使用的是固定顺序（WMI → Dxva2 → Twinkle Tray），与渐变循环中的自定义顺序不一致。
+
+***
+
 # V3.4.2 (2026-04-20)
 
 **原生 WMI 亮度控制与平滑逻辑深度优化**\
