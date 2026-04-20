@@ -28,6 +28,7 @@
 #include <endpointvolume.h>
 #include <physicalmonitorenumerationapi.h>
 #include <highlevelmonitorconfigurationapi.h>
+#include <wbemidl.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -491,60 +492,160 @@ bool RC_ActionSetBrightnessWmiPercent(int percent0to100, const char *target)
      * - target: "all" 表示所有；数字字符串 (e.g. "0", "1") 表示指定索引的实例。
      */
     int v = clamp_int(percent0to100, 0, 100);
-    char psCmd[2048];
     int targetIdx = -1;
     if (target && isdigit((unsigned char)target[0]))
     {
         targetIdx = atoi(target);
     }
 
-    /*
-     * PowerShell 脚本逻辑：
-     * 1. 获取 WmiMonitorBrightnessMethods 实例。
-     * 2. 根据 target 选择全部或特定实例。
-     * 3. 调用 WmiSetBrightness(0, v)。
-     */
-    const char *psTemplate =
-        "$ErrorActionPreference = 'Stop'; "
-        "try { "
-        "  $methods = @(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods); "
-        "  if ($null -eq $methods -or $methods.Count -eq 0) { throw 'No WMI brightness methods found' } "
-        "  $target = %d; "
-        "  if ($target -eq -1) { "
-        "    foreach ($m in $methods) { $m.WmiSetBrightness(0, %d) } "
-        "  } else { "
-        "    if ($target -lt $methods.Count) { "
-        "      $methods[$target].WmiSetBrightness(0, %d) "
-        "    } else { "
-        "      throw \"Target index $target out of range (Count: $($methods.Count))\" "
-        "    } "
-        "  } "
-        "  Write-Host 'Success' "
-        "} catch { "
-        "  [Console]::Error.WriteLine(\"WMI Failed: $($_.Exception.Message)\"); "
-        "  exit 1; "
-        "}";
+    RC_LogInfo("WMI 亮度调节 (原生): %d%% (target=%s)", v, target ? target : "all");
 
-    snprintf(psCmd, sizeof(psCmd), psTemplate, targetIdx, v, v);
+    // 1. 初始化 COM
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    bool coInit = SUCCEEDED(hr);
+    if (hr == RPC_E_CHANGED_MODE)
+        coInit = false;
 
-    RC_LogInfo("WMI 亮度调节: %d%% (target=%s)", v, target ? target : "all");
-    char *output = NULL;
-    bool ok = RC_ActionRunPowershellCommandWithOutput(psCmd, &output);
-    if (ok && output)
+    // 2. 初始化安全性 (如果失败通常是因为已经初始化过，可以忽略)
+    hr = CoInitializeSecurity(NULL, -1, NULL, NULL, RPC_C_AUTHN_LEVEL_DEFAULT,
+                              RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE, NULL);
+
+    IWbemLocator *pLoc = NULL;
+    IWbemServices *pSvc = NULL;
+    IEnumWbemClassObject *pEnumerator = NULL;
+    bool success = false;
+
+    // 3. 创建 Locator
+    hr = CoCreateInstance(&CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, &IID_IWbemLocator, (LPVOID *)&pLoc);
+    if (FAILED(hr))
     {
-        // 去除输出末尾的换行符
-        size_t len = strlen(output);
-        while (len > 0 && (output[len - 1] == '\r' || output[len - 1] == '\n' || output[len - 1] == ' '))
-        {
-            output[--len] = '\0';
-        }
-        if (len > 0)
-        {
-            RC_LogInfo("WMI 调节结果: %s", output);
-        }
-        free(output);
+        RC_LogError("WMI 失败: 无法创建 WbemLocator (0x%08X)", hr);
+        goto cleanup;
     }
-    return ok;
+
+    // 4. 连接到 WMI 命名空间
+    hr = pLoc->lpVtbl->ConnectServer(pLoc, L"ROOT\\WMI", NULL, NULL, NULL, 0, NULL, NULL, &pSvc);
+    if (FAILED(hr))
+    {
+        RC_LogError("WMI 失败: 无法连接到 ROOT\\WMI (0x%08X)", hr);
+        goto cleanup;
+    }
+
+    // 5. 设置代理安全性
+    hr = CoSetProxyBlanket((IUnknown *)pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, NULL,
+                           RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE);
+    if (FAILED(hr))
+    {
+        RC_LogError("WMI 失败: 无法设置代理安全性 (0x%08X)", hr);
+        goto cleanup;
+    }
+
+    // 6. 执行查询
+    hr = pSvc->lpVtbl->ExecQuery(pSvc, L"WQL", L"SELECT * FROM WmiMonitorBrightnessMethods",
+                                 WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnumerator);
+    if (FAILED(hr))
+    {
+        RC_LogError("WMI 失败: 查询 WmiMonitorBrightnessMethods 失败 (0x%08X)", hr);
+        goto cleanup;
+    }
+
+    // 7. 遍历结果并调用方法
+    IWbemClassObject *pclsObj = NULL;
+    ULONG uReturn = 0;
+    int currentIndex = 0;
+
+    while (pEnumerator)
+    {
+        hr = pEnumerator->lpVtbl->Next(pEnumerator, WBEM_INFINITE, 1, &pclsObj, &uReturn);
+        if (0 == uReturn)
+            break;
+
+        if (targetIdx == -1 || currentIndex == targetIdx)
+        {
+            VARIANT vtPath;
+            VariantInit(&vtPath);
+            hr = pclsObj->lpVtbl->Get(pclsObj, L"__RELPATH", 0, &vtPath, NULL, NULL);
+            if (SUCCEEDED(hr) && vtPath.vt == VT_BSTR)
+            {
+                IWbemClassObject *pClass = NULL;
+                BSTR className = SysAllocString(L"WmiMonitorBrightnessMethods");
+                hr = pSvc->lpVtbl->GetObject(pSvc, className, 0, NULL, &pClass, NULL);
+                SysFreeString(className);
+
+                if (SUCCEEDED(hr))
+                {
+                    IWbemClassObject *pInParamsDef = NULL;
+                    hr = pClass->lpVtbl->GetMethod(pClass, L"WmiSetBrightness", 0, &pInParamsDef, NULL);
+                    if (SUCCEEDED(hr) && pInParamsDef)
+                    {
+                        IWbemClassObject *pInParams = NULL;
+                        hr = pInParamsDef->lpVtbl->SpawnInstance(pInParamsDef, 0, &pInParams);
+                        if (SUCCEEDED(hr))
+                        {
+                            VARIANT varB;
+                            VariantInit(&varB);
+                            varB.vt = VT_I4; // Try VT_I4 instead of VT_UI1
+                            varB.lVal = (long)v;
+                            HRESULT hrB = pInParams->lpVtbl->Put(pInParams, L"Brightness", 0, &varB, 0);
+
+                            VARIANT varT;
+                            VariantInit(&varT);
+                            varT.vt = VT_I4; // Try VT_I4 instead of VT_UI4
+                            varT.lVal = 0;
+                            HRESULT hrT = pInParams->lpVtbl->Put(pInParams, L"Timeout", 0, &varT, 0);
+
+                            if (FAILED(hrB) || FAILED(hrT))
+                            {
+                                RC_LogError("WMI 失败: Put 参数失败 (Brightness: 0x%08X, Timeout: 0x%08X)", hrB, hrT);
+                            }
+
+                            hr = pSvc->lpVtbl->ExecMethod(pSvc, vtPath.bstrVal, L"WmiSetBrightness", 0, NULL, pInParams, NULL, NULL);
+                            if (SUCCEEDED(hr))
+                            {
+                                success = true;
+                            }
+                            else
+                            {
+                                RC_LogError("WMI 失败: ExecMethod WmiSetBrightness 失败 (0x%08X) [relpath=%ls, val=%d]", 
+                                            hr, vtPath.bstrVal ? vtPath.bstrVal : L"NULL", v);
+                            }
+                            pInParams->lpVtbl->Release(pInParams);
+                        }
+                        pInParamsDef->lpVtbl->Release(pInParamsDef);
+                    }
+                    pClass->lpVtbl->Release(pClass);
+                }
+                VariantClear(&vtPath);
+            }
+        }
+        pclsObj->lpVtbl->Release(pclsObj);
+        currentIndex++;
+        if (targetIdx != -1 && currentIndex > targetIdx)
+            break;
+    }
+
+    if (success)
+    {
+        RC_LogInfo("WMI 亮度设置成功: %d%%", v);
+    }
+    else if (currentIndex == 0)
+    {
+        RC_LogWarn("WMI 失败: 未发现支持亮度调节的显示器实例");
+    }
+
+cleanup:
+    if (pEnumerator)
+        pEnumerator->lpVtbl->Release(pEnumerator);
+    if (pSvc)
+        pSvc->lpVtbl->Release(pSvc);
+    if (pLoc)
+        pLoc->lpVtbl->Release(pLoc);
+    if (coInit)
+        CoUninitialize();
+
+    // 如果原生失败，则不再尝试 PowerShell，因为用户明确表示 PowerShell 太慢。
+    // 但可以根据需要保留作为备选，目前先只用原生的。
+    return success;
 }
 
 bool RC_ActionSetVolumePercent(int percent0to100)

@@ -286,7 +286,7 @@ $linkArgs = @(
   '-mwindows',
   '-municode',
   '-lshlwapi','-lshell32','-luser32',
-  '-lole32','-luuid',
+  '-lole32','-loleaut32','-luuid','-lwbemuuid',
   '-ldxva2'
   # 注意：Paho 静态库依赖 ws2_32/crypt32/rpcrt4/advapi32，
   # 对于静态库链接，依赖库需要放到静态库之后，避免 undefined reference。
