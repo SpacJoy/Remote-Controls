@@ -1355,48 +1355,119 @@ def show_detail_window():
             _fill_text(txt, content_en if LANG != "zh-CN" else content_zh)
             return entry
 
+        quickstart_content_zh = """
+【快速入门】
+步骤一：准备 MQTT 服务
+    选择一个 MQTT 平台（如巴法云、Home Assistant 等），获取连接信息。
+    巴法云：免费平台，使用私钥模式，端口通常为 9501。
+    其他平台：通常使用账密模式，端口通常为 1883（非加密）或 8883（TLS）。
+
+步骤二：配置并保存
+    运行 RC-GUI.exe，在“系统配置”中填写 MQTT 服务器地址和端口。
+    在“MQTT认证配置”中选择认证模式并填写凭据。
+    在“主题配置”中启用所需主题。
+    点击“保存配置文件”生成 config.toml。
+
+步骤三：运行主程序
+    运行 RC-tray.exe（推荐）或 RC-main.exe。
+    托盘可管理主程序的启动、重启和关闭，并显示权限状态。
+    若未运行独立托盘，主程序会自动启用内置托盘。
+
+步骤四：接入智能家居（可选）
+    如使用巴法云，可在米家中绑定巴法云账号并同步设备，即可通过小爱同学控制。
+    如使用 Home Assistant 等平台，可在对应平台中配置 MQTT 实体。
+"""
+
+        quickstart_content_en = """
+【Quick Start】
+Step 1: Prepare MQTT Service
+    Choose an MQTT platform (e.g., Bemfa, Home Assistant) and obtain connection details.
+    Bemfa: Free platform using Secret Key mode, port is typically 9501.
+    Other platforms: Typically use Username/Password mode, port 1883 (plain) or 8883 (TLS).
+
+Step 2: Configure & Save
+    Run RC-GUI.exe. Fill in the broker address and port under "System Settings".
+    Select an auth mode and enter credentials under "MQTT Authentication".
+    Enable desired themes under "Themes".
+    Click "Save config" to generate config.toml.
+
+Step 3: Run the Main Program
+    Run RC-tray.exe (recommended) or RC-main.exe.
+    The tray manages the main program (start/restart/stop) and shows privilege status.
+    If the standalone tray is not running, the main program enables its built-in tray.
+
+Step 4: Connect to Smart Home (Optional)
+    For Bemfa: bind your Bemfa account in Mi Home and sync devices to control via Xiao Ai.
+    For Home Assistant etc.: configure MQTT entities in the respective platform.
+"""
+
         builtin_content_zh = """
 【内置主题概览】
-显示器亮度：
-    接口：支持 WMI (系统 WMI)、Dxva2 (物理 DDC/CI) 与 Twinkle Tray (第三方命令行) 接口。
-    功能：实现 0-100% 亮度调节，支持优先策略切换及多端同步控制。
+计算机 (Computer)：
+    类型：开关 (Switch) 接口；执行系统级电源与安全操作。
+    打开(on)动作：可选 不执行(none) / 锁屏(lock) / 关机(shutdown) / 重启(restart) / 注销(logoff)。
+    关闭(off)动作：同上，可独立配置。
+    延时：支持为打开/关闭动作分别配置执行延时（秒）；延时仅在关机或重启时生效，其它动作立即执行。
+
+显示器亮度 (Screen)：
+    类型：灯 (Light) 接口；实现 0-100% 亮度调节。
+    控制接口：支持 WMI (系统 WMI)、Dxva2 (物理 DDC/CI) 与 Twinkle Tray (第三方命令行)。
     策略说明：
         - WMI (系统 WMI 接口)：使用系统 WMI 接口；适用于笔记本和部分支持的台式机。
         - Dxva2 (物理显示器 DDC/CI)：使用 Dxva2 接口；依赖驱动支持，可能不稳定。
         - Twinkle Tray (第三方接口)：调用 Twinkle Tray 命令行控制，需先确保其运行。
         - 自定义调节：可自由组合以上接口，支持“同时执行”或“成功即止”策略，并可自定义调节顺序。
+    高级设置：
+        - 亮度范围：可为 WMI 和 Dxva2 分别设置最小/最大亮度范围，防止误操作。
+        - 目标显示器：支持按编号、按 ID 或全部显示器控制。
+        - 平滑渐变：可启用亮度平滑过渡，支持分别设置步长和间隔。
+        - 叠加层：可启用亮度调节时的屏幕叠加层提示。
 
-系统音量：
+系统音量 (Volume)：
     类型：窗帘 (Curtain) 接口；调节系统全局主音量 (0-100%)。
-    控制：支持精确百分比调节，发送 pause 指令可快速切换静音。
+    控制：发送 on#数字 可精确设置音量百分比，发送 pause 指令可快速切换静音。
+    音量范围：支持设置全局音量上下限，防止误操作导致音量过高或过低。
 
-多媒体控制：
+多媒体控制 (Media)：
     类型：窗帘 (Curtain) 接口；模拟多媒体按键实现播放流转：
         打开(on)：上一曲
         关闭(off)：下一曲
         暂停(pause)：播放/暂停。
         进阶：支持 on#百分比 (1-33 下一曲 / 34-66 播放暂停 / 67-100 上一曲)。
 
-睡眠/电源控制：
-    功能：执行系统级电源与安全操作。
-    动作：支持 睡眠(sleep) / 休眠(hibernate) / 关闭显示器(display_off) / 开启显示器(display_on) / 锁屏(lock)。
-    特性：支持为“打开”与“关闭”动作配置独立的执行延时（秒）。
+睡眠/电源控制 (Sleep)：
+    类型：开关 (Switch) 接口；执行系统级电源与安全操作。
+    动作：支持 睡眠(sleep) / 休眠(hibernate) / 关闭显示器(display_off) / 开启显示器(display_on) / 锁屏(lock) / 不执行(none)。
+    延时：支持为“打开”与“关闭”动作配置独立的执行延时（秒）。
+    注意：睡眠/休眠后设备将离线，期间无法接收远程命令，需人工或计划唤醒。
 """
 
         builtin_content_en = """
 【Built-in Themes Overview】
-Monitor Brightness:
+Computer:
+    Type: Switch interface; performs system-level power and security actions.
+    On Action: none / lock / shutdown / restart / logoff.
+    Off Action: Same options, configured independently.
+    Delay: Supports independent action delay (seconds) for On and Off; delay only applies to shutdown/restart, other actions execute immediately.
+
+Monitor Brightness (Screen):
+    Type: Light interface; 0-100% brightness adjustment.
     Interfaces: Supports WMI (System WMI), Dxva2 (Physical DDC/CI) and Twinkle Tray (Third-party CLI).
-    Features: 0-100% brightness adjustment with priority strategies and multi-monitor sync.
     Strategy Notes:
         - WMI (System WMI): Uses WMI only; suitable for laptops and supported devices.
         - Dxva2 (DDC/CI): Uses Dxva2 physical monitor API; driver dependent.
         - Twinkle Tray (Third-party): Uses Twinkle Tray CLI; ensure it is running before use.
         - Custom Adjustment: Combine multiple interfaces with "Simultaneous" or "Stop on success" strategies and custom order.
+    Advanced Settings:
+        - Brightness Range: Set min/max brightness per interface (WMI, Dxva2) to prevent accidental misoperation.
+        - Target Monitor: Control by index, ID, or all monitors.
+        - Smoothing: Enable gradual brightness transitions with configurable step and interval.
+        - Overlay: Show an on-screen brightness indicator when adjusting.
 
 System Volume:
     Type: Curtain interface; adjust system-wide master volume (0-100%).
-    Control: Precise percentage adjustment; 'pause' command toggles mute status.
+    Control: Send on#number for precise percentage; 'pause' command toggles mute.
+    Volume Range: Supports global min/max limits to prevent accidental extreme volume levels.
 
 Media Control:
     Type: Curtain interface; simulates multimedia keys for playback:
@@ -1406,29 +1477,39 @@ Media Control:
         Advanced: Supports on#percent (1-33 Next / 34-66 Play/Pause / 67-100 Previous).
 
 Sleep/Power Control:
-    Function: Perform system-level power and security actions.
-    Actions: sleep / hibernate / display_off / display_on / lock.
-    Features: Supports independent action delay (seconds) for both On and Off triggers.
+    Type: Switch interface; performs system-level power and security actions.
+    Actions: sleep / hibernate / display_off / display_on / lock / none.
+    Delay: Supports independent action delay (seconds) for both On and Off.
+    Note: After sleep/hibernate, the device goes offline and cannot receive remote commands until manually or scheduled wake.
 """
 
         custom_content_zh = """
 【自定义主题类型】
 程序或脚本：
-    “打开(on)”支持选择 EXE/.py/.ps1/.bat/.cmd 等；必要时自动补全解释器。
+    “打开(on)”支持选择 EXE/.py/.ps1/.bat/.cmd 等文件；必要时自动补全解释器。
     “关闭(off)”可选预设（强制结束/忽略）或自定义脚本，切到自定义时可单独选文件。
+    脚本解释器：
+        - .ps1 使用 powershell.exe -ExecutionPolicy Bypass -File
+        - .py/.pyw 使用 python.exe
+        - .cmd/.bat 使用 cmd /c
+        - .exe 直接运行
+    进程终止：终止时优先精确匹配；.bat/.ps1 启用增强终止，并处理进程树。
 
 服务(需管理员权限)：
     填写服务名称；“打开(on)”即启动，默认关闭预设为停止服务，可改为忽略或自定义命令。
     需管理员权限运行主程序/托盘，界面会提示不足权限。
 
 命令：
-    “打开(on)”为 PowerShell 片段，可随时点击测试按钮；
+    “打开(on)”为 PowerShell 片段，可随时点击测试按钮。
     支持 on#数字（默认 0-100，可在配置文件中通过 commandN_value_min/commandN_value_max 自定义范围），命令中使用 {value} 占位符获取参数。
+    越界时主程序会告警并钳制到范围内，GUI 测试会提示范围并要求输入合法值。
+    窗口模式：支持设置命令执行时是否显示窗口。
     关闭预设默认“中断”(CTRL+BREAK)，可改为强制结束或自定义并独立测试。
 
 按键(Hotkey)：
-    支持 ctrl/alt/shift/win 组合；可使用 {down}/{up} 形式；
+    支持 ctrl/alt/shift/win 组合；可使用 {down}/{up} 形式。
     逐字符发送可设置间隔 (>=0)，保存时会提示非 ASCII 风险。
+    GUI 提供键盘录制器，可快速录制组合键。
 """
 
         custom_content_en = """
@@ -1436,6 +1517,12 @@ Sleep/Power Control:
 Program/Script:
     Supports execution of EXE, .py, .ps1, .bat, and .cmd files. Interpreters are automatically detected and configured.
     Off Trigger: Choose from presets (Force Kill, Ignore) or define a custom script. A separate file can be specified for the shutdown action.
+    Script Interpreters:
+        - .ps1 uses powershell.exe -ExecutionPolicy Bypass -File
+        - .py/.pyw uses python.exe
+        - .cmd/.bat uses cmd /c
+        - .exe runs directly
+    Process Termination: Precise matching on kill; .bat/.ps1 use enhanced termination with process tree handling.
 
 Windows Service:
     Provide the exact service name. The 'On' action starts the service, while the 'Off' action stops it by default (customizable to Ignore or a custom command).
@@ -1443,12 +1530,65 @@ Windows Service:
 
 PowerShell Command:
     The 'On' trigger executes a PowerShell snippet. Use the 'Test' button to verify your script instantly.
-    Parameterized Commands: Supports 'on#number' syntax (default range 0-100). Use the {value} placeholder within your command to dynamically inject parameters.
+    Parameterized Commands: Supports 'on#number' syntax (default range 0-100, customizable via commandN_value_min/value_max in config). Use the {value} placeholder to inject parameters.
+    Out-of-range values are clamped with a warning; GUI test prompts for valid input.
+    Window Mode: Toggle whether the command window is visible during execution.
     Off Preset: Defaults to 'Interrupt' (CTRL+BREAK). Can be reconfigured to 'Force Kill' or a custom script.
 
 Keyboard Shortcuts:
     Supports standard modifier combinations (Ctrl, Alt, Shift, Win) and specific key states using {down} or {up} suffixes.
-    Sequential Typing: Configure delays (ms) between characters. Note: Using non-ASCII characters may trigger a warning.
+    Sequential Typing: Configure delays (ms) between characters. Non-ASCII characters trigger a warning.
+    Built-in Recorder: Use the GUI keyboard recorder to quickly capture key combinations.
+"""
+
+        mqtt_content_zh = """
+【MQTT 连接配置】
+认证模式：
+    私钥模式 (private_key)：
+        将私钥填入“客户端ID”字段，用户名和密码留空。
+        适用于巴法云等使用私钥作为客户端 ID 的平台。
+        巴法云示例：网站 bemfa.com，端口 9501，客户端ID 填私钥。
+
+    账密模式 (username_password)：
+        填写用户名、密码和客户端ID。
+        适用于大多数 IoT 平台（阿里云、腾讯云、华为云、AWS IoT 等）。
+        通常端口为 1883（非加密）或 8883（TLS）。
+
+TLS/SSL 加密：
+    默认使用 TCP 连接。如需加密连接，勾选“启用TLS/SSL”。
+    校验证书：启用后可设置 CA 证书文件路径（PEM/CRT 格式，建议绝对路径）。
+    注意：启用 TLS 需要构建时链接 Paho SSL 库。
+
+常见连接问题：
+    连接失败：检查网络、服务器地址和端口是否正确。
+    认证失败：确认认证模式与凭据匹配；认证失败后程序会停止重试，需修正配置后重启。
+    主题订阅失败：检查主题名称是否正确，确认平台控制台中已创建对应主题。
+    TLS 连接失败：确认构建时包含 SSL 支持，检查证书路径是否正确。
+"""
+
+        mqtt_content_en = """
+【MQTT Connection Settings】
+Authentication Modes:
+    Secret Key (private_key):
+        Enter the secret key in the "Client ID" field; leave username and password empty.
+        Suitable for platforms like Bemfa that use a secret key as the client ID.
+        Bemfa example: broker bemfa.com, port 9501, Client ID = your secret key.
+
+    Username/Password (username_password):
+        Fill in username, password, and client ID.
+        Compatible with most IoT platforms (Alibaba Cloud, Tencent Cloud, Huawei Cloud, AWS IoT, etc.).
+        Typical ports: 1883 (plain) or 8883 (TLS).
+
+TLS/SSL Encryption:
+    TCP is used by default. Check "Use TLS/SSL" for encrypted connections.
+    Certificate Validation: When enabled, specify the CA certificate file path (PEM/CRT format; absolute path recommended).
+    Note: TLS requires the Paho SSL library to be linked at build time.
+
+Common Connection Issues:
+    Connection Failed: Check network, broker address, and port.
+    Auth Failed: Verify auth mode and credentials match. After auth failure, the program stops retrying; fix config and restart.
+    Subscription Failed: Check topic names and ensure topics are created in the platform console.
+    TLS Failure: Confirm SSL support was included in the build; verify certificate path.
 """
 
         tips_content_zh = """
@@ -1461,37 +1601,98 @@ Keyboard Shortcuts:
 
 权限说明：
     部分功能（如服务管理、亮度调节、计划任务）需要管理员权限。
+    GUI 中可一键请求管理员权限，程序将以管理员身份重启。
 
 配置同步：
-    在 GUI 保存后，主程序需要重启来重新加载配置。
+    V3.3.0+ 支持配置文件热重载：编辑并保存 config.toml 后，主程序自动重新加载，无需重启。
+    GUI 保存配置后，主程序同样会自动检测并重载。
+    若热重载失败，托盘会弹出通知提示。
+
+开机自启：
+    GUI 提供一键设置/移除开机自启（创建/删除计划任务）。
+    方案一：用户登录时运行（适合只需登录后运行的场景）。
+    方案二：系统启动时以 SYSTEM 运行（适合需尽早启动的场景；媒体控制可能需登录后托盘重启主程序）。
+    移动 EXE 文件位置后需重新设置任务。
+
+托盘管理：
+    RC-tray.exe 提供主程序管理功能：启动/重启/关闭主程序、显示权限与运行模式。
+    若未运行独立托盘，主程序会自动启用内置简洁托盘。
+    单击托盘图标可快速打开配置界面。
 
 实例管理：
     主程序使用互斥体防止多开。在脚本模式下，可配置对已有进程的处理方式（结束/忽略/退出）。
+
+【常见问题】
+MQTT 连接不上/频繁重连：
+    确认 broker/port 可达，认证模式与字段匹配。若服务端仅提供 TLS(8883)，设置 mqtt_tls = 1。
+
+休眠/睡眠不可用：
+    以管理员运行终端执行：powercfg /hibernate on
+
+服务主题无法启动/停止：
+    服务控制需要管理员权限，请用管理员运行托盘/主程序。
+
+PowerShell 脚本无法执行：
+    设置执行策略：Set-ExecutionPolicy RemoteSigned
+
+找不到配置/日志：
+    配置文件默认在程序同目录的 config.toml；日志在 logs/ 目录下。
 """
 
         tips_content_en = """
 【Usage & Tips】
 Logging:
-    For troubleshooting and issue reporting, please provide the log files under 'logs/*.log'.
+    For troubleshooting, provide log files under 'logs/*.log'.
 
 Updates:
-    Check for the latest version manually via the system tray menu. If the version is unrecognized, an upgrade prompt will be displayed.
+    Check for the latest version via the system tray menu. Unrecognized versions display 'VUnknown Version' with an upgrade prompt.
 
 Privileges:
-    Certain features such as Service Management, Brightness Control, and Task Scheduling require Administrator access.
+    Certain features (Service Management, Brightness Control, Task Scheduling) require Administrator access.
+    Request admin rights from the GUI with one click; the program will restart with elevated privileges.
 
 Configuration:
-    After saving settings in the GUI, restart the main application to reload the configuration.
+    V3.3.0+ supports config hot-reload: after editing and saving config.toml, the main program automatically reloads without restart.
+    Saving from the GUI also triggers automatic reload in the main program.
+    If hot-reload fails, a tray notification will appear.
+
+Auto-Start:
+    GUI provides one-click setup/removal of auto-start (creates/deletes scheduled tasks).
+    Mode 1: Run at user logon (suitable when you only need the program after login).
+    Mode 2: Run at system startup as SYSTEM (suitable for early start; media control may require tray to restart main after login).
+    Reconfigure tasks after moving EXE files.
+
+Tray Management:
+    RC-tray.exe manages the main program: start/restart/stop, shows privilege and run mode.
+    If the standalone tray is not running, the main program enables its built-in tray.
+    Click the tray icon to quickly open the configuration GUI.
 
 Instance Management:
-    The application uses mutexes to prevent multiple instances. In script mode, you can configure the behavior to Kill, Ignore, or Exit.
+    The application uses mutexes to prevent multiple instances. In script mode, configure behavior for existing processes (Kill/Ignore/Exit).
+
+【FAQ】
+MQTT connection fails / frequent reconnects:
+    Verify broker/port are reachable and auth mode matches. If the server only provides TLS (8883), set mqtt_tls = 1.
+
+Hibernate/Sleep unavailable:
+    Run as admin: powercfg /hibernate on
+
+Service theme cannot start/stop:
+    Service control requires admin privileges. Run the tray/main program as admin.
+
+PowerShell scripts won't execute:
+    Set execution policy: Set-ExecutionPolicy RemoteSigned
+
+Cannot find config/logs:
+    Config: config.toml in the program directory. Logs: logs/ directory.
 """
 
         _detail_entries: list[dict] = []
+        _detail_entries.append(make_text_tab("快速入门", quickstart_content_zh, quickstart_content_en))
         _detail_entries.append(make_text_tab("内置主题", builtin_content_zh, builtin_content_en))
         _detail_entries.append(make_text_tab("自定义主题", custom_content_zh, custom_content_en))
-        _detail_entries.append(make_text_tab("提示说明", tips_content_zh, tips_content_en))
-
+        _detail_entries.append(make_text_tab("MQTT与连接", mqtt_content_zh, mqtt_content_en))
+        _detail_entries.append(make_text_tab("提示与FAQ", tips_content_zh, tips_content_en))
         center_window(win)
 
         def _apply_lang_to_detail() -> None:
