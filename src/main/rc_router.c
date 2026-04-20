@@ -1836,12 +1836,43 @@ static DWORD WINAPI _brightness_smooth_thread(LPVOID param)
     if (vFinalDxva2 < ctx->dxva2Min) vFinalDxva2 = ctx->dxva2Min;
     if (vFinalDxva2 > ctx->dxva2Max) vFinalDxva2 = ctx->dxva2Max;
 
-    if (useWmi && !ctx->smoothWmi)
-        RC_ActionSetBrightnessWmiPercent(vFinalWmi, ctx->wmiTarget);
-    if (useDxva2 && !ctx->smoothDxva2)
-        RC_ActionSetBrightnessDxva2Percent(vFinalDxva2, ctx->dxva2Target);
-    if (useTT && !ctx->smoothTT)
-        RC_ActionSetBrightnessTwinkleTrayPercentUtf8(target, ctx->ttPath, ctx->ttMode, ctx->ttVal, ctx->ttOverlay, ctx->ttPanel);
+    if (ctx->mode && _stricmp(ctx->mode, "custom") == 0 && ctx->customList && *ctx->customList)
+    {
+        bool fb = (ctx->customStrategy && _stricmp(ctx->customStrategy, "fallback") == 0);
+        char *tmp = _strdup(ctx->customList);
+        if (tmp)
+        {
+            char *tk = NULL;
+            char *tok = strtok_s(tmp, ",", &tk);
+            bool anyOk = false;
+            while (tok)
+            {
+                while (*tok == ' ') tok++;
+                size_t tl = strlen(tok);
+                while (tl > 0 && tok[tl - 1] == ' ') tok[--tl] = 0;
+                bool ok = false;
+                if (_stricmp(tok, "wmi") == 0 && useWmi && !ctx->smoothWmi)
+                    ok = RC_ActionSetBrightnessWmiPercent(vFinalWmi, ctx->wmiTarget);
+                else if (_stricmp(tok, "dxva2") == 0 && useDxva2 && !ctx->smoothDxva2)
+                    ok = RC_ActionSetBrightnessDxva2Percent(vFinalDxva2, ctx->dxva2Target);
+                else if (_stricmp(tok, "twinkle_tray") == 0 && useTT && !ctx->smoothTT)
+                    ok = RC_ActionSetBrightnessTwinkleTrayPercentUtf8(target, ctx->ttPath, ctx->ttMode, ctx->ttVal, ctx->ttOverlay, ctx->ttPanel);
+                if (ok) anyOk = true;
+                if (fb && anyOk) break;
+                tok = strtok_s(NULL, ",", &tk);
+            }
+            free(tmp);
+        }
+    }
+    else
+    {
+        if (useWmi && !ctx->smoothWmi)
+            RC_ActionSetBrightnessWmiPercent(vFinalWmi, ctx->wmiTarget);
+        if (useDxva2 && !ctx->smoothDxva2)
+            RC_ActionSetBrightnessDxva2Percent(vFinalDxva2, ctx->dxva2Target);
+        if (useTT && !ctx->smoothTT)
+            RC_ActionSetBrightnessTwinkleTrayPercentUtf8(target, ctx->ttPath, ctx->ttMode, ctx->ttVal, ctx->ttOverlay, ctx->ttPanel);
+    }
 
     if (start != target)
     {
