@@ -155,9 +155,23 @@
     - `"wmi"`：系统接口（默认显示器场景更稳）
     - `"dxva2"`：DDC/CI 控制（外接显示器原生调节）
     - `"twinkle_tray"`：Twinkle Tray 命令行控制
+    - `"custom"`：自定义控制顺序（配合 `brightness_custom_list` / `brightness_custom_strategy`）
 - `twinkle_tray_path`：Twinkle Tray 可执行文件路径
-- `brightness_fallback_order`：控制方案回退顺序
-- `brightness_strategy`：调节策略（`"fallback"` 成功即止 / `"all"` 全部执行）
+- `twinkle_tray_target_mode` / `twinkle_tray_target_value`：目标显示器选择（`all` / `id` / `number`）
+- `twinkle_tray_overlay`：是否显示亮度浮层（0/1）
+- `brightness_custom_list`：自定义控制顺序（如 `"wmi,dxva2"`）
+- `brightness_custom_strategy`：自定义策略（`"all"` 全部执行 / `"success"` 成功即止）
+
+### 亮度平滑渐变（V3.4.0+）
+
+伪无极调光，从当前亮度逐步过渡到目标亮度。WMI/Dxva2/Twinkle Tray 三接口可分别启用；未启用的接口在开始时一次性设置到目标值，启用的接口逐步过渡。后台异步执行，不阻塞 MQTT 消息处理，并遵循 `brightness_custom_list` 定义的自定义调节顺序。
+
+- `brightness_smooth_enabled`：平滑渐变总开关（0/1）
+- `brightness_step`：每步亮度百分比变化（1-20，默认 10）
+- `brightness_interval_ms`：每步间隔毫秒数（1-500，默认 10）
+- `brightness_smooth_wmi`：WMI 接口平滑开关（0/1）
+- `brightness_smooth_dxva2`：Dxva2 接口平滑开关（0/1）
+- `brightness_smooth_twinkle_tray`：Twinkle Tray 接口平滑开关（0/1）
 
 ### 自定义主题（字段命名规则）
 
