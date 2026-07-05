@@ -13,6 +13,7 @@
 
 #include "rc_config_watcher.h"
 #include "rc_log.h"
+#include "rc_utf.h"
 
 #include <windows.h>
 #include <shlwapi.h>
@@ -50,7 +51,9 @@ static DWORD WINAPI watch_thread(LPVOID p)
 
     if (hDir == INVALID_HANDLE_VALUE)
     {
-        RC_LogWarn("配置文件监听：无法打开目录 [%ls] (错误码: %lu)", w->configDir, GetLastError());
+        char *dirUtf8 = RC_WideToUtf8Alloc(w->configDir);
+        RC_LogWarn("配置文件监听：无法打开目录 [%s] (错误码: %lu)", dirUtf8 ? dirUtf8 : "", GetLastError());
+        free(dirUtf8);
         return 1;
     }
 
@@ -157,7 +160,9 @@ RC_ConfigWatcher *RC_ConfigWatcherCreate(
         return NULL;
     }
 
-    RC_LogInfo("配置文件监听已启动: %ls", configPath);
+    char *pathUtf8 = RC_WideToUtf8Alloc(configPath);
+    RC_LogInfo("配置文件监听已启动: %s", pathUtf8 ? pathUtf8 : "");
+    free(pathUtf8);
     return w;
 }
 

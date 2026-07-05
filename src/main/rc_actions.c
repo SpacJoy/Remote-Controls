@@ -606,8 +606,11 @@ bool RC_ActionSetBrightnessWmiPercent(int percent0to100, const char *target)
                             }
                             else
                             {
-                                RC_LogError("WMI 失败: ExecMethod WmiSetBrightness 失败 (0x%08X) [relpath=%ls, val=%d]", 
-                                            hr, vtPath.bstrVal ? vtPath.bstrVal : L"NULL", v);
+                                const wchar_t *relW = vtPath.bstrVal ? vtPath.bstrVal : L"NULL";
+                                char *relUtf8 = RC_WideToUtf8Alloc(relW);
+                                RC_LogError("WMI 失败: ExecMethod WmiSetBrightness 失败 (0x%08X) [relpath=%s, val=%d]",
+                                            hr, relUtf8 ? relUtf8 : "", v);
+                                free(relUtf8);
                             }
                             pInParams->lpVtbl->Release(pInParams);
                         }
@@ -873,7 +876,9 @@ static bool create_process_ex(const wchar_t *exe, const wchar_t *args, bool hide
         fmtOk = rc_snwprintf_safe(cmdline, (sizeof(cmdline) / sizeof(cmdline[0])), L"\"%ls\"", exe);
     if (!fmtOk)
     {
-        RC_LogError("CreateProcess 参数过长/截断 (exe=%ls)", exe ? exe : L"");
+        char *exeUtf8 = RC_WideToUtf8Alloc(exe ? exe : L"");
+        RC_LogError("CreateProcess 参数过长/截断 (exe=%s)", exeUtf8 ? exeUtf8 : "");
+        free(exeUtf8);
         return false;
     }
 
@@ -909,7 +914,9 @@ static bool create_process_ex(const wchar_t *exe, const wchar_t *args, bool hide
 
     if (!ok)
     {
-        RC_LogError("CreateProcess 失败 (exe=%ls, err=%lu)", exe ? exe : L"", (unsigned long)err);
+        char *exeUtf8 = RC_WideToUtf8Alloc(exe ? exe : L"");
+        RC_LogError("CreateProcess 失败 (exe=%s, err=%lu)", exeUtf8 ? exeUtf8 : "", (unsigned long)err);
+        free(exeUtf8);
         return false;
     }
 
@@ -1092,7 +1099,11 @@ static bool create_process_capture_output(const wchar_t *exe,
         CloseHandle(outWrite);
         CloseHandle(errRead);
         CloseHandle(errWrite);
-        RC_LogError("CreateProcess(捕获输出) 参数过长/截断 (exe=%ls)", exe ? exe : L"");
+        {
+            char *exeUtf8 = RC_WideToUtf8Alloc(exe ? exe : L"");
+            RC_LogError("CreateProcess(捕获输出) 参数过长/截断 (exe=%s)", exeUtf8 ? exeUtf8 : "");
+            free(exeUtf8);
+        }
         return false;
     }
 
@@ -1129,7 +1140,12 @@ static bool create_process_capture_output(const wchar_t *exe,
 
     if (!ok)
     {
-        RC_LogError("CreateProcess(捕获输出) 失败 (exe=%ls, args=%ls, err=%lu)", exe ? exe : L"", (args && *args) ? args : L"", (unsigned long)err);
+        char *exeUtf8 = RC_WideToUtf8Alloc(exe ? exe : L"");
+        char *argsUtf8 = RC_WideToUtf8Alloc((args && *args) ? args : L"");
+        RC_LogError("CreateProcess(捕获输出) 失败 (exe=%s, args=%s, err=%lu)",
+                    exeUtf8 ? exeUtf8 : "", argsUtf8 ? argsUtf8 : "", (unsigned long)err);
+        free(exeUtf8);
+        free(argsUtf8);
         CloseHandle(outRead);
         CloseHandle(errRead);
         return false;
@@ -1156,8 +1172,11 @@ static bool create_process_capture_output(const wchar_t *exe,
             ULONGLONG elapsed = GetTickCount64() - start;
             if (elapsed >= timeoutMs)
             {
-                RC_LogWarn("进程超时(捕获输出) exe=%ls pid=%lu timeoutMs=%lu", exe ? exe : L"", (unsigned long)pi.dwProcessId,
+                char *exeUtf8 = RC_WideToUtf8Alloc(exe ? exe : L"");
+                RC_LogWarn("进程超时(捕获输出) exe=%s pid=%lu timeoutMs=%lu",
+                           exeUtf8 ? exeUtf8 : "", (unsigned long)pi.dwProcessId,
                            (unsigned long)timeoutMs);
+                free(exeUtf8);
                 break;
             }
         }
@@ -1630,9 +1649,13 @@ bool RC_ActionRunPowershellCommandUtf8Ex(const char *commandUtf8, bool hideWindo
         *outPid = (unsigned long)pid;
     
     if (ok) {
-        RC_LogInfo("PowerShell 已启动 (pid=%lu, args=%ls)", (unsigned long)pid, args);
+        char *argsUtf8 = RC_WideToUtf8Alloc(args);
+        RC_LogInfo("PowerShell 已启动 (pid=%lu, args=%s)", (unsigned long)pid, argsUtf8 ? argsUtf8 : "");
+        free(argsUtf8);
     } else {
-        RC_LogError("PowerShell 启动失败 (args=%ls)", args);
+        char *argsUtf8 = RC_WideToUtf8Alloc(args);
+        RC_LogError("PowerShell 启动失败 (args=%s)", argsUtf8 ? argsUtf8 : "");
+        free(argsUtf8);
     }
 
     free(escaped);
