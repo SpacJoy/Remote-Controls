@@ -4,6 +4,35 @@
 
 ***
 
+# V3.4.5 (2026-07-24)
+
+**修复 GUI 开机自启动路径含空格被截断**\
+Full Changelog (相对于 3.4.4): [https://github.com/SpacJoy/Remote-Controls/compare/V3.4.4...V3.4.5](https://github.com/SpacJoy/Remote-Controls/compare/V3.4.4...V3.4.5)
+
+## 🐛 修复
+
+- **GUI 开机自启动路径截断问题**：`src/python/GUI.py` 的 `set_auto_start()` 使用 `schtasks /TR` 创建任务计划时传入了未加引号的程序路径，当安装路径含空格（如 `C:\Program Files\Remote-Controls\`）时，路径会在第一个空格处被截断，导致 `C:\Program` 被识别为程序、`Files\...` 被识别为参数，任务无法正确执行。现已对主程序（`RC-main.exe`）与托盘程序（`RC-tray.exe`）的路径统一加双引号包裹，与安装程序（Inno Setup + Task Scheduler COM API）的行为保持一致。
+
+***
+
+# V3.4.4 (2026-07-24)
+
+**修复日志中含非 ASCII 字符的命令行参数被截断 & 项目文档完善**\
+Full Changelog (相对于 3.4.3): [https://github.com/SpacJoy/Remote-Controls/compare/V3.4.3...V3.4.4](https://github.com/SpacJoy/Remote-Controls/compare/V3.4.3...V3.4.4)
+
+## 🐛 修复
+
+- **日志非 ASCII 字符截断问题**：`RC_Log*` 系列日志函数使用 `vsnprintf` 处理 `%ls`（`wchar_t*`）时，依赖 CRT locale 进行 `wcstombs` 转换，遇到中文等非 ASCII 字符会转换失败并停止，导致日志在中文位置被截断（如 `-Exclude "扬声器..."` 仅输出到 `-Exclude "`）。改为先用 `RC_WideToUtf8Alloc` 转为 UTF-8 再用 `%s` 输出，与日志文件 UTF-8 编码一致，不再依赖 locale。
+  - `src/main/rc_actions.c`：PowerShell 启动/失败、CreateProcess 失败/超长/超时、WMI `WmiSetBrightness` 失败等 6 处日志
+  - `src/main/rc_config_watcher.c`：监听目录打开失败、监听已启动 2 处日志（新增 `rc_utf.h` include）
+
+## 📝 文档
+
+- **新增代码结构 Wiki**：添加 `CODE_WIKI.md`（571 行），系统梳理项目架构、模块职责、核心类与函数、依赖关系、数据流与运行时序，详述三大可执行文件（`RC-main.exe`、`RC-tray.exe`、`RC-GUI.exe`）的协作模型。
+- **更新 README 与详细介绍**：补充亮度平滑渐变和自定义控制策略的说明。
+
+***
+
 # V3.4.3 (2026-04-21)
 
 **亮度平滑渐变自定义顺序支持**\

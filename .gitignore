@@ -57,3 +57,4 @@ installer/test_dynamic_version.ps1
 !/setup_dev.ps1
 version.txt
 git_log.txt
+.workbuddy

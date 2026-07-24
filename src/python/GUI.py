@@ -934,7 +934,7 @@ def set_auto_start() -> None:
         except FileNotFoundError:
             return 1
 
-    exe_cmd = exe_path
+    exe_cmd = f'"{exe_path}"'  # 加引号防止路径含空格时被 schtasks 截断
     
     if choice == True:  # 选择"是"，对应方案一
         # 方案一：使用Administrators用户组创建任务计划，任何用户登录时运行
@@ -1008,7 +1008,7 @@ def set_auto_start() -> None:
 
     tray_result = 0
     if os.path.exists(tray_exe_path):
-        tray_cmd = tray_exe_path  # 托盘程序使用当前登录用户（最高权限）运行，登录后触发
+        tray_cmd = f'"{tray_exe_path}"'  # 加引号防止路径含空格时被 schtasks 截断；托盘程序使用当前登录用户（最高权限）运行，登录后触发
         tray_result = _run_schtasks(
             [
                 "/Create",
