@@ -1,4 +1,4 @@
-;用于遥控器的 Inno 设置脚本
+﻿;用于遥控器的 Inno 设置脚本
 ;包包括：RC-GUI.exe、RC-main.exe、RC-tray.exe、config.toml、日志目录
 ;生成脱机安装程序，安装到 Program Files（需要管理员权限）
 

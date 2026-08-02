@@ -1,4 +1,4 @@
-# Remote Controls 开发环境一键部署脚本 (仅限 C 语言与构建工具)
+﻿# Remote Controls 开发环境一键部署脚本 (仅限 C 语言与构建工具)
 # 用法: .\setup_C_dev.ps1 (需要管理员权限以安装软件)
 
 $ErrorActionPreference = 'Stop'
@@ -9,19 +9,44 @@ Write-Host "===== 开始部署 Remote Controls C 语言开发环境 =====" -Fore
 
 $Global:SkipAllConfirm = $false
 
-# 函数：分步确认
+# 函数：分步确认 (支持回到上一步，空输入不执行任何操作以防误触回车)
+# 返回值: 'proceed' (继续) / 'skip' (跳过) / 'back' (回到上一步)
 function Confirm-Step {
-    param([string]$StepDescription)
-    if ($Global:SkipAllConfirm) { return $true }
-    
-    Write-Host "`n>>> 准备执行: $StepDescription" -ForegroundColor Magenta
-    $choice = Read-Host "是否继续执行? [Y] 是 / [N] 跳过 / [A] 全部执行并不再提示(默认N)"
-    switch ($choice.ToUpper()) {
-        "Y" { return $true }
-        "A" { $Global:SkipAllConfirm = $true; return $true }
-        default { 
-            Write-Host "已跳过该步骤。" -ForegroundColor Gray
-            return $false 
+    param(
+        [string]$StepDescription,
+        [switch]$NoBack
+    )
+    if ($Global:SkipAllConfirm) { return 'proceed' }
+
+    while ($true) {
+        Write-Host "`n>>> 准备执行: $StepDescription" -ForegroundColor Magenta
+        if ($NoBack) {
+            $prompt = "是否继续执行? [Y] 是 / [N] 跳过 / [A] 全部执行并不再提示"
+        } else {
+            $prompt = "是否继续执行? [Y] 是 / [N] 跳过 / [B] 回到上一步 / [A] 全部执行并不再提示"
+        }
+        $choice = (Read-Host $prompt).Trim()
+        switch ($choice.ToUpper()) {
+            "Y" { return 'proceed' }
+            "A" { $Global:SkipAllConfirm = $true; return 'proceed' }
+            "B" {
+                if ($NoBack) {
+                    Write-Host "无效输入，请重新选择。" -ForegroundColor Yellow
+                } else {
+                    Write-Host "返回上一步..." -ForegroundColor Gray
+                    return 'back'
+                }
+            }
+            "N" {
+                Write-Host "已跳过该步骤。" -ForegroundColor Gray
+                return 'skip'
+            }
+            "" {
+                Write-Host "未输入选项，请重新选择 (误触回车不会执行任何操作)。" -ForegroundColor Yellow
+            }
+            default {
+                Write-Host "无效输入 '$choice'，请重新选择。" -ForegroundColor Yellow
+            }
         }
     }
 }
@@ -115,12 +140,24 @@ function Install-App {
 
     Write-Host "正在通过 winget 安装 $AppName..." -ForegroundColor Cyan
     winget install --id $PackageId --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "winget 安装 $AppName 失败 (退出码: $LASTEXITCODE)。" -ForegroundColor Red
+        return $false
+    }
     return $true
 }
 
-# 1. 安装构建工具 (Inno Setup)
-if (Confirm-Step "管理系统构建工具 (Inno Setup)") {
-    Write-Host "`n[1/3] 检查系统构建工具..." -ForegroundColor White
+# 主流程: 支持回到上一步的步骤循环
+$CurrentStep = 1
+while ($CurrentStep -le 2) {
+    if ($CurrentStep -eq 1) {
+        $action = Confirm-Step "管理系统构建工具 (Inno Setup)"
+        if ($action -eq 'back') {
+            Write-Host "已是第一步，重新确认。" -ForegroundColor Gray
+            continue
+        }
+        if ($action -eq 'proceed') {
+            Write-Host "`n[1/3] 检查系统构建工具..." -ForegroundColor White
     $NeedRestart = $false
     
     $InnoPaths = @(
@@ -135,11 +172,13 @@ if (Confirm-Step "管理系统构建工具 (Inno Setup)") {
     if ($NeedRestart) {
         Write-Host "提示: 部分软件新安装或更新成功，如果后续步骤失败，请重启 Terminal 后再次运行此脚本。" -ForegroundColor Magenta
     }
-}
-
-# 2. 配置 C 语言开发环境 (GCC & Paho MQTT)
-if (Confirm-Step "配置 C 语言开发环境 (GCC & Paho MQTT)") {
-    Write-Host "`n[2/3] 配置 C 语言开发环境..." -ForegroundColor White
+        } # end proceed step 1
+        $CurrentStep = 2
+    } elseif ($CurrentStep -eq 2) {
+        $action = Confirm-Step "配置 C 语言开发环境 (GCC & Paho MQTT)"
+        if ($action -eq 'back') { $CurrentStep = 1; continue }
+        if ($action -eq 'proceed') {
+            Write-Host "`n[2/3] 配置 C 语言开发环境..." -ForegroundColor White
     
     # 2.1 检查 GCC
     $Gcc = Get-Command gcc -ErrorAction SilentlyContinue
@@ -190,31 +229,96 @@ if (Confirm-Step "配置 C 语言开发环境 (GCC & Paho MQTT)") {
     if (-not $Gcc -or -not $PahoFound) {
         Write-Host "C 环境不完整，尝试寻找或安装 MSYS2 以补全依赖..." -ForegroundColor Yellow
         
-        # 只有在找不到 C 编译器时才尝试寻找/安装 MSYS2
-        if (Test-Path "C:\msys64\usr\bin\bash.exe") {
-             Write-Host "检测到已安装 MSYS2 (物理路径)。" -ForegroundColor Green
-        } else {
-             Install-App "MSYS2" "MSYS2.MSYS2" "msys2" "C:\msys64\msys2_shell.cmd" | Out-Null
+        # 多路径检测已安装的 MSYS2
+        $MsysPath = $null
+        $CandidateMsysPaths = @(
+            "C:\msys64",
+            "${env:LocalAppData}\msys64",
+            "D:\msys64",
+            "E:\msys64"
+        )
+        # 过滤掉驱动器不存在的候选路径，避免 Join-Path 在 ErrorActionPreference=Stop 下抛出 DriveNotFoundException
+        $CandidateMsysPaths = $CandidateMsysPaths | Where-Object {
+            $_ -and ($_ -match '^([A-Za-z]:)') -and (Test-Path "$($Matches[1])\")
+        }
+        foreach ($cand in $CandidateMsysPaths) {
+            if (Test-Path (Join-Path $cand "usr\bin\bash.exe") -ErrorAction SilentlyContinue) {
+                $MsysPath = $cand
+                Write-Host "检测到已安装 MSYS2: $MsysPath" -ForegroundColor Green
+                break
+            }
         }
         
-        $MsysPath = "C:\msys64"
-        $Bash = Join-Path $MsysPath "usr\bin\bash.exe"
-        if (Test-Path $Bash) {
+        # 未检测到则尝试安装 (winget -> GitHub 直接下载回退)
+        if (-not $MsysPath) {
+            $WingetOk = Install-App "MSYS2" "MSYS2.MSYS2" "msys2" @("C:\msys64\msys2_shell.cmd")
+            if ($WingetOk) {
+                foreach ($cand in $CandidateMsysPaths) {
+                    if (Test-Path (Join-Path $cand "usr\bin\bash.exe") -ErrorAction SilentlyContinue) {
+                        $MsysPath = $cand
+                        break
+                    }
+                }
+            }
+            
+            # winget 失败或仍未检测到 -> 直接从 GitHub 下载安装器
+            if (-not $MsysPath -and ((Confirm-Step "winget 安装 MSYS2 失败，是否从 GitHub 直接下载安装器?" -NoBack) -eq 'proceed')) {
+                $ApiUrl = "https://api.github.com/repos/msys2/msys2-installer/releases/latest"
+                try {
+                    Write-Host "正在查询 MSYS2 最新发布版本..." -ForegroundColor Cyan
+                    $Release = Invoke-RestMethod -Uri $ApiUrl -Headers @{ "User-Agent" = "setup_C_dev.ps1" } -ErrorAction Stop
+                    $Asset = $Release.assets | Where-Object { $_.name -like "msys2-x86_64-*.exe" } | Select-Object -First 1
+                    if (-not $Asset) {
+                        Write-Host "未在 GitHub release 中找到 MSYS2 安装器资产。" -ForegroundColor Red
+                    } else {
+                        $Installer = Join-Path $env:TEMP $Asset.name
+                        Write-Host "正在下载 $($Asset.name) ..." -ForegroundColor Cyan
+                        Invoke-WebRequest -Uri $Asset.browser_download_url -OutFile $Installer -UseBasicParsing
+                        Write-Host "正在静默安装 MSYS2 到 C:\msys64 ..." -ForegroundColor Cyan
+                        $Proc = Start-Process -FilePath $Installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait -PassThru -NoNewWindow
+                        if ($Proc.ExitCode -ne 0) {
+                            Write-Host "MSYS2 安装器返回非零退出码: $($Proc.ExitCode)" -ForegroundColor Red
+                        }
+                        if (Test-Path "C:\msys64\usr\bin\bash.exe") {
+                            $MsysPath = "C:\msys64"
+                            Write-Host "MSYS2 安装成功: $MsysPath" -ForegroundColor Green
+                        } else {
+                            Write-Host "MSYS2 静默安装后仍未检测到 bash.exe。" -ForegroundColor Red
+                        }
+                        Remove-Item $Installer -Force -ErrorAction SilentlyContinue
+                    }
+                } catch {
+                    Write-Host "GitHub 下载回退失败: $($_.Exception.Message)" -ForegroundColor Red
+                }
+            }
+        }
+        
+        # 初始化 MSYS2 并安装缺失包
+        if ($MsysPath -and (Test-Path (Join-Path $MsysPath "usr\bin\bash.exe"))) {
+            $Bash = Join-Path $MsysPath "usr\bin\bash.exe"
+            $MingwRoot = Join-Path $MsysPath "mingw64"
+            
+            # 首次安装后初始化 pacman 密钥与数据库 (否则后续 pacman -S 会失败)
+            if ((Confirm-Step "初始化 MSYS2 pacman 密钥与数据库 (首次安装必需)" -NoBack) -eq 'proceed') {
+                Write-Host "正在初始化 pacman-key 与数据库..." -ForegroundColor Cyan
+                & $Bash -lc "pacman-key --init; pacman-key --populate msys2; pacman -Sy --noconfirm" 2>&1 | Out-Host
+            }
+            
             $ToInstall = @()
             if (-not $Gcc) { $ToInstall += "mingw-w64-x86_64-gcc" }
             if (-not $PahoFound) { $ToInstall += "mingw-w64-x86_64-paho.mqtt.c" }
             
             if ($ToInstall.Count -gt 0) {
                 $PkgList = $ToInstall -join " "
-                if (Confirm-Step "通过 MSYS2 安装缺失包: $PkgList") {
+                if ((Confirm-Step "通过 MSYS2 安装缺失包: $PkgList" -NoBack) -eq 'proceed') {
                     & $Bash -lc "pacman -S --noconfirm --needed $PkgList"
                     # 安装后重新设置变量
                     if ($ToInstall -contains "mingw-w64-x86_64-paho.mqtt.c") {
-                        $env:PAHO_MQTT_C_ROOT = "C:\msys64\mingw64"
+                        $env:PAHO_MQTT_C_ROOT = $MingwRoot
                         $PahoFound = $true
                     }
                     if ($ToInstall -contains "mingw-w64-x86_64-gcc") {
-                        $GccDir = "C:\msys64\mingw64\bin"
+                        $GccDir = Join-Path $MingwRoot "bin"
                         if ($env:PATH -notlike "*$GccDir*") { $env:PATH = "$GccDir;" + $env:PATH }
                         $Gcc = Get-Command gcc -ErrorAction SilentlyContinue
                     }
@@ -222,7 +326,7 @@ if (Confirm-Step "配置 C 语言开发环境 (GCC & Paho MQTT)") {
             }
         } else {
             Write-Host "未找到 MSYS2，无法自动安装缺失的 C 开发组件。" -ForegroundColor Red
-            Write-Host "请手动安装 GCC 并配置 Paho MQTT C 库。" -ForegroundColor White
+            Write-Host "请手动安装 MSYS2 (https://www.msys2.org/) 并配置 GCC 与 Paho MQTT C 库。" -ForegroundColor White
         }
     }
 
@@ -231,7 +335,7 @@ if (Confirm-Step "配置 C 语言开发环境 (GCC & Paho MQTT)") {
         $GccBin = Split-Path $Gcc.Source
         $UserPath = [Environment]::GetEnvironmentVariable("PATH", "User")
         if ($UserPath -notlike "*$GccBin*") {
-            if (Confirm-Step "永久将 GCC 路径添加到用户 PATH 环境变量?") {
+            if ((Confirm-Step "永久将 GCC 路径添加到用户 PATH 环境变量?" -NoBack) -eq 'proceed') {
                 [Environment]::SetEnvironmentVariable("PATH", $UserPath + ";" + $GccBin, "User")
                 Write-Host "已永久添加 PATH，重启 IDE 后生效。" -ForegroundColor Green
             }
@@ -242,23 +346,26 @@ if (Confirm-Step "配置 C 语言开发环境 (GCC & Paho MQTT)") {
     if ($PahoFound) {
         $CurrentPahoRoot = [Environment]::GetEnvironmentVariable("PAHO_MQTT_C_ROOT", "User")
         if ($CurrentPahoRoot -ne $env:PAHO_MQTT_C_ROOT) {
-            if (Confirm-Step "永久设置 PAHO_MQTT_C_ROOT 环境变量?") {
+            if ((Confirm-Step "永久设置 PAHO_MQTT_C_ROOT 环境变量?" -NoBack) -eq 'proceed') {
                 [Environment]::SetEnvironmentVariable("PAHO_MQTT_C_ROOT", $env:PAHO_MQTT_C_ROOT, "User")
                 Write-Host "环境变量 PAHO_MQTT_C_ROOT 已设置。" -ForegroundColor Green
             }
         }
     }
-}
+        } # end proceed step 2
+        $CurrentStep = 3
+    }
+} # end mainLoop
 
 # 3. 最终验证
 Write-Host "`n[3/3] 最终环境验证..." -ForegroundColor White
 $Gcc = Get-Command gcc -ErrorAction SilentlyContinue
 if ($Gcc) { Write-Host "GCC: OK ($($Gcc.Source))" -ForegroundColor Green } else { Write-Host "GCC: 未找到 (请确保 C:\msys64\mingw64\bin 在 PATH 中)" -ForegroundColor Red }
 
-if (Test-Path (Join-Path $env:PAHO_MQTT_C_ROOT "include\MQTTClient.h")) {
-    Write-Host "Paho MQTT C: OK" -ForegroundColor Green
+if ($env:PAHO_MQTT_C_ROOT -and (Test-Path (Join-Path $env:PAHO_MQTT_C_ROOT "include\MQTTClient.h"))) {
+    Write-Host "Paho MQTT C: OK ($env:PAHO_MQTT_C_ROOT)" -ForegroundColor Green
 } else {
-    Write-Host "Paho MQTT C: 未找到" -ForegroundColor Red
+    Write-Host "Paho MQTT C: 未找到 (PAHO_MQTT_C_ROOT 未设置或路径无效)" -ForegroundColor Red
 }
 
 $Iscc = Get-Command iscc -ErrorAction SilentlyContinue

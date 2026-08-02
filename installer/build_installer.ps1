@@ -1,4 +1,4 @@
-<#
+﻿<#
 Remote Controls 项目打包脚本 (PowerShell)
 用法：
     - 双击运行（推荐）
@@ -512,7 +512,9 @@ $IssPath = (Join-Path $InstallerDir 'Remote-Controls.iss')
 
 # 创建临时的Inno Setup脚本，包含版本信息
 $TempIssPath = (Join-Path $InstallerDir 'Remote-Controls-temp.iss')
-$IssContent = Get-Content -Path $IssPath -Raw
+# 必须显式以 UTF-8 读取：PS 5.1 下 Get-Content -Raw 默认按系统 ANSI(GBK) 解码无 BOM 的 UTF-8 文件，
+# 会把中文破坏成乱码，甚至吞掉相邻的引号字节(0x22)，导致 Inno Setup 报 "Mismatched or misplaced quotes"。
+$IssContent = Get-Content -Path $IssPath -Raw -Encoding UTF8
 $IssContentWithVersion = "#define MyAppVersion `"$FinalVersion`"`r`n" + $IssContent
 $IssEncoding = if ($PSVersionTable.PSVersion.Major -ge 6) { 'utf8BOM' } else { 'utf8' }
 Set-Content -Path $TempIssPath -Value $IssContentWithVersion -Encoding $IssEncoding
