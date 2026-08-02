@@ -1150,6 +1150,7 @@ def load_custom_themes() -> None:
                 "on_value": on_val,
                 "off_value": off_val,
                 "off_preset": off_preset,
+                "default_state": config.get(f"{app_key}_default_state", ""),
             }
             custom_themes.append(theme)
             status = t("开") if theme["checked"] else t("关")
@@ -1176,6 +1177,7 @@ def load_custom_themes() -> None:
                 "on_value": on_val,
                 "off_value": off_val,
                 "off_preset": off_preset,
+                "default_state": config.get(f"{serve_key}_default_state", ""),
             }
             custom_themes.append(theme)
             status = t("开") if theme["checked"] else t("关")
@@ -1220,6 +1222,7 @@ def load_custom_themes() -> None:
                 "window": config.get(f"{cmd_key}_window", "show"),
                 "value_min": _vmin,
                 "value_max": _vmax,
+                "default_state": config.get(f"{cmd_key}_default_state", ""),
             }
             custom_themes.append(theme)
             status = t("开") if theme["checked"] else t("关")
@@ -1247,6 +1250,7 @@ def load_custom_themes() -> None:
                 "off_type": config.get(f"{hk_key}_off_type", "none"),
                 "off_value": config.get(f"{hk_key}_off_value", ""),
                 "char_delay_ms": int(config.get(f"{hk_key}_char_delay_ms", 0) or 0),
+                "default_state": config.get(f"{hk_key}_default_state", ""),
             }
             custom_themes.append(theme)
             status = t("开") if theme["checked"] else t("关")
@@ -1921,6 +1925,20 @@ def modify_custom_theme() -> None:
     )
     off_preset_combo_mod.grid(row=6, column=1, sticky="w", padx=(0, _PADX), pady=_PADY)
 
+    # 默认状态：订阅成功后向服务器发布该状态，用于同步服务器端主题状态
+    default_state_label_mod = ttk.Label(theme_window, text=t("默认状态："))
+    default_state_label_mod.grid(row=7, column=0, sticky="e", padx=_PADX, pady=_PADY)
+    default_state_var_mod = tk.StringVar(value=theme.get("default_state", ""))
+    default_state_combo_mod = ttk.Combobox(
+        theme_window,
+        textvariable=default_state_var_mod,
+        state="readonly",
+        values=["", "on", "off"],
+        width=12,
+    )
+    default_state_combo_mod.grid(row=7, column=1, sticky="w", padx=(0, _PADX), pady=_PADY)
+    ttk.Label(theme_window, text=t("(订阅成功时发送)")).grid(row=7, column=2, sticky="w", padx=_PADX, pady=_PADY)
+
     # 记录自定义内容以便在预设与自定义切换时还原
     previous_custom_off_value_mod = theme.get("off_value", "")
     def _preview_text_for_mod(code: str, t_type: str, service_name: str = "") -> str:
@@ -2212,9 +2230,9 @@ def modify_custom_theme() -> None:
 
     # 垂直方向自适应：占位扩展区，推开底部按钮
     try:
-        theme_window.rowconfigure(7, weight=1)
+        theme_window.rowconfigure(8, weight=1)
         _spacer_mod = ttk.Frame(theme_window)
-        _spacer_mod.grid(row=7, column=0, columnspan=4, sticky="nsew")
+        _spacer_mod.grid(row=8, column=0, columnspan=4, sticky="nsew")
     except Exception:
         pass
 
@@ -2421,6 +2439,7 @@ def modify_custom_theme() -> None:
         else:
             theme["off_value"] = ""
         theme["off_preset"] = off_preset_code
+        theme["default_state"] = default_state_var_mod.get()
         if theme["type"] == "服务(需管理员权限)":
             theme["value"] = theme["on_value"]
         if theme["type"] == "命令":
@@ -2486,10 +2505,10 @@ def modify_custom_theme() -> None:
             theme_window.lift()
 
     ttk.Button(theme_window, text=t("保存"), command=save_theme).grid(
-        row=8, column=0, pady=_PADY + 6, padx=_PADX
+        row=9, column=0, pady=_PADY + 6, padx=_PADX
     )
-    ttk.Button(theme_window, text=t("删除"), command=delete_theme).grid(row=8, column=1, pady=_PADY + 6, padx=_PADX)
-    ttk.Button(theme_window, text=t("取消"), command=lambda:theme_window.destroy()).grid(row=8, column=2, pady=_PADY + 6, padx=_PADX)
+    ttk.Button(theme_window, text=t("删除"), command=delete_theme).grid(row=9, column=1, pady=_PADY + 6, padx=_PADX)
+    ttk.Button(theme_window, text=t("取消"), command=lambda:theme_window.destroy()).grid(row=9, column=2, pady=_PADY + 6, padx=_PADX)
 
     center_window(theme_window)
 
@@ -2675,6 +2694,20 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         values=_preset_labels_for_type_add("程序或脚本"),
     )
     off_preset_combo_add.grid(row=6, column=1, sticky="w", padx=(0, _PADX), pady=_PADY)
+
+    # 默认状态：订阅成功后向服务器发布该状态，用于同步服务器端主题状态
+    default_state_label_add = ttk.Label(theme_window, text=t("默认状态："))
+    default_state_label_add.grid(row=7, column=0, sticky="e", padx=_PADX, pady=_PADY)
+    default_state_var_add = tk.StringVar(value="")
+    default_state_combo_add = ttk.Combobox(
+        theme_window,
+        textvariable=default_state_var_add,
+        state="readonly",
+        values=["", "on", "off"],
+        width=12,
+    )
+    default_state_combo_add.grid(row=7, column=1, sticky="w", padx=(0, _PADX), pady=_PADY)
+    ttk.Label(theme_window, text=t("(订阅成功时发送)")).grid(row=7, column=2, sticky="w", padx=_PADX, pady=_PADY)
 
     previous_custom_off_value_add = ""
     def _preview_text_for_add(code: str, t_type: str, service_name: str = "") -> str:
@@ -2981,9 +3014,9 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
 
     # 垂直方向自适应：占位扩展区，推开底部按钮
     try:
-        theme_window.rowconfigure(7, weight=1)
+        theme_window.rowconfigure(8, weight=1)
         _spacer_add = ttk.Frame(theme_window)
-        _spacer_add.grid(row=7, column=0, columnspan=4, sticky="nsew")
+        _spacer_add.grid(row=8, column=0, columnspan=4, sticky="nsew")
     except Exception:
         pass
 
@@ -3113,6 +3146,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             "checked": theme_checked_var.get(),
             "nickname": theme_nickname_entry.get(),
             "name": theme_name_entry.get(),
+            "default_state": default_state_var_add.get(),
         }
         if theme["type"] in ("程序或脚本", "命令", "服务(需管理员权限)"):
             theme["on_value"] = on_value_text_add.get("1.0","end-1c").strip()
@@ -3172,9 +3206,9 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         theme_window.destroy()
 
     ttk.Button(theme_window, text=t("保存"), command=save_theme).grid(
-        row=8, column=0, pady=_PADY + 6, padx=_PADX
+        row=9, column=0, pady=_PADY + 6, padx=_PADX
     )
-    ttk.Button(theme_window, text=t("取消"), command=theme_window.destroy).grid(row=8, column=2, pady=_PADY + 6, padx=_PADX)
+    ttk.Button(theme_window, text=t("取消"), command=theme_window.destroy).grid(row=9, column=2, pady=_PADY + 6, padx=_PADX)
 
     center_window(theme_window)
 
@@ -3377,7 +3411,14 @@ def save_config_toml(nested_config: Dict[str, Any], file_path: str) -> None:
         "sleep_on_action =": "# 睡眠开启时的动作 (Sleep On Action)\nsleep_on_action",
         "sleep_off_action =": "# 睡眠关闭时的动作 (Sleep Off Action)\nsleep_off_action",
         "sleep_on_delay =": "# 睡眠开启延时 (Sleep On Delay)\nsleep_on_delay",
-        "sleep_off_delay =": "# 睡眠关闭延时 (Sleep Off Delay)\nsleep_off_delay"
+        "sleep_off_delay =": "# 睡眠关闭延时 (Sleep Off Delay)\nsleep_off_delay",
+
+        # --- Default State Items ---
+        "Computer_default_state =": "# 电脑默认状态 (Computer Default State: on/off/empty)\nComputer_default_state",
+        "screen_default_state =": "# 屏幕默认状态 (Screen Default State: on/off/empty)\nscreen_default_state",
+        "volume_default_state =": "# 音量默认状态 (Volume Default State: on/off/empty)\nvolume_default_state",
+        "sleep_default_state =": "# 睡眠默认状态 (Sleep Default State: on/off/empty)\nsleep_default_state",
+        "media_default_state =": "# 媒体默认状态 (Media Default State: on/off/empty)\nmedia_default_state",
     }
     
     # 为了避免替换掉不该替换的内容（如自定义主题中的 key 可能包含这些子串），
@@ -3458,6 +3499,8 @@ def save_config_toml(nested_config: Dict[str, Any], file_path: str) -> None:
                         comment = "# 触发类型 (Trigger Type: keyboard/mouse/etc.)"
                     elif suffix == "_char_delay_ms":
                         comment = "# 字符输入延迟 (Char Delay MS)"
+                    elif suffix == "_default_state":
+                        comment = "# 默认状态 (Default State: on/off, 订阅成功时发送)"
                 
                 if comment:
                     new_lines.append(comment)
@@ -3550,6 +3593,7 @@ def generate_config() -> None:
             config[f"{prefix}_on_value"] = theme.get("on_value", "")
             config[f"{prefix}_off_value"] = theme.get("off_value", "")
             config[f"{prefix}_off_preset"] = theme.get("off_preset", "kill")
+            config[f"{prefix}_default_state"] = theme.get("default_state", "")
             app_index += 1
         elif theme["type"] == "服务(需管理员权限)":
             prefix = f"serve{serve_index}"
@@ -3561,6 +3605,7 @@ def generate_config() -> None:
             config[f"{prefix}_on_value"] = theme.get("on_value", service_name)
             config[f"{prefix}_off_value"] = theme.get("off_value", "")
             config[f"{prefix}_off_preset"] = theme.get("off_preset", "stop")
+            config[f"{prefix}_default_state"] = theme.get("default_state", "")
             serve_index += 1
         elif theme["type"] == "命令":
             prefix = f"command{command_index}"
@@ -3589,6 +3634,7 @@ def generate_config() -> None:
                 vmin, vmax = vmax, vmin
             config[f"{prefix}_value_min"] = vmin
             config[f"{prefix}_value_max"] = vmax
+            config[f"{prefix}_default_state"] = theme.get("default_state", "")
             command_index += 1
         elif theme["type"] == "按键(Hotkey)":
             prefix = f"hotkey{hotkey_index}"
@@ -3600,6 +3646,7 @@ def generate_config() -> None:
             config[f"{prefix}_off_type"] = theme.get("off_type", "none")
             config[f"{prefix}_off_value"] = theme.get("off_value", "")
             config[f"{prefix}_char_delay_ms"] = int(theme.get("char_delay_ms", 0) or 0)
+            config[f"{prefix}_default_state"] = theme.get("default_state", "")
             hotkey_index += 1
 
     # 1. 保存为 TOML 文件 (首选格式)
@@ -5092,6 +5139,30 @@ def open_builtin_settings():
     ttk.Separator(main_frame, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
     row_i += 1
 
+    # 内置主题默认状态（订阅成功时发布，同步服务器端状态）
+    ttk.Label(main_frame, text=t("默认状态（订阅成功时发送）")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
+    row_i += 1
+
+    _builtin_default_state_vars = {}
+    _builtin_default_state_keys = [
+        ("Computer", "Computer_default_state", "计算机"),
+        ("screen", "screen_default_state", "屏幕"),
+        ("volume", "volume_default_state", "音量"),
+        ("sleep", "sleep_default_state", "睡眠"),
+        ("media", "media_default_state", "媒体"),
+    ]
+    for _bk, _bcfg_key, _blabel in _builtin_default_state_keys:
+        ttk.Label(main_frame, text=t(_blabel + "：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=2)
+        _bv = tk.StringVar(value=config.get(_bcfg_key, ""))
+        _bc = ttk.Combobox(main_frame, textvariable=_bv, state="readonly", values=["", "on", "off"], width=12)
+        _bc.grid(row=row_i, column=1, sticky="w")
+        _builtin_default_state_vars[_bk] = _bv
+        row_i += 1
+
+    # 分隔线
+    ttk.Separator(main_frame, orient="horizontal").grid(row=row_i, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 10))
+    row_i += 1
+
     def save_builtin_settings():
         try:
             # 更新内存配置
@@ -5135,6 +5206,10 @@ def open_builtin_settings():
             # 音量上下限
             config["volume_min"] = vol_min.get()
             config["volume_max"] = vol_max.get()
+
+            # 内置主题默认状态
+            for _bk, _bcfg_key, _ in _builtin_default_state_keys:
+                config[_bcfg_key] = _builtin_default_state_vars[_bk].get()
 
             # Hotkey 不在内置设置中保存
 

@@ -65,6 +65,14 @@ extern "C"
     bool RC_RouterIsEnglish(const RC_Router *r);
 
     /*
+     * 获取指定 topic 的默认状态。
+     * - 返回值：默认状态字符串（例如 "on" / "off"），为空或 NULL 表示未配置。
+     * - 用途：MQTT 订阅成功后，向该 topic 发布默认状态，以同步服务器端主题状态。
+     * - 返回指针由 Router 持有，生命周期直到 RC_RouterDestroy 或配置重载。
+     */
+    const char *RC_RouterGetDefaultState(const RC_Router *r, const char *topicUtf8);
+
+    /*
      * 重新加载配置：
      * - 从磁盘读取 config.toml 并解析
      * - 更新路由器内部状态（topic 列表、动作表等）

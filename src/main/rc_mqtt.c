@@ -121,6 +121,85 @@ static char *utf8_dup_and_trim(const unsigned char *buf, int len)
 }
 
 /*
+ * 自发布消息回环抑制（self-echo suppression）
+ *
+ * 背景：订阅 topic 后会立即发布默认状态（on/off）以同步服务器端主题状态。
+ * 由于客户端本身也订阅了同一 topic，broker 会把这条消息回投给自己，
+ * 导致程序把"自己发出的默认状态"当作外部指令执行（例如误杀应用）。
+ *
+ * 方案：发布默认状态时记录 (topic, payload, tick)；接收时若在时间窗口内
+ * 匹配到完全相同的 (topic, payload)，则判定为自回环并跳过 RC_RouterHandle。
+ * 匹配后立即消费该条目，避免误抑制后续合法的同 payload 指令。
+ */
+#define RC_MQTT_SELF_ECHO_MAX_ENTRIES 32
+#define RC_MQTT_SELF_ECHO_TOPIC_LEN  127
+#define RC_MQTT_SELF_ECHO_PAYLOAD_LEN 63
+#define RC_MQTT_SELF_ECHO_WINDOW_MS  5000
+
+typedef struct
+{
+    bool used;
+    DWORD tick;
+    char topic[RC_MQTT_SELF_ECHO_TOPIC_LEN + 1];
+    char payload[RC_MQTT_SELF_ECHO_PAYLOAD_LEN + 1];
+} SelfPublishEntry;
+
+static SelfPublishEntry g_selfPublishEntries[RC_MQTT_SELF_ECHO_MAX_ENTRIES];
+
+static void self_publish_record(const char *topic, const char *payload)
+{
+    if (!topic || !*topic || !payload || !*payload)
+        return;
+
+    DWORD now = GetTickCount();
+    // 找一个空闲或已过期的槽位
+    SelfPublishEntry *slot = NULL;
+    for (int i = 0; i < RC_MQTT_SELF_ECHO_MAX_ENTRIES; i++)
+    {
+        if (!g_selfPublishEntries[i].used ||
+            (now - g_selfPublishEntries[i].tick) > RC_MQTT_SELF_ECHO_WINDOW_MS)
+        {
+            slot = &g_selfPublishEntries[i];
+            break;
+        }
+    }
+    if (!slot)
+        return; // 表满则放弃记录（极少发生）
+
+    slot->used = true;
+    slot->tick = now;
+    strncpy(slot->topic, topic, RC_MQTT_SELF_ECHO_TOPIC_LEN);
+    slot->topic[RC_MQTT_SELF_ECHO_TOPIC_LEN] = 0;
+    strncpy(slot->payload, payload, RC_MQTT_SELF_ECHO_PAYLOAD_LEN);
+    slot->payload[RC_MQTT_SELF_ECHO_PAYLOAD_LEN] = 0;
+}
+
+static bool self_publish_is_echo(const char *topic, const char *payload)
+{
+    if (!topic || !*topic || !payload || !*payload)
+        return false;
+
+    DWORD now = GetTickCount();
+    for (int i = 0; i < RC_MQTT_SELF_ECHO_MAX_ENTRIES; i++)
+    {
+        if (!g_selfPublishEntries[i].used)
+            continue;
+        if ((now - g_selfPublishEntries[i].tick) > RC_MQTT_SELF_ECHO_WINDOW_MS)
+        {
+            g_selfPublishEntries[i].used = false; // 过期清理
+            continue;
+        }
+        if (strcmp(g_selfPublishEntries[i].topic, topic) == 0 &&
+            strcmp(g_selfPublishEntries[i].payload, payload) == 0)
+        {
+            g_selfPublishEntries[i].used = false; // 消费，避免误抑制后续合法指令
+            return true;
+        }
+    }
+    return false;
+}
+
+/*
  * 判断 Paho 返回码是否属于“鉴权类不可恢复错误”。
  *
  * 设计意图：
@@ -318,7 +397,30 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
                 continue;
             int subrc = MQTTClient_subscribe(client, topics[i], 0);
             if (subrc == MQTTCLIENT_SUCCESS)
+            {
                 RC_LogInfo("MQTT(Paho) 订阅：%s", topics[i]);
+
+                // 订阅成功后，发布默认状态以同步服务器端主题状态。
+                const char *defaultState = RC_RouterGetDefaultState(router, topics[i]);
+                if (defaultState && *defaultState)
+                {
+                    MQTTClient_message pubmsg = MQTTClient_message_initializer;
+                    pubmsg.payload = (void *)defaultState;
+                    pubmsg.payloadlen = (int)strlen(defaultState);
+                    pubmsg.qos = 0;
+                    pubmsg.retained = 0;
+                    MQTTClient_deliveryToken dt = 0;
+                    int pubrc = MQTTClient_publishMessage(client, topics[i], &pubmsg, &dt);
+                    if (pubrc == MQTTCLIENT_SUCCESS)
+                    {
+                        RC_LogInfo("MQTT(Paho) 发布默认状态：topic=%s state=%s", topics[i], defaultState);
+                        // 记录自发布，以便接收循环跳过 broker 回投的同一消息（防自回环）
+                        self_publish_record(topics[i], defaultState);
+                    }
+                    else
+                        RC_LogWarn("MQTT(Paho) 发布默认状态失败 rc=%d topic=%s", pubrc, topics[i]);
+                }
+            }
             else
                 RC_LogWarn("MQTT(Paho) 订阅失败 rc=%d topic=%s", subrc, topics[i]);
         }
@@ -379,11 +481,25 @@ void RC_MqttRunLoop(const RC_MqttConfig *cfg, RC_Router *router, volatile bool *
                 break;
             }
 
+            const char *msgTopic = topicName ? topicName : "";
+
             if (RC_RouterIsEnglish(router))
-                log_mqtt_message(router, topicName ? topicName : "", payload);
+                log_mqtt_message(router, msgTopic, payload);
             else
-                log_mqtt_message(router, topicName ? topicName : "", payload);
-            RC_RouterHandle(router, topicName ? topicName : "", payload);
+                log_mqtt_message(router, msgTopic, payload);
+
+            // 跳过自发布回环：broker 把刚发出的默认状态回投给本客户端，不应作为指令执行
+            if (self_publish_is_echo(msgTopic, payload))
+            {
+                if (RC_RouterIsEnglish(router))
+                    RC_LogInfo("MQTT(Paho) skip self-echo: topic=%s payload=%s", msgTopic, payload);
+                else
+                    RC_LogInfo("MQTT(Paho) 跳过自回环消息：topic=%s payload=%s", msgTopic, payload);
+            }
+            else
+            {
+                RC_RouterHandle(router, msgTopic, payload);
+            }
 
             free(payload);
             MQTTClient_freeMessage(&message);

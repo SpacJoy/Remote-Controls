@@ -191,7 +191,8 @@ typedef struct
     char *displayName; // optional: applicationN_name
     char *onPath;
     char *offPath;
-    char *offPreset; // kill/none/custom
+    char *offPreset;      // kill/none/custom
+    char *defaultState;   // optional: applicationN_default_state
 } RcApp;
 
 typedef struct
@@ -205,6 +206,7 @@ typedef struct
     char *window;    // show/hide
     int valueMin;    // optional: commandN_value_min (default 0)
     int valueMax;    // optional: commandN_value_max (default 100)
+    char *defaultState; // optional: commandN_default_state
 } RcCommand;
 
 typedef struct
@@ -212,8 +214,9 @@ typedef struct
     char *topic;
     char *displayName; // optional: serveN_name
     char *serviceName;
-    char *offPreset; // stop/none/custom
+    char *offPreset;      // stop/none/custom
     char *offValue;
+    char *defaultState;   // optional: serveN_default_state
 } RcServe;
 
 typedef struct
@@ -225,6 +228,7 @@ typedef struct
     char *offType;
     char *offValue;
     int charDelayMs;
+    char *defaultState; // optional: hotkeyN_default_state
 } RcHotkey;
 
 typedef struct
@@ -252,6 +256,13 @@ struct RC_Router
     char *topicVolume;
     char *topicSleep;
     char *topicMedia;
+
+    // 内置功能的默认状态（订阅成功后发布，用于同步服务器端主题状态）。
+    char *defaultStateComputer;
+    char *defaultStateScreen;
+    char *defaultStateVolume;
+    char *defaultStateSleep;
+    char *defaultStateMedia;
 
     bool checkedComputer;
     bool checkedScreen;
@@ -424,6 +435,7 @@ static void free_apps(RcApp *arr, int n)
         free(arr[i].onPath);
         free(arr[i].offPath);
         free(arr[i].offPreset);
+        free(arr[i].defaultState);
     }
     free(arr);
 }
@@ -439,6 +451,7 @@ static void free_cmds(RcCommand *arr, int n)
         free(arr[i].offValue);
         free(arr[i].offPreset);
         free(arr[i].window);
+        free(arr[i].defaultState);
     }
     free(arr);
 }
@@ -452,6 +465,7 @@ static void free_serves(RcServe *arr, int n)
         free(arr[i].serviceName);
         free(arr[i].offPreset);
         free(arr[i].offValue);
+        free(arr[i].defaultState);
     }
     free(arr);
 }
@@ -466,6 +480,7 @@ static void free_hotkeys(RcHotkey *arr, int n)
         free(arr[i].onValue);
         free(arr[i].offType);
         free(arr[i].offValue);
+        free(arr[i].defaultState);
     }
     free(arr);
 }
@@ -718,6 +733,12 @@ static void load_builtins(RC_Router *r)
     r->topicSleep = dupstr0(cfg_str(r->config, "sleep"));
     r->topicMedia = dupstr0(cfg_str(r->config, "media"));
 
+    r->defaultStateComputer = dupstr0(cfg_str(r->config, "Computer_default_state"));
+    r->defaultStateScreen = dupstr0(cfg_str(r->config, "screen_default_state"));
+    r->defaultStateVolume = dupstr0(cfg_str(r->config, "volume_default_state"));
+    r->defaultStateSleep = dupstr0(cfg_str(r->config, "sleep_default_state"));
+    r->defaultStateMedia = dupstr0(cfg_str(r->config, "media_default_state"));
+
     if (r->checkedComputer)
         topics_add(r, r->topicComputer);
     if (r->checkedScreen)
@@ -756,17 +777,20 @@ static void load_applications(RC_Router *r)
         char offPresetKey[96];
         char dirKey[96];
         char nameKey[96];
+        char defaultStateKey[96];
         _snprintf(onKey, sizeof(onKey), "%s_on_value", key);
         _snprintf(offKey, sizeof(offKey), "%s_off_value", key);
         _snprintf(offPresetKey, sizeof(offPresetKey), "%s_off_preset", key);
         _snprintf(dirKey, sizeof(dirKey), "%s_directory%d", key, i); // legacy per-GUI naming
         _snprintf(nameKey, sizeof(nameKey), "%s_name", key);
+        _snprintf(defaultStateKey, sizeof(defaultStateKey), "%s_default_state", key);
 
         const char *onPath = cfg_str(r->config, onKey);
         const char *offPath = cfg_str(r->config, offKey);
         const char *offPreset = cfg_str(r->config, offPresetKey);
         const char *dirLegacy = cfg_str(r->config, dirKey);
         const char *dispName = cfg_str(r->config, nameKey);
+        const char *defaultState = cfg_str(r->config, defaultStateKey);
 
         RcApp item;
         ZeroMemory(&item, sizeof(item));
@@ -775,6 +799,7 @@ static void load_applications(RC_Router *r)
         item.onPath = dupstr0((onPath && *onPath) ? onPath : (dirLegacy ? dirLegacy : ""));
         item.offPath = dupstr0(offPath);
         item.offPreset = dupstr0((offPreset && *offPreset) ? offPreset : "kill");
+        item.defaultState = dupstr0(defaultState);
 
         RcApp *narr = (RcApp *)realloc(r->apps, (size_t)(r->appsCount + 1) * sizeof(RcApp));
         if (!narr)
@@ -784,6 +809,7 @@ static void load_applications(RC_Router *r)
             free(item.onPath);
             free(item.offPath);
             free(item.offPreset);
+            free(item.defaultState);
             continue;
         }
         r->apps = narr;
@@ -824,6 +850,7 @@ static void load_commands(RC_Router *r)
         char nameKey[96];
         char minKey[96];
         char maxKey[96];
+        char defaultStateKey[96];
         _snprintf(valueKey, sizeof(valueKey), "%s_value", key);
         _snprintf(onKey, sizeof(onKey), "%s_on_value", key);
         _snprintf(offKey, sizeof(offKey), "%s_off_value", key);
@@ -832,6 +859,7 @@ static void load_commands(RC_Router *r)
         _snprintf(nameKey, sizeof(nameKey), "%s_name", key);
         _snprintf(minKey, sizeof(minKey), "%s_value_min", key);
         _snprintf(maxKey, sizeof(maxKey), "%s_value_max", key);
+        _snprintf(defaultStateKey, sizeof(defaultStateKey), "%s_default_state", key);
 
         RcCommand item;
         ZeroMemory(&item, sizeof(item));
@@ -844,6 +872,7 @@ static void load_commands(RC_Router *r)
         item.window = dupstr0(cfg_str(r->config, windowKey));
         item.valueMin = cfg_int(r->config, minKey, 0);
         item.valueMax = cfg_int(r->config, maxKey, 100);
+        item.defaultState = dupstr0(cfg_str(r->config, defaultStateKey));
         if (item.valueMin > item.valueMax)
         {
             int tmp = item.valueMin;
@@ -871,6 +900,7 @@ static void load_commands(RC_Router *r)
             free(item.offValue);
             free(item.offPreset);
             free(item.window);
+            free(item.defaultState);
             continue;
         }
         r->cmds = narr;
@@ -905,10 +935,12 @@ static void load_serves(RC_Router *r)
         char offPresetKey[96];
         char offValueKey[96];
         char nameKey[96];
+        char defaultStateKey[96];
         _snprintf(valueKey, sizeof(valueKey), "%s_value", key);
         _snprintf(offPresetKey, sizeof(offPresetKey), "%s_off_preset", key);
         _snprintf(offValueKey, sizeof(offValueKey), "%s_off_value", key);
         _snprintf(nameKey, sizeof(nameKey), "%s_name", key);
+        _snprintf(defaultStateKey, sizeof(defaultStateKey), "%s_default_state", key);
 
         RcServe item;
         ZeroMemory(&item, sizeof(item));
@@ -917,6 +949,7 @@ static void load_serves(RC_Router *r)
         item.serviceName = dupstr0(cfg_str(r->config, valueKey));
         item.offPreset = dupstr0(cfg_str(r->config, offPresetKey));
         item.offValue = dupstr0(cfg_str(r->config, offValueKey));
+        item.defaultState = dupstr0(cfg_str(r->config, defaultStateKey));
         if (!item.offPreset || !*item.offPreset)
         {
             free(item.offPreset);
@@ -931,6 +964,7 @@ static void load_serves(RC_Router *r)
             free(item.serviceName);
             free(item.offPreset);
             free(item.offValue);
+            free(item.defaultState);
             continue;
         }
         r->serves = narr;
@@ -967,12 +1001,14 @@ static void load_hotkeys(RC_Router *r)
         char offValueKey[96];
         char delayKey[96];
         char nameKey[96];
+        char defaultStateKey[96];
         _snprintf(onTypeKey, sizeof(onTypeKey), "%s_on_type", key);
         _snprintf(onValueKey, sizeof(onValueKey), "%s_on_value", key);
         _snprintf(offTypeKey, sizeof(offTypeKey), "%s_off_type", key);
         _snprintf(offValueKey, sizeof(offValueKey), "%s_off_value", key);
         _snprintf(delayKey, sizeof(delayKey), "%s_char_delay_ms", key);
         _snprintf(nameKey, sizeof(nameKey), "%s_name", key);
+        _snprintf(defaultStateKey, sizeof(defaultStateKey), "%s_default_state", key);
 
         RcHotkey item;
         ZeroMemory(&item, sizeof(item));
@@ -983,6 +1019,7 @@ static void load_hotkeys(RC_Router *r)
         item.offType = dupstr0(cfg_str(r->config, offTypeKey));
         item.offValue = dupstr0(cfg_str(r->config, offValueKey));
         item.charDelayMs = cfg_int(r->config, delayKey, 0);
+        item.defaultState = dupstr0(cfg_str(r->config, defaultStateKey));
 
         if (!item.onType || !*item.onType)
         {
@@ -1004,6 +1041,7 @@ static void load_hotkeys(RC_Router *r)
             free(item.onValue);
             free(item.offType);
             free(item.offValue);
+            free(item.defaultState);
             continue;
         }
         r->hotkeys = narr;
@@ -1120,6 +1158,12 @@ void RC_RouterDestroy(RC_Router *r)
     free(r->topicSleep);
     free(r->topicMedia);
 
+    free(r->defaultStateComputer);
+    free(r->defaultStateScreen);
+    free(r->defaultStateVolume);
+    free(r->defaultStateSleep);
+    free(r->defaultStateMedia);
+
     free_apps(r->apps, r->appsCount);
     free_cmds(r->cmds, r->cmdsCount);
     free_serves(r->serves, r->servesCount);
@@ -1190,6 +1234,17 @@ static void router_free_resources(RC_Router *r)
     r->topicSleep = NULL;
     free(r->topicMedia);
     r->topicMedia = NULL;
+
+    free(r->defaultStateComputer);
+    r->defaultStateComputer = NULL;
+    free(r->defaultStateScreen);
+    r->defaultStateScreen = NULL;
+    free(r->defaultStateVolume);
+    r->defaultStateVolume = NULL;
+    free(r->defaultStateSleep);
+    r->defaultStateSleep = NULL;
+    free(r->defaultStateMedia);
+    r->defaultStateMedia = NULL;
 
     free_apps(r->apps, r->appsCount);
     r->apps = NULL;
@@ -1586,6 +1641,90 @@ const char *const *RC_RouterGetTopics(const RC_Router *r, int *outCount)
     if (outCount)
         *outCount = r ? r->topicsCount : 0;
     return r ? (const char *const *)r->topics : NULL;
+}
+
+const char *RC_RouterGetDefaultState(const RC_Router *r, const char *topicUtf8)
+{
+    /*
+     * 查找指定 topic 的默认状态。
+     *
+     * 查找顺序：
+     * 1) 内置主题（Computer/Screen/Volume/Sleep/Media）
+     * 2) 自定义主题（Applications/Commands/Serves/Hotkeys）
+     *
+     * 返回值：
+     * - 找到且非空：返回默认状态字符串指针（由 Router 持有）。
+     * - 未找到或为空：返回 NULL。
+     */
+    if (!r || !topicUtf8 || !*topicUtf8)
+        return NULL;
+
+    // 内置主题
+    if (r->checkedComputer && r->topicComputer && strcmp(topicUtf8, r->topicComputer) == 0)
+    {
+        if (r->defaultStateComputer && *r->defaultStateComputer)
+            return r->defaultStateComputer;
+    }
+    if (r->checkedScreen && r->topicScreen && strcmp(topicUtf8, r->topicScreen) == 0)
+    {
+        if (r->defaultStateScreen && *r->defaultStateScreen)
+            return r->defaultStateScreen;
+    }
+    if (r->checkedVolume && r->topicVolume && strcmp(topicUtf8, r->topicVolume) == 0)
+    {
+        if (r->defaultStateVolume && *r->defaultStateVolume)
+            return r->defaultStateVolume;
+    }
+    if (r->checkedSleep && r->topicSleep && strcmp(topicUtf8, r->topicSleep) == 0)
+    {
+        if (r->defaultStateSleep && *r->defaultStateSleep)
+            return r->defaultStateSleep;
+    }
+    if (r->checkedMedia && r->topicMedia && strcmp(topicUtf8, r->topicMedia) == 0)
+    {
+        if (r->defaultStateMedia && *r->defaultStateMedia)
+            return r->defaultStateMedia;
+    }
+
+    // 自定义主题
+    for (int i = 0; i < r->appsCount; i++)
+    {
+        if (r->apps[i].topic && strcmp(topicUtf8, r->apps[i].topic) == 0)
+        {
+            if (r->apps[i].defaultState && *r->apps[i].defaultState)
+                return r->apps[i].defaultState;
+            return NULL;
+        }
+    }
+    for (int i = 0; i < r->cmdsCount; i++)
+    {
+        if (r->cmds[i].topic && strcmp(topicUtf8, r->cmds[i].topic) == 0)
+        {
+            if (r->cmds[i].defaultState && *r->cmds[i].defaultState)
+                return r->cmds[i].defaultState;
+            return NULL;
+        }
+    }
+    for (int i = 0; i < r->servesCount; i++)
+    {
+        if (r->serves[i].topic && strcmp(topicUtf8, r->serves[i].topic) == 0)
+        {
+            if (r->serves[i].defaultState && *r->serves[i].defaultState)
+                return r->serves[i].defaultState;
+            return NULL;
+        }
+    }
+    for (int i = 0; i < r->hotkeysCount; i++)
+    {
+        if (r->hotkeys[i].topic && strcmp(topicUtf8, r->hotkeys[i].topic) == 0)
+        {
+            if (r->hotkeys[i].defaultState && *r->hotkeys[i].defaultState)
+                return r->hotkeys[i].defaultState;
+            return NULL;
+        }
+    }
+
+    return NULL;
 }
 
 typedef struct
