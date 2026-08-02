@@ -56,15 +56,15 @@ sleep_checked = 0
 media = "mtkz009"
 # 是否启用媒体控制 (Enable Media Control: 0/1)
 media_checked = 1
-# 电脑默认状态 (Computer Default State: on/off/empty)
+# 电脑默认状态 (Computer Default State: on/off/on#n/off#n/empty)
 Computer_default_state = "on"
-# 屏幕默认状态 (Screen Default State: on/off/empty)
+# 屏幕默认状态 (Screen Default State: on/off/on#n/off#n/empty)
 screen_default_state = "on"
-# 音量默认状态 (Volume Default State: on/off/empty)
+# 音量默认状态 (Volume Default State: on/off/on#n/off#n/empty)
 volume_default_state = "on"
-# 睡眠默认状态 (Sleep Default State: on/off/empty)
+# 睡眠默认状态 (Sleep Default State: on/off/on#n/off#n/empty)
 sleep_default_state = ""
-# 媒体默认状态 (Media Default State: on/off/empty)
+# 媒体默认状态 (Media Default State: on/off/on#n/off#n/empty)
 media_default_state = ""
 # 睡眠开启时的动作 (Sleep On Action)
 sleep_on_action = "none"
@@ -138,7 +138,7 @@ application1_on_value = "D:/Code/Python/Special-Folders/dist/特殊文件夹.exe
 application1_off_value = ""
 # 关闭预设 (Off Preset: kill/none/etc.)
 application1_off_preset = "kill"
-# 默认状态 (Default State: on/off, 订阅成功时发送)
+# 默认状态 (Default State: on/off/on#n/off#n, 订阅成功时发送)
 application1_default_state = ""
 application2 = "yxms006"
 application2_name = "启动器"
@@ -147,7 +147,7 @@ application2_directory2 = "D:/Otheapps/Starward/Starward.exe"
 application2_on_value = "D:/Otheapps/Starward/Starward.exe"
 application2_off_value = ""
 application2_off_preset = "kill"
-# 默认状态 (Default State: on/off, 订阅成功时发送)
+# 默认状态 (Default State: on/off/on#n/off#n, 订阅成功时发送)
 application2_default_state = ""
 application3 = "uuyc006"
 application3_name = "UU远程"
@@ -156,7 +156,7 @@ application3_directory3 = "C:/Program Files/Netease/GameViewer/GameViewer.exe"
 application3_on_value = "C:/Program Files/Netease/GameViewer/GameViewer.exe"
 application3_off_value = ""
 application3_off_preset = "kill"
-# 默认状态 (Default State: on/off, 订阅成功时发送)
+# 默认状态 (Default State: on/off/on#n/off#n, 订阅成功时发送)
 application3_default_state = ""
 application4 = "xyzbz006"
 application4_name = "播放视频"
@@ -165,7 +165,7 @@ application4_directory4 = "D:/Code/View/view.ps1"
 application4_on_value = "D:/Code/View/view.ps1"
 application4_off_value = ""
 application4_off_preset = "kill"
-# 默认状态 (Default State: on/off, 订阅成功时发送)
+# 默认状态 (Default State: on/off/on#n/off#n, 订阅成功时发送)
 application4_default_state = ""
 
 
@@ -185,7 +185,7 @@ serve1_on_value = "GameViewerService"
 serve1_off_value = ""
 # 关闭预设 (Off Preset: kill/none/etc.)
 serve1_off_preset = "stop"
-# 默认状态 (Default State: on/off, 订阅成功时发送)
+# 默认状态 (Default State: on/off/on#n/off#n, 订阅成功时发送)
 serve1_default_state = ""
 
 
@@ -211,7 +211,7 @@ command1_window = "show"
 command1_value_min = 0
 # 最大值 (Max Value)
 command1_value_max = 100
-# 默认状态 (Default State: on/off, 订阅成功时发送)
+# 默认状态 (Default State: on/off/on#n/off#n, 订阅成功时发送)
 command1_default_state = ""
 command2 = "cscs002"
 command2_name = "测试参数"
@@ -223,7 +223,7 @@ command2_off_preset = "kill"
 command2_window = "show"
 command2_value_min = 0
 command2_value_max = 10000
-# 默认状态 (Default State: on/off, 订阅成功时发送)
+# 默认状态 (Default State: on/off/on#n/off#n, 订阅成功时发送)
 command2_default_state = ""
 command3 = "bfsb006"
 command3_name = "播放设备"
@@ -235,7 +235,7 @@ command3_off_preset = "custom"
 command3_window = "hide"
 command3_value_min = 0
 command3_value_max = 100
-# 默认状态 (Default State: on/off, 订阅成功时发送)
+# 默认状态 (Default State: on/off/on#n/off#n, 订阅成功时发送)
 command3_default_state = ""
 
 
@@ -257,7 +257,7 @@ hotkey1_off_type = "keyboard"
 hotkey1_off_value = "ctrl+alt+s"
 # 字符输入延迟 (Char Delay MS)
 hotkey1_char_delay_ms = 25
-# 默认状态 (Default State: on/off, 订阅成功时发送)
+# 默认状态 (Default State: on/off/on#n/off#n, 订阅成功时发送)
 hotkey1_default_state = ""
 hotkey2 = "gbyy006"
 hotkey2_name = "当前应用"
@@ -267,5 +267,5 @@ hotkey2_on_value = ""
 hotkey2_off_type = "keyboard"
 hotkey2_off_value = "alt+f4"
 hotkey2_char_delay_ms = 25
-# 默认状态 (Default State: on/off, 订阅成功时发送)
+# 默认状态 (Default State: on/off/on#n/off#n, 订阅成功时发送)
 hotkey2_default_state = ""

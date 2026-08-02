@@ -1926,18 +1926,43 @@ def modify_custom_theme() -> None:
     off_preset_combo_mod.grid(row=6, column=1, sticky="w", padx=(0, _PADX), pady=_PADY)
 
     # 默认状态：订阅成功后向服务器发布该状态，用于同步服务器端主题状态
+    # 开关(on/off) 与可选参数(#n) 分开输入，组合为 on#n / off#n
     default_state_label_mod = ttk.Label(theme_window, text=t("默认状态："))
     default_state_label_mod.grid(row=7, column=0, sticky="e", padx=_PADX, pady=_PADY)
-    default_state_var_mod = tk.StringVar(value=theme.get("default_state", ""))
+    _ds_mod_raw = theme.get("default_state", "") or ""
+    _ds_mod_param = ""
+    if "#" in _ds_mod_raw:
+        _ds_mod_parts = _ds_mod_raw.split("#", 1)
+        _ds_mod_base = _ds_mod_parts[0].lower()
+        _ds_mod_param = _ds_mod_parts[1] if len(_ds_mod_parts) > 1 else ""
+    else:
+        _ds_mod_base = _ds_mod_raw.lower()
+    if _ds_mod_base not in ("", "on", "off"):
+        _ds_mod_base = ""
+    default_state_var_mod = tk.StringVar(value=_ds_mod_base)
     default_state_combo_mod = ttk.Combobox(
         theme_window,
         textvariable=default_state_var_mod,
         state="readonly",
         values=["", "on", "off"],
-        width=12,
+        width=8,
     )
     default_state_combo_mod.grid(row=7, column=1, sticky="w", padx=(0, _PADX), pady=_PADY)
-    ttk.Label(theme_window, text=t("(订阅成功时发送)")).grid(row=7, column=2, sticky="w", padx=_PADX, pady=_PADY)
+    ttk.Label(theme_window, text=t("(订阅成功时发送至服务端) 可添加参数----->   #")).grid(row=7, column=1, sticky="e", padx=_PADX, pady=_PADY)
+    # ttk.Label(theme_window, text="#").grid(row=7, column=1, sticky="e", padx=(0, 2), pady=_PADY)
+    default_state_param_var_mod = tk.StringVar(value=_ds_mod_param)
+    default_state_param_entry_mod = ttk.Entry(theme_window, textvariable=default_state_param_var_mod, width=8)
+    default_state_param_entry_mod.grid(row=7, column=2, sticky="w", padx=(0, _PADX), pady=_PADY)
+    # 未选择开关(on/off)时禁用参数输入框
+    def _on_default_state_mod_changed(_e=None):
+        _base = default_state_var_mod.get().strip().lower()
+        _new_state = "normal" if _base in ("on", "off") else "disabled"
+        if str(default_state_param_entry_mod.cget("state")) != _new_state:
+            if _new_state == "disabled":
+                default_state_param_var_mod.set("")  # 清空参数，避免禁用状态下残留旧值
+            default_state_param_entry_mod.config(state=_new_state)
+    default_state_combo_mod.bind("<<ComboboxSelected>>", _on_default_state_mod_changed)
+    _on_default_state_mod_changed()
 
     # 记录自定义内容以便在预设与自定义切换时还原
     previous_custom_off_value_mod = theme.get("off_value", "")
@@ -2439,7 +2464,18 @@ def modify_custom_theme() -> None:
         else:
             theme["off_value"] = ""
         theme["off_preset"] = off_preset_code
-        theme["default_state"] = default_state_var_mod.get()
+        _ds_mod_base = default_state_var_mod.get().strip().lower()
+        _ds_mod_param = default_state_param_var_mod.get().strip()
+        if _ds_mod_base not in ("", "on", "off"):
+            messagebox.showwarning(t("提示"), t("默认状态开关无效，请选择 on/off"))
+            return
+        if _ds_mod_param and _ds_mod_base == "":
+            messagebox.showwarning(t("提示"), t("填写参数时必须选择 on 或 off"))
+            return
+        if _ds_mod_param and not _ds_mod_param.lstrip("-").isdigit():
+            messagebox.showwarning(t("提示"), t("默认状态参数必须是整数"))
+            return
+        theme["default_state"] = (_ds_mod_base + "#" + _ds_mod_param) if (_ds_mod_base and _ds_mod_param) else _ds_mod_base
         if theme["type"] == "服务(需管理员权限)":
             theme["value"] = theme["on_value"]
         if theme["type"] == "命令":
@@ -2696,6 +2732,7 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
     off_preset_combo_add.grid(row=6, column=1, sticky="w", padx=(0, _PADX), pady=_PADY)
 
     # 默认状态：订阅成功后向服务器发布该状态，用于同步服务器端主题状态
+    # 开关(on/off) 与可选参数(#n) 分开输入，组合为 on#n / off#n
     default_state_label_add = ttk.Label(theme_window, text=t("默认状态："))
     default_state_label_add.grid(row=7, column=0, sticky="e", padx=_PADX, pady=_PADY)
     default_state_var_add = tk.StringVar(value="")
@@ -2704,10 +2741,24 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
         textvariable=default_state_var_add,
         state="readonly",
         values=["", "on", "off"],
-        width=12,
+        width=8,
     )
     default_state_combo_add.grid(row=7, column=1, sticky="w", padx=(0, _PADX), pady=_PADY)
-    ttk.Label(theme_window, text=t("(订阅成功时发送)")).grid(row=7, column=2, sticky="w", padx=_PADX, pady=_PADY)
+    ttk.Label(theme_window, text=t("(订阅成功时发送至服务端) 可添加参数----->   #")).grid(row=7, column=1, sticky="e", padx=_PADX, pady=_PADY)
+    # ttk.Label(theme_window, text="#").grid(row=7, column=1, sticky="e", padx=(0, 2), pady=_PADY)
+    default_state_param_var_add = tk.StringVar(value="")
+    default_state_param_entry_add = ttk.Entry(theme_window, textvariable=default_state_param_var_add, width=8)
+    default_state_param_entry_add.grid(row=7, column=2, sticky="w", padx=(0, _PADX), pady=_PADY)
+    # 未选择开关(on/off)时禁用参数输入框
+    def _on_default_state_add_changed(_e=None):
+        _base = default_state_var_add.get().strip().lower()
+        _new_state = "normal" if _base in ("on", "off") else "disabled"
+        if str(default_state_param_entry_add.cget("state")) != _new_state:
+            if _new_state == "disabled":
+                default_state_param_var_add.set("")  # 清空参数，避免禁用状态下残留旧值
+            default_state_param_entry_add.config(state=_new_state)
+    default_state_combo_add.bind("<<ComboboxSelected>>", _on_default_state_add_changed)
+    _on_default_state_add_changed()
 
     previous_custom_off_value_add = ""
     def _preview_text_for_add(code: str, t_type: str, service_name: str = "") -> str:
@@ -3141,12 +3192,24 @@ def add_custom_theme(config: Dict[str, Any]) -> None:
             pass
 
     def save_theme():
+        _ds_add_base = default_state_var_add.get().strip().lower()
+        _ds_add_param = default_state_param_var_add.get().strip()
+        if _ds_add_base not in ("", "on", "off"):
+            messagebox.showwarning(t("提示"), t("默认状态开关无效，请选择 on/off"))
+            return
+        if _ds_add_param and _ds_add_base == "":
+            messagebox.showwarning(t("提示"), t("填写参数时必须选择 on 或 off"))
+            return
+        if _ds_add_param and not _ds_add_param.lstrip("-").isdigit():
+            messagebox.showwarning(t("提示"), t("默认状态参数必须是整数"))
+            return
+        _ds_add_final = (_ds_add_base + "#" + _ds_add_param) if (_ds_add_base and _ds_add_param) else _ds_add_base
         theme = {
             "type": theme_type_key_var.get(),
             "checked": theme_checked_var.get(),
             "nickname": theme_nickname_entry.get(),
             "name": theme_name_entry.get(),
-            "default_state": default_state_var_add.get(),
+            "default_state": _ds_add_final,
         }
         if theme["type"] in ("程序或脚本", "命令", "服务(需管理员权限)"):
             theme["on_value"] = on_value_text_add.get("1.0","end-1c").strip()
@@ -3414,11 +3477,11 @@ def save_config_toml(nested_config: Dict[str, Any], file_path: str) -> None:
         "sleep_off_delay =": "# 睡眠关闭延时 (Sleep Off Delay)\nsleep_off_delay",
 
         # --- Default State Items ---
-        "Computer_default_state =": "# 电脑默认状态 (Computer Default State: on/off/empty)\nComputer_default_state",
-        "screen_default_state =": "# 屏幕默认状态 (Screen Default State: on/off/empty)\nscreen_default_state",
-        "volume_default_state =": "# 音量默认状态 (Volume Default State: on/off/empty)\nvolume_default_state",
-        "sleep_default_state =": "# 睡眠默认状态 (Sleep Default State: on/off/empty)\nsleep_default_state",
-        "media_default_state =": "# 媒体默认状态 (Media Default State: on/off/empty)\nmedia_default_state",
+        "Computer_default_state =": "# 电脑默认状态 (Computer Default State: on/off/on#n/off#n/empty)\nComputer_default_state",
+        "screen_default_state =": "# 屏幕默认状态 (Screen Default State: on/off/on#n/off#n/empty)\nscreen_default_state",
+        "volume_default_state =": "# 音量默认状态 (Volume Default State: on/off/on#n/off#n/empty)\nvolume_default_state",
+        "sleep_default_state =": "# 睡眠默认状态 (Sleep Default State: on/off/on#n/off#n/empty)\nsleep_default_state",
+        "media_default_state =": "# 媒体默认状态 (Media Default State: on/off/on#n/off#n/empty)\nmedia_default_state",
     }
     
     # 为了避免替换掉不该替换的内容（如自定义主题中的 key 可能包含这些子串），
@@ -3500,7 +3563,7 @@ def save_config_toml(nested_config: Dict[str, Any], file_path: str) -> None:
                     elif suffix == "_char_delay_ms":
                         comment = "# 字符输入延迟 (Char Delay MS)"
                     elif suffix == "_default_state":
-                        comment = "# 默认状态 (Default State: on/off, 订阅成功时发送)"
+                        comment = "# 默认状态 (Default State: on/off/on#n/off#n, 订阅成功时发送)"
                 
                 if comment:
                     new_lines.append(comment)
@@ -5140,10 +5203,11 @@ def open_builtin_settings():
     row_i += 1
 
     # 内置主题默认状态（订阅成功时发布，同步服务器端状态）
-    ttk.Label(main_frame, text=t("默认状态（订阅成功时发送）")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
+    ttk.Label(main_frame, text=t("默认状态（订阅成功时发送，可添加参数）")).grid(row=row_i, column=0, columnspan=4, padx=10, pady=(0, 6), sticky="w")
     row_i += 1
 
     _builtin_default_state_vars = {}
+    _builtin_default_state_param_vars = {}
     _builtin_default_state_keys = [
         ("Computer", "Computer_default_state", "计算机"),
         ("screen", "screen_default_state", "屏幕"),
@@ -5153,10 +5217,35 @@ def open_builtin_settings():
     ]
     for _bk, _bcfg_key, _blabel in _builtin_default_state_keys:
         ttk.Label(main_frame, text=t(_blabel + "：")).grid(row=row_i, column=0, sticky="e", padx=8, pady=2)
-        _bv = tk.StringVar(value=config.get(_bcfg_key, ""))
-        _bc = ttk.Combobox(main_frame, textvariable=_bv, state="readonly", values=["", "on", "off"], width=12)
+        _bv_raw = config.get(_bcfg_key, "") or ""
+        _bv_param = ""
+        if "#" in _bv_raw:
+            _bv_parts = _bv_raw.split("#", 1)
+            _bv_base = _bv_parts[0].lower()
+            _bv_param = _bv_parts[1] if len(_bv_parts) > 1 else ""
+        else:
+            _bv_base = _bv_raw.lower()
+        if _bv_base not in ("", "on", "off"):
+            _bv_base = ""
+        _bv = tk.StringVar(value=_bv_base)
+        _bc = ttk.Combobox(main_frame, textvariable=_bv, state="readonly", values=["", "on", "off"], width=8)
         _bc.grid(row=row_i, column=1, sticky="w")
+        ttk.Label(main_frame, text="#").grid(row=row_i, column=2, sticky="e", padx=(0, 2), pady=2)
+        _bv_p = tk.StringVar(value=_bv_param)
+        _be = ttk.Entry(main_frame, textvariable=_bv_p, width=8)
+        _be.grid(row=row_i, column=3, sticky="w")
+        # 未选择开关(on/off)时禁用参数输入框（用默认参数捕获本次循环的控件引用）
+        def _on_builtin_default_state_changed(_e=None, _sv=_bv, _ent=_be, _svp=_bv_p):
+            _base = _sv.get().strip().lower()
+            _new_state = "normal" if _base in ("on", "off") else "disabled"
+            if str(_ent.cget("state")) != _new_state:
+                if _new_state == "disabled":
+                    _svp.set("")  # 清空参数，避免禁用状态下残留旧值
+                _ent.config(state=_new_state)
+        _bc.bind("<<ComboboxSelected>>", _on_builtin_default_state_changed)
+        _on_builtin_default_state_changed()
         _builtin_default_state_vars[_bk] = _bv
+        _builtin_default_state_param_vars[_bk] = _bv_p
         row_i += 1
 
     # 分隔线
@@ -5209,7 +5298,18 @@ def open_builtin_settings():
 
             # 内置主题默认状态
             for _bk, _bcfg_key, _ in _builtin_default_state_keys:
-                config[_bcfg_key] = _builtin_default_state_vars[_bk].get()
+                _ds_base = _builtin_default_state_vars[_bk].get().strip().lower()
+                _ds_param = _builtin_default_state_param_vars[_bk].get().strip()
+                if _ds_base not in ("", "on", "off"):
+                    messagebox.showwarning(t("提示"), t(f"{_bk} 默认状态开关无效，请选择 on/off"))
+                    return
+                if _ds_param and _ds_base == "":
+                    messagebox.showwarning(t("提示"), t(f"{_bk} 填写参数时必须选择 on 或 off"))
+                    return
+                if _ds_param and not _ds_param.lstrip("-").isdigit():
+                    messagebox.showwarning(t("提示"), t(f"{_bk} 默认状态参数必须是整数"))
+                    return
+                config[_bcfg_key] = (_ds_base + "#" + _ds_param) if (_ds_base and _ds_param) else _ds_base
 
             # Hotkey 不在内置设置中保存
 
