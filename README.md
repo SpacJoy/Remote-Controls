@@ -2,7 +2,7 @@
 
 让 Windows 电脑接入智能家居：通过 MQTT 控制开关、脚本、媒体/亮度/音量、热键等，配置热重载、托盘管理、支持 EXE 打包与自启。
 
-[使用教程](#使用教程) • [图文教程](https://blog.spacjoy.top/posts/dev/%E8%BF%9C%E7%A8%8B%E6%8E%A7%E5%88%B6-%E6%95%99%E7%A8%8B/) • [项目结构](#项目结构) • [更新日志](CHANGELOG.md) • [贡献指南](CONTRIBUTING.md)
+[使用教程](#使用教程) • [图文教程](https://blog.spacejoy.top/posts/dev/%E8%BF%9C%E7%A8%8B%E6%8E%A7%E5%88%B6-%E6%95%99%E7%A8%8B/) • [项目结构](#项目结构) • [更新日志](CHANGELOG.md) • [贡献指南](CONTRIBUTING.md)
 
 提醒与声明：仅供学习交流，请勿用于非法用途。
 
