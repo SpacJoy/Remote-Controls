@@ -5264,7 +5264,7 @@ def open_builtin_settings():
             try:
                 config["computer_off_delay"] = max(0, int(off_delay_var.get()))
             except Exception:
-                config["computer_off_delay"] = 60
+                config["computer_off_delay"] = 0
 
             # 读取睡眠动作选择
             _sleep_on_sel = s_on_key_var.get() or "sleep"

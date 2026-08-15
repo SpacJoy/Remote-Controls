@@ -1366,7 +1366,7 @@ static void router_notify_action(const RC_Router *r, const char *topicUtf8, cons
         const char *onAction = cfg_str(r->config, "computer_on_action");
         const char *offAction = cfg_str(r->config, "computer_off_action");
         int onDelay = cfg_int(r->config, "computer_on_delay", 0);
-        int offDelay = cfg_int(r->config, "computer_off_delay", 60);
+        int offDelay = cfg_int(r->config, "computer_off_delay", 0);
 
         const char *act = (_stricmp(base, "on") == 0) ? (onAction ? onAction : "lock") : (offAction ? offAction : "none");
         int delay = (_stricmp(base, "on") == 0) ? onDelay : offDelay;
@@ -2549,11 +2549,10 @@ void RC_RouterHandle(RC_Router *r, const char *topicUtf8, const char *payloadUtf
         // - computer_on_action / computer_off_action：例如 lock/shutdown/restart/sleep...
         // - computer_on_delay / computer_off_delay：延迟秒数
         //
-        // 注意：这里会给 off_delay 一个默认值 60 秒（与原项目行为一致）。
         const char *onAction = cfg_str(r->config, "computer_on_action");
         const char *offAction = cfg_str(r->config, "computer_off_action");
         int onDelay = cfg_int(r->config, "computer_on_delay", 0);
-        int offDelay = cfg_int(r->config, "computer_off_delay", 60);
+        int offDelay = cfg_int(r->config, "computer_off_delay", 0);
         if (_stricmp(base, "on") == 0)
             RC_ActionPerformComputer(onAction ? onAction : "lock", onDelay);
         else if (_stricmp(base, "off") == 0)

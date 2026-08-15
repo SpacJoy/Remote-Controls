@@ -4,6 +4,57 @@
 
 ***
 
+# V3.4.7 (2026-08-15)
+
+**修复计算机关闭延迟默认值不合理的问题**\
+Full Changelog (相对于 3.4.6): [https://github.com/SpacJoy/Remote-Controls/compare/V3.4.6...V3.4.7](https://github.com/SpacJoy/Remote-Controls/compare/V3.4.6...V3.4.7)
+
+## 🐛 修复
+
+- **计算机关闭延迟默认值从 60 秒改为 0 秒**：`computer_off_delay` 的默认值此前为 60 秒，意味着用户在未配置延迟的情况下发送"关机/重启/睡眠"指令时，系统会先等待 60 秒再执行，可能导致用户误以为指令未生效或产生不必要的等待。现改为默认立即执行（0 秒延迟），与 `computer_on_delay` 的默认行为保持一致。
+  - `src/main/rc_router.c`：`router_notify_action()` 和 `RC_RouterHandle()` 两处 `cfg_int(..., "computer_off_delay", 60)` 均改为 `0`
+  - `src/python/GUI.py`：内置主题设置中 `computer_off_delay` 输入异常时的回退值从 60 改为 0
+
+***
+
+# V3.4.6 (2026-08-03)
+
+**MQTT 默认状态同步、自回环抑制与开发环境脚本增强**\
+Full Changelog (相对于 3.4.5): [https://github.com/SpacJoy/Remote-Controls/compare/V3.4.5...V3.4.6](https://github.com/SpacJoy/Remote-Controls/compare/V3.4.5...V3.4.6)
+
+## ✨ MQTT 默认状态同步
+
+- **订阅后自动发布默认状态**：所有主题（内置 + 自定义）现在支持配置 `default_state` 字段。MQTT 订阅成功后，程序会自动向该 topic 发布预设的默认状态（如 `on`、`off`、`on#50`），使服务器端主题状态与实际设备状态保持同步，避免 Home Assistant 等平台显示"未知"状态。
+- **全主题类型支持**：
+  - 内置主题：`Computer_default_state`、`screen_default_state`、`volume_default_state`、`sleep_default_state`、`media_default_state`
+  - 自定义主题：`applicationN_default_state`、`commandN_default_state`、`serveN_default_state`、`hotkeyN_default_state`
+- **参数化默认状态**：默认状态支持附带参数，格式为 `on#参数` 或 `off#参数`（如 `on#50` 表示"开启，参数 50"），适配音量、亮度等需要具体数值的场景。
+
+## 🛡️ 自回环消息抑制
+
+- **防止默认状态被误执行为外部指令**：由于客户端本身也订阅了同一 topic，broker 会将刚发布的默认状态回投给自己。如果不加处理，程序会把"自己发出的默认状态"当作外部指令执行（例如误杀应用）。
+- **时间窗口 + 内容匹配方案**：发布默认状态时记录 `(topic, payload, tick)`，接收时若在 5 秒窗口内匹配到完全相同的 `(topic, payload)`，则判定为自回环并跳过 `RC_RouterHandle` 执行。
+- **即时消费机制**：匹配后立即消费该条目，避免误抑制后续合法的同 payload 指令。环形缓冲区上限 32 条，超出后自动覆盖最旧条目。
+
+## 💄 GUI 配置界面
+
+- **内置主题默认状态设置**：内置主题设置窗口新增"默认状态"配置区域，为计算机、屏幕、音量、睡眠、媒体五个内置主题分别提供 on/off 下拉选择和可选参数输入框。
+- **自定义主题默认状态设置**：新增/修改自定义主题窗口新增"默认状态"行，支持 on/off 选择和参数输入，与自定义主题的其它配置项布局一致。
+- **输入校验**：选择参数时必须先选择 on/off；参数必须是整数；未选择开关时参数输入框自动禁用并清空，避免残留无效值。
+- **配置注释自动生成**：`config.toml` 保存时为所有 `*_default_state` 字段自动生成中文注释。
+
+## 🛠️ 开发环境脚本增强
+
+- **BOM 编码修复**：修复 `build.ps1`、`build_main.ps1`、`build_tray.ps1`、`installer/Remote-Controls.iss`、`installer/build_installer.ps1` 等脚本文件中的 BOM（Byte Order Mark）问题，确保 PowerShell 和 Inno Setup 正确解析。
+- **部署脚本交互增强**（`setup_C_dev.ps1` / `setup_python_env.ps1`）：
+  - 分步确认新增"回到上一步"选项，空输入不会执行任何操作以防误触回车。
+  - MSYS2 检测支持多路径（`C:\msys64`、`%LocalAppData%\msys64`、`D:\msys64`、`E:\msys64`），过滤不存在的驱动器避免异常。
+  - winget 安装 MSYS2 失败时，自动回退到 GitHub 直接下载安装器并静默安装。
+  - 新增 MSYS2 首次安装后的 pacman 密钥初始化与数据库同步步骤。
+  - winget 安装失败时正确返回错误码，不再静默忽略。
+
+***
+
 # V3.4.5 (2026-07-24)
 
 **修复 GUI 开机自启动路径含空格被截断**\
